@@ -92,10 +92,7 @@ func splitRunes(value string, chunkSize int) []string {
 	runes := []rune(value)
 	chunks := make([]string, 0, (len(runes)+chunkSize-1)/chunkSize)
 	for start := 0; start < len(runes); start += chunkSize {
-		end := start + chunkSize
-		if end > len(runes) {
-			end = len(runes)
-		}
+		end := min(start+chunkSize, len(runes))
 		chunks = append(chunks, string(runes[start:end]))
 	}
 	return chunks
