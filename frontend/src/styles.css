@@ -395,6 +395,12 @@ input:focus-visible,
   background: #e3e7e4;
 }
 
+.tool-button.is-active {
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+
 .tool-button:disabled {
   opacity: 0.25;
   cursor: default;

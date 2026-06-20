@@ -8,6 +8,11 @@ function hasPdfHeader(data: Uint8Array): boolean {
   return pdfHeader.every((byte, index) => data[index] === byte);
 }
 
+function resolveAssetUrl(path: string): string {
+  const base = typeof document !== "undefined" ? document.baseURI : "http://localhost/";
+  return new URL(path, base).toString();
+}
+
 export async function createPdfLoadingTask(
   url: string,
   signal: AbortSignal,
@@ -26,5 +31,10 @@ export async function createPdfLoadingTask(
     throw new Error("取得したデータがPDFではありません。アプリを再起動して、もう一度開いてください。");
   }
 
-  return pdfjs.getDocument({ data });
+  return pdfjs.getDocument({
+    data,
+    cMapUrl: resolveAssetUrl("pdfjs/cmaps/"),
+    cMapPacked: true,
+    standardFontDataUrl: resolveAssetUrl("pdfjs/standard_fonts/"),
+  });
 }

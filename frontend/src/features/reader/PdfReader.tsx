@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowsHorizontal,
   BookOpenText,
   CaretLeft,
   CaretRight,
@@ -17,6 +18,11 @@ import { normalizePageText } from "../../shared/lib/text";
 import { createPdfLoadingTask } from "./loadPdf";
 
 const loadTimeoutMilliseconds = 60_000;
+const minScale = 0.4;
+const maxScale = 3;
+const manualZoomStep = 0.1;
+
+type ZoomMode = { kind: "fit-width" } | { kind: "manual"; value: number };
 
 type PdfReaderProps = {
   book: BookFile | null;
@@ -25,11 +31,37 @@ type PdfReaderProps = {
 
 export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageObserverRef = useRef<ResizeObserver | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [zoom, setZoom] = useState(1.15);
+  const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-width" });
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [effectiveScale, setEffectiveScale] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const stageRef = useCallback((node: HTMLDivElement | null) => {
+    stageObserverRef.current?.disconnect();
+    stageObserverRef.current = null;
+    if (!node) {
+      setStageSize({ width: 0, height: 0 });
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setStageSize((current) =>
+          current.width === width && current.height === height
+            ? current
+            : { width, height },
+        );
+      }
+    });
+    observer.observe(node);
+    stageObserverRef.current = observer;
+  }, []);
+
+  useEffect(() => () => stageObserverRef.current?.disconnect(), []);
 
   useEffect(() => {
     if (!book) {
@@ -105,6 +137,9 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
     if (!document || !canvasRef.current) {
       return;
     }
+    if (zoomMode.kind === "fit-width" && stageSize.width === 0) {
+      return;
+    }
 
     let active = true;
     let renderTask: RenderTask | undefined;
@@ -115,7 +150,14 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
         return;
       }
 
-      const viewport = page.getViewport({ scale: zoom });
+      const naturalViewport = page.getViewport({ scale: 1 });
+      const rawScale =
+        zoomMode.kind === "fit-width"
+          ? stageSize.width / naturalViewport.width
+          : zoomMode.value;
+      const scale = Math.min(maxScale, Math.max(minScale, rawScale || 1));
+
+      const viewport = page.getViewport({ scale });
       const outputScale = window.devicePixelRatio || 1;
       const canvas = canvasRef.current;
       const context = canvas.getContext("2d");
@@ -135,6 +177,9 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
         transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
       });
       await renderTask.promise;
+      if (active) {
+        setEffectiveScale(scale);
+      }
 
       const textContent = await page.getTextContent();
       if (active) {
@@ -157,7 +202,15 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
       active = false;
       renderTask?.cancel();
     };
-  }, [document, onPageContextChange, pageNumber, zoom]);
+  }, [document, onPageContextChange, pageNumber, stageSize, zoomMode]);
+
+  function adjustZoom(delta: number) {
+    setZoomMode((current) => {
+      const base = current.kind === "manual" ? current.value : effectiveScale;
+      const next = Math.min(maxScale, Math.max(minScale, base + delta));
+      return { kind: "manual", value: next };
+    });
+  }
 
   if (!book) {
     return (
@@ -200,17 +253,24 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
           </ToolButton>
         </div>
         <div className="zoom-controls" aria-label="Zoom controls">
-          <ToolButton label="縮小" onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))}>
+          <ToolButton
+            label="幅に合わせる"
+            className={zoomMode.kind === "fit-width" ? "is-active" : ""}
+            onClick={() => setZoomMode({ kind: "fit-width" })}
+          >
+            <ArrowsHorizontal size={14} weight="bold" />
+          </ToolButton>
+          <ToolButton label="縮小" onClick={() => adjustZoom(-manualZoomStep)}>
             <Minus size={14} weight="bold" />
           </ToolButton>
-          <span>{Math.round(zoom * 100)}%</span>
-          <ToolButton label="拡大" onClick={() => setZoom((value) => Math.min(2.2, value + 0.1))}>
+          <span>{Math.round(effectiveScale * 100)}%</span>
+          <ToolButton label="拡大" onClick={() => adjustZoom(manualZoomStep)}>
             <Plus size={14} weight="bold" />
           </ToolButton>
         </div>
       </div>
 
-      <div className="pdf-stage">
+      <div className="pdf-stage" ref={stageRef}>
         {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
         {error && <div className="reader-error" role="alert">{error}</div>}
         <canvas ref={canvasRef} className="pdf-canvas" aria-label={`${pageNumber}ページ`} />
