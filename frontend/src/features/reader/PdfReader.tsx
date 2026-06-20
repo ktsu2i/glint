@@ -41,9 +41,20 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const stageNodeRef = useRef<HTMLDivElement | null>(null);
+  const wheelCleanupRef = useRef<(() => void) | null>(null);
+  const effectiveScaleRef = useRef(1);
+
+  useEffect(() => {
+    effectiveScaleRef.current = effectiveScale;
+  }, [effectiveScale]);
+
   const stageRef = useCallback((node: HTMLDivElement | null) => {
     stageObserverRef.current?.disconnect();
     stageObserverRef.current = null;
+    wheelCleanupRef.current?.();
+    wheelCleanupRef.current = null;
+    stageNodeRef.current = node;
     if (!node) {
       setStageSize({ width: 0, height: 0 });
       return;
@@ -60,9 +71,29 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
     });
     observer.observe(node);
     stageObserverRef.current = observer;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) {
+        return;
+      }
+      event.preventDefault();
+      setZoomMode((current) => {
+        const base = current.kind === "manual" ? current.value : effectiveScaleRef.current;
+        const factor = Math.exp(-event.deltaY * 0.01);
+        const next = Math.min(maxScale, Math.max(minScale, base * factor));
+        return { kind: "manual", value: next };
+      });
+    };
+    node.addEventListener("wheel", handleWheel, { passive: false });
+    wheelCleanupRef.current = () => {
+      node.removeEventListener("wheel", handleWheel);
+    };
   }, []);
 
-  useEffect(() => () => stageObserverRef.current?.disconnect(), []);
+  useEffect(() => () => {
+    stageObserverRef.current?.disconnect();
+    wheelCleanupRef.current?.();
+  }, []);
 
   useEffect(() => {
     if (!book) {

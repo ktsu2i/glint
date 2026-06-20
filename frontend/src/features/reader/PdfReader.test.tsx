@@ -162,6 +162,45 @@ describe("PdfReader", () => {
     expect(task.destroy).toHaveBeenCalled();
   });
 
+  it("zooms manually on a ctrl+wheel pinch gesture and ignores plain scrolls", async () => {
+    const page = makePage();
+    resolveDocument(makeDocument(page));
+    render(
+      <PdfReader
+        book={makeBook()}
+        onPageContextChange={vi.fn()}
+      />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await screen.findByText("200%");
+
+    const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
+    const plainEvent = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+    act(() => { stage.dispatchEvent(plainEvent); });
+    expect(plainEvent.defaultPrevented).toBe(false);
+    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
+
+    const pinchEvent = new WheelEvent("wheel", {
+      deltaY: -20,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => { stage.dispatchEvent(pinchEvent); });
+    expect(pinchEvent.defaultPrevented).toBe(true);
+    await screen.findByText("244%");
+    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("");
+
+    const zoomOutEvent = new WheelEvent("wheel", {
+      deltaY: 400,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => { stage.dispatchEvent(zoomOutEvent); });
+    await screen.findByText("40%");
+  });
+
   it("fits the whole page when height is the limiting dimension", async () => {
     const page = makePage({
       getViewport: vi.fn(({ scale }: { scale: number }) => ({
