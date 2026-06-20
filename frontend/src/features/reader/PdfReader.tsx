@@ -1,0 +1,180 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  GlobalWorkerOptions,
+  getDocument,
+  type PDFDocumentProxy,
+  type RenderTask,
+} from "pdfjs-dist";
+import type { BookFile } from "../../shared/api/backend";
+import { normalizePageText } from "../../shared/lib/text";
+
+GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
+
+type PdfReaderProps = {
+  book: BookFile | null;
+  onPageContextChange: (pageNumber: number, text: string) => void;
+};
+
+export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [zoom, setZoom] = useState(1.15);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!book) {
+      setDocument(null);
+      setPageNumber(1);
+      setError("");
+      onPageContextChange(0, "");
+      return;
+    }
+
+    let active = true;
+    const loadingTask = getDocument({ url: book.url });
+    setLoading(true);
+    setError("");
+    setPageNumber(1);
+
+    loadingTask.promise
+      .then((loadedDocument) => {
+        if (active) {
+          setDocument(loadedDocument);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : "PDFを開けませんでした。");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+      void loadingTask.destroy();
+    };
+  }, [book, onPageContextChange]);
+
+  useEffect(() => {
+    if (!document || !canvasRef.current) {
+      return;
+    }
+
+    let active = true;
+    let renderTask: RenderTask | undefined;
+
+    async function renderPage() {
+      const page = await document!.getPage(pageNumber);
+      if (!active || !canvasRef.current) {
+        return;
+      }
+
+      const viewport = page.getViewport({ scale: zoom });
+      const outputScale = window.devicePixelRatio || 1;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Canvasを初期化できませんでした。");
+      }
+
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      renderTask = page.render({
+        canvas,
+        canvasContext: context,
+        viewport,
+        transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+      });
+      await renderTask.promise;
+
+      const textContent = await page.getTextContent();
+      if (active) {
+        const text = normalizePageText(
+          textContent.items
+            .filter((item) => "str" in item)
+            .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
+        );
+        onPageContextChange(pageNumber, text);
+      }
+    }
+
+    renderPage().catch((reason: unknown) => {
+      if (active && !(reason instanceof Error && reason.name === "RenderingCancelledException")) {
+        setError(reason instanceof Error ? reason.message : "ページを描画できませんでした。");
+      }
+    });
+
+    return () => {
+      active = false;
+      renderTask?.cancel();
+    };
+  }, [document, onPageContextChange, pageNumber, zoom]);
+
+  if (!book) {
+    return (
+      <section className="reader-empty" aria-label="PDF reader">
+        <div className="empty-book-mark">G</div>
+        <p className="eyebrow">READING WORKSPACE</p>
+        <h2>技術書を開いて、読書を始める</h2>
+        <p>検索可能なPDFをimportすると、ページ本文をAI contextとして利用できます。</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="reader" aria-label="PDF reader">
+      <div className="reader-toolbar">
+        <div className="book-identity">
+          <span className="book-dot" />
+          <span className="book-name" title={book.name}>{book.name}</span>
+        </div>
+        <div className="reader-controls" aria-label="Page controls">
+          <button
+            type="button"
+            className="icon-button"
+            disabled={pageNumber <= 1}
+            onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
+            aria-label="前のページ"
+          >
+            ←
+          </button>
+          <span className="page-count">
+            {pageNumber} <span>/ {document?.numPages ?? "–"}</span>
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            disabled={!document || pageNumber >= document.numPages}
+            onClick={() => setPageNumber((current) => Math.min(document?.numPages ?? current, current + 1))}
+            aria-label="次のページ"
+          >
+            →
+          </button>
+        </div>
+        <div className="zoom-controls" aria-label="Zoom controls">
+          <button type="button" className="icon-button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))}>−</button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button type="button" className="icon-button" onClick={() => setZoom((value) => Math.min(2.2, value + 0.1))}>＋</button>
+        </div>
+      </div>
+
+      <div className="pdf-stage">
+        {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
+        {error && <div className="reader-error" role="alert">{error}</div>}
+        <canvas ref={canvasRef} className="pdf-canvas" aria-label={`${pageNumber}ページ`} />
+      </div>
+    </section>
+  );
+}
