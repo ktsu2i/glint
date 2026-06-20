@@ -5,6 +5,7 @@ frontend/dist/*
 !frontend/dist/.gitkeep
 frontend/coverage/
 frontend/package.json.md5
+.pnpm-store/
 
 # Wails build output
 build/bin/

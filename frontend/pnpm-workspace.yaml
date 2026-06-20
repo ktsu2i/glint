@@ -1,0 +1,7 @@
+strictDepBuilds: true
+
+# 依存 package の lifecycle script は、必要性を確認してから個別に許可する。
+allowBuilds: {}
+
+trustPolicy: no-downgrade
+blockExoticSubdeps: true

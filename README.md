@@ -25,6 +25,7 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 
 - Go 1.23以上
 - Node.js 20.19以上、または22.12以上
+- pnpm 10.30.2
 - Wails CLI v2.12.0
 
 ```bash
@@ -33,11 +34,13 @@ go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
 OSごとの追加要件は[Wails installation guide](https://wails.io/docs/gettingstarted/installation)を確認してください。
 
+frontendのpackage managerはpnpm 10.30.2に固定しています。`npm install`と`npm run`は`package.json`のguardにより失敗します。
+
 ## 開発起動
 
 ```bash
 cd frontend
-npm ci
+pnpm install --frozen-lockfile
 cd ..
 wails dev
 ```
@@ -47,8 +50,8 @@ wails dev
 ```bash
 go test ./...
 cd frontend
-npm test
-npm run build
+pnpm test
+pnpm run build
 ```
 
 ## Production build
