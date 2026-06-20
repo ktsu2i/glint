@@ -7,19 +7,16 @@ import {
   Plus,
 } from "@phosphor-icons/react";
 import {
-  GlobalWorkerOptions,
-  getDocument,
   type PDFDocumentProxy,
+  type PDFDocumentLoadingTask,
   type RenderTask,
 } from "pdfjs-dist";
 import type { BookFile } from "../../shared/api/backend";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
+import { createPdfLoadingTask } from "./loadPdf";
 
-GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+const loadTimeoutMilliseconds = 60_000;
 
 type PdfReaderProps = {
   book: BookFile | null;
@@ -44,31 +41,63 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
     }
 
     let active = true;
-    const loadingTask = getDocument({ url: book.url });
+    let loadingTask: PDFDocumentLoadingTask | undefined;
+    let timedOut = false;
+    const abortController = new AbortController();
+    const bookUrl = book.url;
     setLoading(true);
     setError("");
+    setDocument(null);
     setPageNumber(1);
+    onPageContextChange(0, "");
 
-    loadingTask.promise
-      .then((loadedDocument) => {
+    let timeout = 0;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = window.setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+        void loadingTask?.destroy();
+        reject(new Error("PDF load timed out"));
+      }, loadTimeoutMilliseconds);
+    });
+
+    async function loadDocument() {
+      try {
+        const loadedDocument = await Promise.race([
+          (async () => {
+            loadingTask = await createPdfLoadingTask(bookUrl, abortController.signal);
+            return loadingTask.promise;
+          })(),
+          timeoutPromise,
+        ]);
         if (active) {
           setDocument(loadedDocument);
         }
-      })
-      .catch((reason: unknown) => {
+      } catch (reason: unknown) {
         if (active) {
-          setError(reason instanceof Error ? reason.message : "PDFを開けませんでした。");
+          setError(
+            timedOut
+              ? "PDFの読み込みがタイムアウトしました。アプリを再起動して、もう一度開いてください。"
+              : reason instanceof Error
+                ? reason.message
+                : "PDFを開けませんでした。",
+          );
         }
-      })
-      .finally(() => {
+      } finally {
+        window.clearTimeout(timeout);
         if (active) {
           setLoading(false);
         }
-      });
+      }
+    }
+
+    void loadDocument();
 
     return () => {
       active = false;
-      void loadingTask.destroy();
+      window.clearTimeout(timeout);
+      abortController.abort();
+      void loadingTask?.destroy();
     };
   }, [book, onPageContextChange]);
 

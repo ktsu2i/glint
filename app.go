@@ -41,6 +41,17 @@ type bookServer struct {
 	book selectedBook
 }
 
+func (server *bookServer) middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if strings.HasPrefix(request.URL.Path, bookRoutePrefix) {
+			server.ServeHTTP(response, request)
+			return
+		}
+
+		next.ServeHTTP(response, request)
+	})
+}
+
 func NewApp() *App {
 	return &App{
 		gateway: llm.NewMockGateway(),

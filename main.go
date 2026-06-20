@@ -23,8 +23,9 @@ func main() {
 		MinWidth:  1024,
 		MinHeight: 700,
 		AssetServer: &assetserver.Options{
-			Assets:  assets,
-			Handler: app.books,
+			Assets:     assets,
+			Handler:    app.books,
+			Middleware: app.books.middleware,
 		},
 		BackgroundColour: &options.RGBA{R: 243, G: 239, B: 231, A: 1},
 		LogLevel:         logger.WARNING,
