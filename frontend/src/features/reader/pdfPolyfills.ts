@@ -6,6 +6,26 @@ declare global {
     getOrInsertComputed(key: K, callbackfn: (key: K) => V): V;
     getOrInsert(key: K, value: V): V;
   }
+
+  interface Uint8Array {
+    toHex(): string;
+  }
+}
+
+// pdfjs-dist 6.x also uses Uint8Array#toHex, which is not available in
+// Node.js 24 or Wails' current WebKit.
+if (typeof Uint8Array.prototype.toHex !== "function") {
+  Object.defineProperty(Uint8Array.prototype, "toHex", {
+    value: function toHex(this: Uint8Array): string {
+      let result = "";
+      for (const byte of this) {
+        result += byte.toString(16).padStart(2, "0");
+      }
+      return result;
+    },
+    writable: true,
+    configurable: true,
+  });
 }
 
 if (typeof Map.prototype.getOrInsertComputed !== "function") {

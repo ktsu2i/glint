@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 describe("PDF compatibility polyfills", () => {
-  it("installs and exercises Map and ReadableStream compatibility methods", async () => {
+  it("installs and exercises PDF.js compatibility methods", async () => {
     const computedDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "getOrInsertComputed");
     const insertDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "getOrInsert");
+    const toHexDescriptor = Object.getOwnPropertyDescriptor(Uint8Array.prototype, "toHex");
     Reflect.deleteProperty(Map.prototype, "getOrInsertComputed");
     Reflect.deleteProperty(Map.prototype, "getOrInsert");
+    Reflect.deleteProperty(Uint8Array.prototype, "toHex");
 
     class TestReadableStream<R> {
       constructor(private readonly reader: object) {}
@@ -26,6 +28,7 @@ describe("PDF compatibility polyfills", () => {
       expect(compute).toHaveBeenCalledOnce();
       expect(map.getOrInsert("b", 4)).toBe(4);
       expect(map.getOrInsert("b", 5)).toBe(4);
+      expect(new Uint8Array([0, 15, 16, 255]).toHex()).toBe("000f10ff");
 
       const reader = {
         read: vi.fn()
@@ -96,6 +99,11 @@ describe("PDF compatibility polyfills", () => {
         Object.defineProperty(Map.prototype, "getOrInsert", insertDescriptor);
       } else {
         Reflect.deleteProperty(Map.prototype, "getOrInsert");
+      }
+      if (toHexDescriptor) {
+        Object.defineProperty(Uint8Array.prototype, "toHex", toHexDescriptor);
+      } else {
+        Reflect.deleteProperty(Uint8Array.prototype, "toHex");
       }
     }
   });
