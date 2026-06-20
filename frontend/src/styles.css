@@ -802,9 +802,19 @@ input:focus-visible,
   background-size: 100% 8px;
 }
 
+.pdf-spread {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.pdf-spread.is-spread {
+  gap: 4px;
+}
+
 .pdf-canvas {
   display: block;
-  margin: 0 auto;
   background: white;
   box-shadow:
     0 1px 1px rgb(32 37 42 / 7%),

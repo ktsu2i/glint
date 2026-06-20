@@ -453,6 +453,105 @@ describe("PdfReader", () => {
     await act(async () => Promise.resolve());
   });
 
+  it("renders two pages side by side in spread mode", async () => {
+    const pageOne = makePage({
+      getTextContent: vi.fn(async () => ({
+        items: [{ str: "First", hasEOL: false }],
+      })),
+    });
+    const pageTwo = makePage({
+      getTextContent: vi.fn(async () => ({
+        items: [{ str: "Second", hasEOL: false }],
+      })),
+    });
+    const pdfDocument = {
+      numPages: 4,
+      getPage: vi.fn(async (...args: unknown[]) => (args[0] === 1 ? pageOne : pageTwo)),
+    };
+    resolveDocument(pdfDocument);
+    const onPageContextChange = vi.fn();
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={onPageContextChange} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
+
+    const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
+    expect(canvases.length).toBe(2);
+    expect(canvases[0].getAttribute("aria-label")).toBe("1ページ");
+    expect(canvases[1].getAttribute("aria-label")).toBe("2ページ");
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("1–2");
+    await waitFor(() => expect(onPageContextChange).toHaveBeenCalledWith(1, "First\n\nSecond", 4));
+  });
+
+  it("advances by two pages with the next button and arrow keys in spread mode", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 6;
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(4));
+
+    fireEvent.keyDown(globalThis.window, { key: "ArrowRight" });
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(5));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(6));
+
+    expect(screen.getByRole("button", { name: "次のページ" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "前のページ" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(4));
+  });
+
+  it("renders a single canvas in spread mode when on the last page", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 1;
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+
+    const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
+    expect(canvases.length).toBe(1);
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("1 ");
+  });
+
+  it("toggles back from spread to single page view", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 4;
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    await waitFor(
+      () => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(2),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1ページ表示に切り替え" }));
+    await waitFor(
+      () => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(1),
+    );
+  });
+
   it("does not publish scale or text after an in-flight render is unmounted", async () => {
     let resolveRender!: () => void;
     const page = makePage({

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
   BookOpenText,
   CaretLeft,
   CaretRight,
   CornersIn,
+  File,
   Minus,
   Plus,
 } from "@phosphor-icons/react";
@@ -23,6 +25,7 @@ const maxScale = 3;
 const manualZoomStep = 0.1;
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
+type ViewMode = "single" | "spread";
 
 type PdfReaderProps = {
   book: BookFile | null;
@@ -31,10 +34,12 @@ type PdfReaderProps = {
 };
 
 export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfReaderProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasLeftRef = useRef<HTMLCanvasElement>(null);
+  const canvasRightRef = useRef<HTMLCanvasElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [effectiveScale, setEffectiveScale] = useState(1);
@@ -173,6 +178,7 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       return;
     }
     const numPages = document.numPages;
+    const step = viewMode === "spread" ? 2 : 1;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
@@ -187,82 +193,107 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       }
       if (event.key === "ArrowRight" || event.key === "PageDown") {
         event.preventDefault();
-        setPageNumber((current) => Math.min(numPages, current + 1));
+        setPageNumber((current) => Math.min(numPages, current + step));
       } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
         event.preventDefault();
-        setPageNumber((current) => Math.max(1, current - 1));
+        setPageNumber((current) => Math.max(1, current - step));
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [document]);
+  }, [document, viewMode]);
 
   useEffect(() => {
-    if (!document || !canvasRef.current) {
+    if (!document) {
       return;
     }
     if (zoomMode.kind === "fit-page" && (stageSize.width === 0 || stageSize.height === 0)) {
       return;
     }
+    const leftCanvas = canvasLeftRef.current;
+    if (!leftCanvas) {
+      return;
+    }
+    const rightCanvas = canvasRightRef.current;
+    const numPages = document.numPages;
+    const pageNumbers: number[] = [pageNumber];
+    if (viewMode === "spread" && pageNumber + 1 <= numPages) {
+      pageNumbers.push(pageNumber + 1);
+    }
+    if (viewMode === "spread" && !rightCanvas && pageNumbers.length === 2) {
+      return;
+    }
+    const canvases: HTMLCanvasElement[] = [leftCanvas];
+    if (pageNumbers.length === 2 && rightCanvas) {
+      canvases.push(rightCanvas);
+    }
 
     let active = true;
-    let renderTask: RenderTask | undefined;
+    const renderTasks: RenderTask[] = [];
 
-    async function renderPage() {
-      const page = await document!.getPage(pageNumber);
-      if (!active || !canvasRef.current) {
+    async function renderPages() {
+      const pages = await Promise.all(pageNumbers.map((n) => document!.getPage(n)));
+      if (!active) {
         return;
       }
-
-      const naturalViewport = page.getViewport({ scale: 1 });
+      const naturalViewports = pages.map((page) => page.getViewport({ scale: 1 }));
+      const totalWidth = naturalViewports.reduce((sum, v) => sum + v.width, 0);
+      const maxHeight = Math.max(...naturalViewports.map((v) => v.height));
       const fitRatios = [
-        stageSize.width / naturalViewport.width,
-        stageSize.height / naturalViewport.height,
+        stageSize.width / totalWidth,
+        stageSize.height / maxHeight,
       ].filter((ratio) => Number.isFinite(ratio) && ratio > 0);
       const fitScale = fitRatios.length > 0 ? Math.min(...fitRatios) : 1;
-      const rawScale = zoomMode.kind === "fit-page"
-        ? fitScale
-        : zoomMode.value;
+      const rawScale = zoomMode.kind === "fit-page" ? fitScale : zoomMode.value;
       const scale = zoomMode.kind === "fit-page"
         ? Math.min(maxScale, rawScale || 1)
         : Math.min(maxScale, Math.max(minScale, rawScale || 1));
 
-      const viewport = page.getViewport({ scale });
       const outputScale = window.devicePixelRatio || 1;
-      const canvas = canvasRef.current;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        throw new Error("Canvasを初期化できませんでした。");
+      for (let i = 0; i < pages.length; i += 1) {
+        const page = pages[i];
+        const canvas = canvases[i];
+        const viewport = page.getViewport({ scale });
+        const context = canvas.getContext("2d");
+        if (!context) {
+          throw new Error("Canvasを初期化できませんでした。");
+        }
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+        const task = page.render({
+          canvas,
+          canvasContext: context,
+          viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+        });
+        renderTasks.push(task);
+        await task.promise;
+        if (!active) {
+          return;
+        }
       }
-
-      canvas.width = Math.floor(viewport.width * outputScale);
-      canvas.height = Math.floor(viewport.height * outputScale);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-      renderTask = page.render({
-        canvas,
-        canvasContext: context,
-        viewport,
-        transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
-      });
-      await renderTask.promise;
       if (active) {
         setEffectiveScale(scale);
       }
 
-      const textContent = await page.getTextContent();
+      const textContents = await Promise.all(pages.map((page) => page.getTextContent()));
       if (active) {
-        const text = normalizePageText(
-          textContent.items
-            .filter((item) => "str" in item)
-            .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
-        );
+        const text = textContents
+          .map((textContent) =>
+            normalizePageText(
+              textContent.items
+                .filter((item) => "str" in item)
+                .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
+            ),
+          )
+          .join("\n\n");
         onPageContextChange(pageNumber, text, document!.numPages);
       }
     }
 
-    renderPage().catch((reason: unknown) => {
+    renderPages().catch((reason: unknown) => {
       if (active && !(reason instanceof Error && reason.name === "RenderingCancelledException")) {
         setError(reason instanceof Error ? reason.message : "ページを描画できませんでした。");
       }
@@ -270,9 +301,9 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
 
     return () => {
       active = false;
-      renderTask?.cancel();
+      renderTasks.forEach((task) => task.cancel());
     };
-  }, [document, onPageContextChange, pageNumber, stageSize, zoomMode]);
+  }, [document, onPageContextChange, pageNumber, stageSize, viewMode, zoomMode]);
 
   function adjustZoom(delta: number) {
     setZoomMode((current) => {
@@ -296,6 +327,14 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
     );
   }
 
+  const numPages = document?.numPages ?? 0;
+  const step = viewMode === "spread" ? 2 : 1;
+  const showRightCanvas = viewMode === "spread" && pageNumber + 1 <= numPages;
+  const rightPageNumber = pageNumber + 1;
+  const pageRangeLabel = showRightCanvas
+    ? `${pageNumber}–${rightPageNumber}`
+    : `${pageNumber}`;
+
   return (
     <section className="reader" aria-label="PDF reader">
       <div className="reader-toolbar">
@@ -307,22 +346,33 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
           <ToolButton
             label="前のページ"
             disabled={pageNumber <= 1}
-            onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
+            onClick={() => setPageNumber((current) => Math.max(1, current - step))}
           >
             <CaretLeft size={15} weight="bold" />
           </ToolButton>
           <span className="page-count">
-            {pageNumber} <span>/ {document?.numPages ?? "–"}</span>
+            {pageRangeLabel} <span>/ {document?.numPages ?? "–"}</span>
           </span>
           <ToolButton
             label="次のページ"
-            disabled={!document || pageNumber >= document.numPages}
-            onClick={() => setPageNumber((current) => Math.min(document!.numPages, current + 1))}
+            disabled={!document || pageNumber + step > document.numPages}
+            onClick={() => setPageNumber((current) => Math.min(document!.numPages, current + step))}
           >
             <CaretRight size={15} weight="bold" />
           </ToolButton>
         </div>
         <div className="zoom-controls" aria-label="Zoom controls">
+          <ToolButton
+            label={viewMode === "spread" ? "1ページ表示に切り替え" : "見開き表示に切り替え"}
+            className={viewMode === "spread" ? "is-active" : ""}
+            onClick={() => setViewMode((current) => (current === "spread" ? "single" : "spread"))}
+          >
+            {viewMode === "spread" ? (
+              <File size={14} weight="bold" />
+            ) : (
+              <BookOpen size={14} weight="bold" />
+            )}
+          </ToolButton>
           <ToolButton
             label="全体を表示"
             className={zoomMode.kind === "fit-page" ? "is-active" : ""}
@@ -343,7 +393,20 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       <div className="pdf-stage" ref={stageRef}>
         {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
         {error && <div className="reader-error" role="alert">{error}</div>}
-        <canvas ref={canvasRef} className="pdf-canvas" aria-label={`${pageNumber}ページ`} />
+        <div className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}>
+          <canvas
+            ref={canvasLeftRef}
+            className="pdf-canvas"
+            aria-label={`${pageNumber}ページ`}
+          />
+          {showRightCanvas && (
+            <canvas
+              ref={canvasRightRef}
+              className="pdf-canvas"
+              aria-label={`${rightPageNumber}ページ`}
+            />
+          )}
+        </div>
       </div>
     </section>
   );
