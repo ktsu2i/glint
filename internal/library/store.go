@@ -9,37 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	gormsqlite "github.com/glebarez/sqlite"
+	"github.com/kaito/glint/internal/sqlite"
+	"github.com/kaito/glint/migrations"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
-
-const schemaVersion = 1
-
-const schema = `
-CREATE TABLE IF NOT EXISTS books (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    file_name TEXT NOT NULL,
-    source_path TEXT NOT NULL,
-    file_hash TEXT NOT NULL UNIQUE,
-    size_bytes INTEGER NOT NULL,
-    page_count INTEGER NOT NULL DEFAULT 0,
-    cover_thumbnail_path TEXT NOT NULL DEFAULT '',
-    cover_thumbnail_status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (cover_thumbnail_status IN ('pending', 'ready', 'failed')),
-    imported_at TEXT NOT NULL,
-    last_opened_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS book_reading_states (
-    book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
-    page_number INTEGER NOT NULL DEFAULT 1,
-    updated_at TEXT NOT NULL
-);
-`
 
 type Store struct {
 	db *gorm.DB
@@ -89,7 +65,7 @@ func Open(path string) (*Store, error) {
 	if err := ensureParentDirectory(path); err != nil {
 		return nil, err
 	}
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+	db, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -127,28 +103,17 @@ func (store *Store) migrate(ctx context.Context) error {
 		"PRAGMA journal_mode = WAL",
 	} {
 		if err := db.Exec(statement).Error; err != nil {
-			return fmt.Errorf("migrate library database: %w", err)
+			return fmt.Errorf("apply library pragma: %w", err)
 		}
 	}
-	var version int
-	if err := db.Raw("PRAGMA user_version").Row().Scan(&version); err != nil {
-		return fmt.Errorf("read library schema version: %w", err)
+
+	sqlDB, err := store.db.DB()
+	if err != nil {
+		return fmt.Errorf("access library database handle: %w", err)
 	}
-	if version > schemaVersion {
-		return fmt.Errorf("library schema version %d is newer than supported version %d", version, schemaVersion)
-	}
-	if version == 0 {
-		if err := db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Exec(schema).Error; err != nil {
-				return fmt.Errorf("apply library schema version 1: %w", err)
-			}
-			if err := tx.Exec("PRAGMA user_version = 1").Error; err != nil {
-				return fmt.Errorf("record library schema version: %w", err)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
+	migrator := &sqlite.Migrator{DB: sqlDB, FS: migrations.FS}
+	if err := migrator.Up(ctx); err != nil {
+		return fmt.Errorf("apply library migrations: %w", err)
 	}
 	return nil
 }
