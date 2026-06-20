@@ -162,6 +162,41 @@ describe("PdfReader", () => {
     expect(task.destroy).toHaveBeenCalled();
   });
 
+  it("turns pages with arrow keys and ignores them inside editable elements", async () => {
+    const pdfDocument = makeDocument();
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader
+        book={makeBook()}
+        onPageContextChange={vi.fn()}
+      />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.keyDown(globalThis.window, { key: "ArrowRight" });
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(2));
+
+    fireEvent.keyDown(globalThis.window, { key: "ArrowRight" });
+    expect(pdfDocument.getPage).toHaveBeenLastCalledWith(2);
+
+    fireEvent.keyDown(globalThis.window, { key: "ArrowLeft" });
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1));
+
+    fireEvent.keyDown(globalThis.window, { key: "ArrowLeft" });
+    expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1);
+
+    const input = globalThis.document.createElement("input");
+    globalThis.document.body.appendChild(input);
+    input.focus();
+    fireEvent.keyDown(input, { key: "ArrowRight" });
+    expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1);
+    input.remove();
+
+    fireEvent.keyDown(globalThis.window, { key: "ArrowRight", metaKey: true });
+    expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1);
+  });
+
   it("zooms manually on a ctrl+wheel pinch gesture and ignores plain scrolls", async () => {
     const page = makePage();
     resolveDocument(makeDocument(page));

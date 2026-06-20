@@ -169,6 +169,35 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
   }, [book, initialPage, onPageContextChange]);
 
   useEffect(() => {
+    if (!document) {
+      return;
+    }
+    const numPages = document.numPages;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable) {
+        return;
+      }
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        return;
+      }
+      if (event.key === "ArrowRight" || event.key === "PageDown") {
+        event.preventDefault();
+        setPageNumber((current) => Math.min(numPages, current + 1));
+      } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        setPageNumber((current) => Math.max(1, current - 1));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [document]);
+
+  useEffect(() => {
     if (!document || !canvasRef.current) {
       return;
     }
