@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  BookOpenText,
+  CaretLeft,
+  CaretRight,
+  Minus,
+  Plus,
+} from "@phosphor-icons/react";
+import {
   GlobalWorkerOptions,
   getDocument,
   type PDFDocumentProxy,
   type RenderTask,
 } from "pdfjs-dist";
 import type { BookFile } from "../../shared/api/backend";
+import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
 
 GlobalWorkerOptions.workerSrc = new URL(
@@ -125,10 +133,13 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
   if (!book) {
     return (
       <section className="reader-empty" aria-label="PDF reader">
-        <div className="empty-book-mark">G</div>
-        <p className="eyebrow">READING WORKSPACE</p>
-        <h2>技術書を開いて、読書を始める</h2>
-        <p>検索可能なPDFをimportすると、ページ本文をAI contextとして利用できます。</p>
+        <div className="empty-reading-symbol" aria-hidden="true">
+          <BookOpenText size={34} weight="thin" />
+          <span />
+        </div>
+        <p className="section-label">Reading desk</p>
+        <h2>本とコードのあいだを読む。</h2>
+        <p>検索可能な技術書PDFを開いてください。ページ本文は、必要なときだけ質問に添付できます。</p>
       </section>
     );
   }
@@ -136,37 +147,37 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
   return (
     <section className="reader" aria-label="PDF reader">
       <div className="reader-toolbar">
-        <div className="book-identity">
-          <span className="book-dot" />
-          <span className="book-name" title={book.name}>{book.name}</span>
+        <div className="reader-section-label">
+          <BookOpenText size={15} weight="regular" />
+          <span>Reader</span>
         </div>
         <div className="reader-controls" aria-label="Page controls">
-          <button
-            type="button"
-            className="icon-button"
+          <ToolButton
+            label="前のページ"
             disabled={pageNumber <= 1}
             onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
-            aria-label="前のページ"
           >
-            ←
-          </button>
+            <CaretLeft size={15} weight="bold" />
+          </ToolButton>
           <span className="page-count">
             {pageNumber} <span>/ {document?.numPages ?? "–"}</span>
           </span>
-          <button
-            type="button"
-            className="icon-button"
+          <ToolButton
+            label="次のページ"
             disabled={!document || pageNumber >= document.numPages}
             onClick={() => setPageNumber((current) => Math.min(document?.numPages ?? current, current + 1))}
-            aria-label="次のページ"
           >
-            →
-          </button>
+            <CaretRight size={15} weight="bold" />
+          </ToolButton>
         </div>
         <div className="zoom-controls" aria-label="Zoom controls">
-          <button type="button" className="icon-button" onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))}>−</button>
+          <ToolButton label="縮小" onClick={() => setZoom((value) => Math.max(0.6, value - 0.1))}>
+            <Minus size={14} weight="bold" />
+          </ToolButton>
           <span>{Math.round(zoom * 100)}%</span>
-          <button type="button" className="icon-button" onClick={() => setZoom((value) => Math.min(2.2, value + 0.1))}>＋</button>
+          <ToolButton label="拡大" onClick={() => setZoom((value) => Math.min(2.2, value + 0.1))}>
+            <Plus size={14} weight="bold" />
+          </ToolButton>
         </div>
       </div>
 

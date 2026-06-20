@@ -1,4 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { Switch } from "@base-ui/react/switch";
+import {
+  ArrowUp,
+  BookOpenText,
+  ChatCircleDots,
+  Paperclip,
+} from "@phosphor-icons/react";
 import {
   onAnswerDelta,
   startMockChat,
@@ -27,7 +34,7 @@ export function ChatSidebar({ context }: ChatSidebarProps) {
     {
       id: "welcome",
       role: "assistant",
-      content: "ページを開いたら、その内容をcontextに含めて質問できます。現在はmock providerでstreaming UIを確認できます。",
+      content: "PDFを開くと、表示中のページを文脈として添付できます。現在はmock providerで応答を確認できます。",
     },
   ]);
   const [question, setQuestion] = useState("");
@@ -104,27 +111,38 @@ export function ChatSidebar({ context }: ChatSidebarProps) {
   return (
     <aside className="chat-sidebar" aria-label="AI chat">
       <header className="chat-header">
-        <div>
-          <p className="eyebrow">READING ASSISTANT</p>
-          <h2>Ask Glint</h2>
+        <div className="assistant-heading">
+          <span className="assistant-icon" aria-hidden="true">
+            <ChatCircleDots size={17} weight="regular" />
+          </span>
+          <div>
+            <h2>Assistant</h2>
+            <p>読書中の疑問を整理する</p>
+          </div>
         </div>
-        <span className="provider-badge"><span /> MOCK</span>
+        <span className="provider-status"><span /> Mock</span>
       </header>
 
-      <section className="context-card" aria-label="送信context">
+      <section className="context-panel" aria-label="送信する読書文脈">
         <div className="context-heading">
-          <div>
-            <span className="context-label">CONTEXT</span>
-            <strong>{hasContext ? `Page ${context.pageNumber}` : "PDF未選択"}</strong>
+          <div className="context-source">
+            <BookOpenText size={15} weight="regular" />
+            <div>
+              <span className="context-label">Reading context</span>
+              <strong>{hasContext ? `Page ${context.pageNumber}` : "PDF未選択"}</strong>
+            </div>
           </div>
-          <label className="context-switch">
-            <input
-              type="checkbox"
-              checked={includeContext}
+          <label className="context-toggle">
+            <Switch.Root
+              className="context-switch"
+              checked={includeContext && hasContext}
               disabled={!hasContext || sending}
-              onChange={(event) => setIncludeContext(event.target.checked)}
-            />
-            <span>{includeContext && hasContext ? "含める" : "含めない"}</span>
+              onCheckedChange={setIncludeContext}
+              aria-label="表示中のページを質問に含める"
+            >
+              <Switch.Thumb className="context-switch-thumb" />
+            </Switch.Root>
+            <span>{includeContext && hasContext ? "添付する" : "添付しない"}</span>
           </label>
         </div>
         <p className={hasContext ? "context-preview" : "context-preview context-placeholder"}>
@@ -133,15 +151,18 @@ export function ChatSidebar({ context }: ChatSidebarProps) {
             : "PDFを開くと、current page textのpreviewがここに表示されます。"}
         </p>
         {hasContext && (
-          <p className="context-meta">最大6,000文字・送信前に明示的に確認</p>
+          <p className="context-meta"><Paperclip size={11} /> 最大6,000文字</p>
         )}
       </section>
 
       <div className="message-list" aria-live="polite">
         {messages.map((message) => (
           <article key={message.id} className={`message message-${message.role}`}>
-            <span className="message-author">{message.role === "assistant" ? "GLINT" : "YOU"}</span>
-            <p>{message.content || <span className="typing-indicator">● ● ●</span>}</p>
+            <div className="message-meta">
+              <span className="message-author">{message.role === "assistant" ? "Glint" : "You"}</span>
+              {message.role === "assistant" && <span className="message-rule" />}
+            </div>
+            <p>{message.content || <span className="typing-indicator"><i /><i /><i /></span>}</p>
           </article>
         ))}
         <div ref={messageEndRef} />
@@ -163,9 +184,10 @@ export function ChatSidebar({ context }: ChatSidebarProps) {
           }}
         />
         <div className="composer-footer">
-          <span>Enter で送信 · Shift+Enter で改行</span>
+          <span>{includeContext && hasContext ? `Page ${context.pageNumber} を添付` : "文脈なし"}</span>
           <button type="submit" disabled={!question.trim() || sending}>
-            {sending ? "応答中" : "送信"} <span>↗</span>
+            <span>{sending ? "応答中" : "送信"}</span>
+            <ArrowUp size={14} weight="bold" />
           </button>
         </div>
       </form>
