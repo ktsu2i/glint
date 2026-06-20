@@ -5,6 +5,18 @@ import {llm} from '../models';
 
 export function AppDataDirectory():Promise<string>;
 
+export function ListBooks():Promise<Array<main.BookSummary>>;
+
+export function MarkBookCoverFailed(arg1:string):Promise<void>;
+
+export function OpenBook(arg1:string):Promise<main.BookFile>;
+
 export function OpenPDF():Promise<main.BookFile>;
+
+export function RelinkPDF(arg1:string):Promise<main.BookFile>;
+
+export function SaveBookCover(arg1:string,arg2:string):Promise<void>;
+
+export function SaveReadingPosition(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function StartMockChat(arg1:llm.ChatRequest):Promise<void>;

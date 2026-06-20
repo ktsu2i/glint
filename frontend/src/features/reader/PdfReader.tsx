@@ -26,10 +26,11 @@ type ZoomMode = { kind: "fit-width" } | { kind: "manual"; value: number };
 
 type PdfReaderProps = {
   book: BookFile | null;
-  onPageContextChange: (pageNumber: number, text: string) => void;
+  initialPage?: number;
+  onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
 };
 
-export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
+export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfReaderProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
@@ -68,7 +69,7 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
       setDocument(null);
       setPageNumber(1);
       setError("");
-      onPageContextChange(0, "");
+      onPageContextChange(0, "", 0);
       return;
     }
 
@@ -80,8 +81,8 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
     setLoading(true);
     setError("");
     setDocument(null);
-    setPageNumber(1);
-    onPageContextChange(0, "");
+    setPageNumber(Math.max(1, initialPage));
+    onPageContextChange(0, "", 0);
 
     let timeout = 0;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -104,6 +105,7 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
         ]);
         if (active) {
           setDocument(loadedDocument);
+          setPageNumber(Math.min(loadedDocument.numPages, Math.max(1, initialPage)));
         }
       } catch (reason: unknown) {
         if (active) {
@@ -131,7 +133,7 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
       abortController.abort();
       void loadingTask?.destroy();
     };
-  }, [book, onPageContextChange]);
+  }, [book, initialPage, onPageContextChange]);
 
   useEffect(() => {
     if (!document || !canvasRef.current) {
@@ -188,7 +190,7 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
             .filter((item) => "str" in item)
             .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
         );
-        onPageContextChange(pageNumber, text);
+        onPageContextChange(pageNumber, text, document!.numPages);
       }
     }
 

@@ -1,10 +1,14 @@
 # Glint
 
-Glint は、技術書PDFを読みながら、その内容を自分のコードベースへ接続して理解するためのdesktop appです。現在は最初のvertical sliceとして、PDF readerとmock AI chat sidebarを実装しています。
+Glint は、技術書PDFを読みながら、その内容を自分のコードベースへ接続して理解するためのdesktop appです。現在は最初のvertical sliceとして、local library、PDF reader、mock AI chat sidebarを実装しています。
 
 ## 現在できること
 
-- native file dialogから検索可能なPDFを開く
+- native file dialogから検索可能なPDFを本棚へimportする
+- import済みPDFをSQLiteに保存し、再起動後も表紙cardで一覧する
+- PDF先頭ページのlocal thumbnail生成とplaceholder cover
+- 本棚からreaderを開き、前回の読書ページから再開する
+- source PDFが移動・削除された場合の再選択導線
 - PDF.jsでページを表示する
 - 前後ページ移動とzoom
 - current page textの抽出と送信前preview
@@ -12,7 +16,7 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 - Goのprovider-neutral gatewayを通したmock streaming answer
 - token付きlocal endpointによるPDF配信。frontendへlocal pathは渡さない
 
-実LLM provider、API key保存、読書位置の永続化、repo indexing、book-to-repo mappingはまだ含みません。
+実LLM provider、API key保存、repo indexing、book-to-repo mappingはまだ含みません。
 
 ## 技術構成
 
@@ -20,6 +24,7 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 - Go
 - React 19 + TypeScript + Vite
 - PDF.js
+- SQLite（modernc.org/sqlite）
 
 ## 必要な環境
 

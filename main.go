@@ -30,6 +30,7 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 243, G: 239, B: 231, A: 1},
 		LogLevel:         logger.WARNING,
 		OnStartup:        app.startup,
+		OnShutdown:       app.shutdown,
 		Bind: []any{
 			app,
 		},

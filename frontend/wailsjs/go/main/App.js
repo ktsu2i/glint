@@ -6,8 +6,32 @@ export function AppDataDirectory() {
   return window['go']['main']['App']['AppDataDirectory']();
 }
 
+export function ListBooks() {
+  return window['go']['main']['App']['ListBooks']();
+}
+
+export function MarkBookCoverFailed(arg1) {
+  return window['go']['main']['App']['MarkBookCoverFailed'](arg1);
+}
+
+export function OpenBook(arg1) {
+  return window['go']['main']['App']['OpenBook'](arg1);
+}
+
 export function OpenPDF() {
   return window['go']['main']['App']['OpenPDF']();
+}
+
+export function RelinkPDF(arg1) {
+  return window['go']['main']['App']['RelinkPDF'](arg1);
+}
+
+export function SaveBookCover(arg1, arg2) {
+  return window['go']['main']['App']['SaveBookCover'](arg1, arg2);
+}
+
+export function SaveReadingPosition(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveReadingPosition'](arg1, arg2, arg3);
 }
 
 export function StartMockChat(arg1) {

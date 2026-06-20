@@ -25,6 +25,7 @@ vi.mock("../../shared/components/ToolButton", () => ({
 }));
 
 import { PdfReader } from "./PdfReader";
+import type { BookFile } from "../../shared/api/backend";
 
 type ResizeCallback = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
 
@@ -73,6 +74,18 @@ function makeDocument(page = makePage()) {
   };
 }
 
+function makeBook(url = "/book/1"): BookFile {
+  return {
+    id: "book-1",
+    title: "Guide",
+    name: "Guide.pdf",
+    url,
+    size: 10,
+    initialPage: 1,
+    coverStatus: "pending",
+  };
+}
+
 function resolveDocument(document = makeDocument()) {
   const task = { promise: Promise.resolve(document), destroy: vi.fn(async () => undefined) };
   loader.createPdfLoadingTask.mockResolvedValue(task);
@@ -95,7 +108,7 @@ describe("PdfReader", () => {
     );
 
     expect(screen.getByText("本とコードのあいだを読む。")).toBeTruthy();
-    expect(onPageContextChange).toHaveBeenCalledWith(0, "");
+    expect(onPageContextChange).toHaveBeenCalledWith(0, "", 0);
     unmount();
   });
 
@@ -106,7 +119,7 @@ describe("PdfReader", () => {
     const onPageContextChange = vi.fn();
     const { unmount } = render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={onPageContextChange}
       />,
     );
@@ -118,7 +131,7 @@ describe("PdfReader", () => {
     ));
 
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
-    await waitFor(() => expect(onPageContextChange).toHaveBeenCalledWith(1, "Alpha\nBeta"));
+    await waitFor(() => expect(onPageContextChange).toHaveBeenCalledWith(1, "Alpha\nBeta", 2));
     expect(page.render).toHaveBeenCalledWith(expect.objectContaining({
       transform: [2, 0, 0, 2, 0, 0],
     }));
@@ -149,6 +162,22 @@ describe("PdfReader", () => {
     expect(task.destroy).toHaveBeenCalled();
   });
 
+  it("restores and clamps the saved reading position", async () => {
+    const pdfDocument = makeDocument();
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader
+        book={makeBook()}
+        initialPage={9}
+        onPageContextChange={vi.fn()}
+      />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("/ 2");
+  });
+
   it.each([
     [new Error("broken PDF"), "broken PDF"],
     ["unknown", "PDFを開けませんでした。"],
@@ -156,7 +185,7 @@ describe("PdfReader", () => {
     loader.createPdfLoadingTask.mockRejectedValue(reason);
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/broken", size: 10 }}
+        book={makeBook("/book/broken")}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -170,7 +199,7 @@ describe("PdfReader", () => {
     loader.createPdfLoadingTask.mockResolvedValue(task);
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/slow", size: 10 }}
+        book={makeBook("/book/slow")}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -191,7 +220,7 @@ describe("PdfReader", () => {
     }));
     const { unmount } = render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/pending", size: 10 }}
+        book={makeBook("/book/pending")}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -208,7 +237,7 @@ describe("PdfReader", () => {
     }));
     const { unmount } = render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/pending", size: 10 }}
+        book={makeBook("/book/pending")}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -224,7 +253,7 @@ describe("PdfReader", () => {
     resolveDocument(makeDocument(page));
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -244,7 +273,7 @@ describe("PdfReader", () => {
     resolveDocument(makeDocument(page));
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -260,7 +289,7 @@ describe("PdfReader", () => {
     resolveDocument();
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -275,7 +304,7 @@ describe("PdfReader", () => {
     resolveDocument({ numPages: 2, getPage: vi.fn(async () => Promise.reject("bad render")) });
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -293,7 +322,7 @@ describe("PdfReader", () => {
     resolveDocument({ numPages: 1, getPage: vi.fn(async () => Promise.reject(cancellation)) });
     render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -314,7 +343,7 @@ describe("PdfReader", () => {
     resolveDocument(document);
     const { unmount } = render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={vi.fn()}
       />,
     );
@@ -340,7 +369,7 @@ describe("PdfReader", () => {
     const onPageContextChange = vi.fn();
     const { unmount } = render(
       <PdfReader
-        book={{ name: "Guide.pdf", url: "/book/1", size: 10 }}
+        book={makeBook()}
         onPageContextChange={onPageContextChange}
       />,
     );
