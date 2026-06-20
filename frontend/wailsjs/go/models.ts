@@ -1,29 +1,4 @@
-export namespace llm {
-	
-	export class ChatRequest {
-	    requestId: string;
-	    question: string;
-	    contextText: string;
-	    bookName: string;
-	    pageNumber: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new ChatRequest(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.requestId = source["requestId"];
-	        this.question = source["question"];
-	        this.contextText = source["contextText"];
-	        this.bookName = source["bookName"];
-	        this.pageNumber = source["pageNumber"];
-	    }
-	}
-
-}
-
-export namespace main {
+export namespace books {
 	
 	export class BookFile {
 	    id: string;
@@ -33,7 +8,7 @@ export namespace main {
 	    size: number;
 	    initialPage: number;
 	    coverStatus: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookFile(source);
 	    }
@@ -61,11 +36,11 @@ export namespace main {
 	    coverUrl: string;
 	    coverStatus: string;
 	    available: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookSummary(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -83,3 +58,29 @@ export namespace main {
 	}
 
 }
+
+export namespace llm {
+	
+	export class ChatRequest {
+	    requestId: string;
+	    question: string;
+	    contextText: string;
+	    bookName: string;
+	    pageNumber: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.requestId = source["requestId"];
+	        this.question = source["question"];
+	        this.contextText = source["contextText"];
+	        this.bookName = source["bookName"];
+	        this.pageNumber = source["pageNumber"];
+	    }
+	}
+
+}
+

@@ -6,8 +6,8 @@ import {
   RelinkPDF,
   SaveBookCover,
   SaveReadingPosition,
-  StartMockChat,
-} from "../../../wailsjs/go/main/App";
+} from "../../../wailsjs/go/books/Service";
+import { StartMockChat } from "../../../wailsjs/go/chat/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
 
 export type BookFile = {

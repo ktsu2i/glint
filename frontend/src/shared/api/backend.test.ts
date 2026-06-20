@@ -13,7 +13,7 @@ const bindings = vi.hoisted(() => ({
   eventsOff: vi.fn(),
 }));
 
-vi.mock("../../../wailsjs/go/main/App", () => ({
+vi.mock("../../../wailsjs/go/books/Service", () => ({
   ListBooks: bindings.listBooks,
   MarkBookCoverFailed: bindings.markBookCoverFailed,
   OpenBook: bindings.openBook,
@@ -21,6 +21,9 @@ vi.mock("../../../wailsjs/go/main/App", () => ({
   RelinkPDF: bindings.relinkPDF,
   SaveBookCover: bindings.saveBookCover,
   SaveReadingPosition: bindings.saveReadingPosition,
+}));
+
+vi.mock("../../../wailsjs/go/chat/Service", () => ({
   StartMockChat: bindings.startMockChat,
 }));
 

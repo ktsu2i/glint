@@ -1,0 +1,160 @@
+package books
+
+import (
+	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/kaito/glint/internal/assetserver"
+	"github.com/kaito/glint/internal/library"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type harness struct {
+	t        *testing.T
+	root     string
+	dataDir  string
+	store    *library.Store
+	assets   *assetserver.Server
+	service  *Service
+}
+
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	require.NoError(t, os.MkdirAll(dataDir, 0o700))
+	store, err := library.Open(filepath.Join(dataDir, "library.sqlite3"))
+	require.NoError(t, err)
+	assets := assetserver.New()
+	service := New(store, assets, dataDir)
+	t.Cleanup(func() { _ = store.Close() })
+	return &harness{t: t, root: root, dataDir: dataDir, store: store, assets: assets, service: service}
+}
+
+func (h *harness) writePDF(name, body string) string {
+	path := filepath.Join(h.root, name)
+	require.NoError(h.t, os.WriteFile(path, []byte(body), 0o600))
+	return path
+}
+
+func TestSelectPDFRegistersAssetAndReturnsBookFile(t *testing.T) {
+	h := newHarness(t)
+	content := "%PDF-1.7\nfixture"
+	path := h.writePDF("sample.pdf", content)
+
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+	assert.Equal(t, "sample.pdf", book.Name)
+	assert.True(t, strings.HasPrefix(book.URL, assetserver.BookRoutePrefix))
+
+	request := httptest.NewRequest(http.MethodGet, book.URL, nil)
+	response := httptest.NewRecorder()
+	h.assets.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, content, response.Body.String())
+}
+
+func TestSelectPDFRejectsInvalidHeader(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("invalid.pdf", "not a pdf")
+	_, err := h.service.selectPDF(path)
+	assert.Error(t, err)
+}
+
+func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	require.NoError(t, os.MkdirAll(dataDir, 0o700))
+	path := filepath.Join(root, "Persistent Guide.pdf")
+	require.NoError(t, os.WriteFile(path, []byte("%PDF-1.7\nfixture"), 0o600))
+
+	store, err := library.Open(filepath.Join(dataDir, "library.sqlite3"))
+	require.NoError(t, err)
+	assets := assetserver.New()
+	service := New(store, assets, dataDir)
+
+	book, err := service.selectPDF(path)
+	require.NoError(t, err)
+	assert.NotEmpty(t, book.ID)
+	assert.Equal(t, "Persistent Guide", book.Title)
+	assert.Equal(t, 1, book.InitialPage)
+	require.NoError(t, service.SaveReadingPosition(book.ID, 3, 8))
+	png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("cover")...)
+	require.NoError(t, service.SaveBookCover(book.ID, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)))
+	require.NoError(t, store.Close())
+
+	store, err = library.Open(filepath.Join(dataDir, "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	assets = assetserver.New()
+	service = New(store, assets, dataDir)
+
+	books, err := service.ListBooks()
+	require.NoError(t, err)
+	require.Len(t, books, 1)
+	summary := books[0]
+	assert.Equal(t, 3, summary.LastPage)
+	assert.Equal(t, 8, summary.PageCount)
+	assert.Equal(t, "ready", summary.CoverStatus)
+	assert.NotEmpty(t, summary.CoverURL)
+	assert.True(t, summary.Available)
+	opened, err := service.OpenBook(summary.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, opened.InitialPage)
+
+	request := httptest.NewRequest(http.MethodGet, summary.CoverURL, nil)
+	response := httptest.NewRecorder()
+	assets.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "image/png", response.Header().Get("Content-Type"))
+}
+
+func TestLibraryReportsMissingSourceWithoutExposingPath(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Moved.pdf", "%PDF-1.7\nfixture")
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(path))
+	books, err := h.service.ListBooks()
+	require.NoError(t, err)
+	require.Len(t, books, 1)
+	assert.False(t, books[0].Available)
+	_, err = h.service.OpenBook(book.ID)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), path)
+}
+
+func TestSaveBookCoverRejectsInvalidContent(t *testing.T) {
+	h := newHarness(t)
+	assert.Error(t, h.service.SaveBookCover("missing", "data:text/plain;base64,SGk="))
+}
+
+func TestLibraryRegeneratesCoverWhenCacheOrPDFChanges(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Changing.pdf", "%PDF-1.7\nfirst")
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("cover")...)
+	require.NoError(t, h.service.SaveBookCover(book.ID, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)))
+	covers, err := filepath.Glob(filepath.Join(h.dataDir, "covers", "*.png"))
+	require.NoError(t, err)
+	require.Len(t, covers, 1)
+	require.NoError(t, os.Remove(covers[0]))
+	summaries, err := h.service.ListBooks()
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "pending", summaries[0].CoverStatus)
+	assert.Empty(t, summaries[0].CoverURL)
+
+	require.NoError(t, os.WriteFile(path, []byte("%PDF-1.7\nsecond version"), 0o600))
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", opened.CoverStatus)
+	assert.Greater(t, opened.Size, book.Size)
+}
