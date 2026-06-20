@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowsHorizontal,
   BookOpenText,
   CaretLeft,
   CaretRight,
+  CornersIn,
   Minus,
   Plus,
 } from "@phosphor-icons/react";
@@ -22,7 +22,7 @@ const minScale = 0.4;
 const maxScale = 3;
 const manualZoomStep = 0.1;
 
-type ZoomMode = { kind: "fit-width" } | { kind: "manual"; value: number };
+type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 
 type PdfReaderProps = {
   book: BookFile | null;
@@ -35,7 +35,7 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
   const stageObserverRef = useRef<ResizeObserver | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-width" });
+  const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [effectiveScale, setEffectiveScale] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -82,6 +82,8 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
     setError("");
     setDocument(null);
     setPageNumber(Math.max(1, initialPage));
+    setZoomMode({ kind: "fit-page" });
+    setEffectiveScale(1);
     onPageContextChange(0, "", 0);
 
     let timeout = 0;
@@ -139,7 +141,7 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
     if (!document || !canvasRef.current) {
       return;
     }
-    if (zoomMode.kind === "fit-width" && stageSize.width === 0) {
+    if (zoomMode.kind === "fit-page" && (stageSize.width === 0 || stageSize.height === 0)) {
       return;
     }
 
@@ -153,11 +155,17 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       }
 
       const naturalViewport = page.getViewport({ scale: 1 });
-      const rawScale =
-        zoomMode.kind === "fit-width"
-          ? stageSize.width / naturalViewport.width
-          : zoomMode.value;
-      const scale = Math.min(maxScale, Math.max(minScale, rawScale || 1));
+      const fitRatios = [
+        stageSize.width / naturalViewport.width,
+        stageSize.height / naturalViewport.height,
+      ].filter((ratio) => Number.isFinite(ratio) && ratio > 0);
+      const fitScale = fitRatios.length > 0 ? Math.min(...fitRatios) : 1;
+      const rawScale = zoomMode.kind === "fit-page"
+        ? fitScale
+        : zoomMode.value;
+      const scale = zoomMode.kind === "fit-page"
+        ? Math.min(maxScale, rawScale || 1)
+        : Math.min(maxScale, Math.max(minScale, rawScale || 1));
 
       const viewport = page.getViewport({ scale });
       const outputScale = window.devicePixelRatio || 1;
@@ -256,11 +264,11 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
         </div>
         <div className="zoom-controls" aria-label="Zoom controls">
           <ToolButton
-            label="幅に合わせる"
-            className={zoomMode.kind === "fit-width" ? "is-active" : ""}
-            onClick={() => setZoomMode({ kind: "fit-width" })}
+            label="全体を表示"
+            className={zoomMode.kind === "fit-page" ? "is-active" : ""}
+            onClick={() => setZoomMode({ kind: "fit-page" })}
           >
-            <ArrowsHorizontal size={14} weight="bold" />
+            <CornersIn size={14} weight="bold" />
           </ToolButton>
           <ToolButton label="縮小" onClick={() => adjustZoom(-manualZoomStep)}>
             <Minus size={14} weight="bold" />

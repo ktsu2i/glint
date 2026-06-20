@@ -141,15 +141,15 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 1000, height: 300 } }]));
     await screen.findByText("300%");
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 20, height: 300 } }]));
-    await screen.findByText("40%");
+    await screen.findByText("10%");
 
     fireEvent.click(screen.getByRole("button", { name: "拡大" }));
-    await screen.findByText("50%");
-    expect(screen.getByRole("button", { name: "幅に合わせる" }).className).toBe("");
+    await screen.findByText("40%");
+    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "縮小" }));
     await screen.findByText("40%");
-    fireEvent.click(screen.getByRole("button", { name: "幅に合わせる" }));
-    expect(screen.getByRole("button", { name: "幅に合わせる" }).className).toBe("is-active");
+    fireEvent.click(screen.getByRole("button", { name: "全体を表示" }));
+    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
 
     fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
     await waitFor(() => expect(document.getPage).toHaveBeenCalledWith(2));
@@ -160,6 +160,31 @@ describe("PdfReader", () => {
     unmount();
     expect(page.renderTask.cancel).toHaveBeenCalled();
     expect(task.destroy).toHaveBeenCalled();
+  });
+
+  it("fits the whole page when height is the limiting dimension", async () => {
+    const page = makePage({
+      getViewport: vi.fn(({ scale }: { scale: number }) => ({
+        width: 200 * scale,
+        height: 400 * scale,
+      })),
+    });
+    resolveDocument(makeDocument(page));
+    render(
+      <PdfReader
+        book={makeBook()}
+        onPageContextChange={vi.fn()}
+      />,
+    );
+
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+
+    await screen.findByText("75%");
+    expect(page.getViewport).toHaveBeenLastCalledWith({ scale: 0.75 });
+    const canvas = globalThis.document.querySelector(".pdf-canvas") as HTMLCanvasElement;
+    expect(canvas.style.width).toBe("150px");
+    expect(canvas.style.height).toBe("300px");
+    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
   });
 
   it("restores and clamps the saved reading position", async () => {
