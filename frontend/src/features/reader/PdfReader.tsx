@@ -247,7 +247,7 @@ export function PdfReader({ book, onPageContextChange }: PdfReaderProps) {
           <ToolButton
             label="次のページ"
             disabled={!document || pageNumber >= document.numPages}
-            onClick={() => setPageNumber((current) => Math.min(document?.numPages ?? current, current + 1))}
+            onClick={() => setPageNumber((current) => Math.min(document!.numPages, current + 1))}
           >
             <CaretRight size={15} weight="bold" />
           </ToolButton>

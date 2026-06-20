@@ -2,8 +2,9 @@ import { createReadStream, copyFileSync, mkdirSync, readdirSync, statSync } from
 import { createRequire } from "node:module";
 import { extname, join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { defineConfig, type Plugin } from "vite";
+import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 
 const require = createRequire(import.meta.url);
 const pdfjsDir = resolve(require.resolve("pdfjs-dist/package.json"), "..");
@@ -79,6 +80,16 @@ function pdfjsAssetsPlugin(): Plugin {
 export default defineConfig({
   plugins: [react(), pdfjsAssetsPlugin()],
   clearScreen: false,
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/**/*.d.ts", "src/**/*.test.{ts,tsx}", "src/test/**"],
+      reporter: ["text", "json-summary", "html"],
+    },
+  },
   server: {
     strictPort: true,
   },

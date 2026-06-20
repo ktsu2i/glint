@@ -48,4 +48,21 @@ describe("createPdfLoadingTask", () => {
       createPdfLoadingTask("/book/token", new AbortController().signal),
     ).rejects.toThrow("取得したデータがPDFではありません");
   });
+
+  it("reports an unsuccessful HTTP response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+
+    await expect(
+      createPdfLoadingTask("/book/missing", new AbortController().signal),
+    ).rejects.toThrow("HTTP 503");
+  });
+
+  it("resolves asset URLs without a document global", async () => {
+    vi.stubGlobal("document", undefined);
+    const pdf = createOnePagePdf();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(pdf.buffer as ArrayBuffer)));
+
+    const task = await createPdfLoadingTask("/book/token", new AbortController().signal);
+    await task.destroy();
+  });
 });
