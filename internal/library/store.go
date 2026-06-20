@@ -2,7 +2,6 @@ package library
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -10,7 +9,10 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 const schemaVersion = 1
@@ -40,7 +42,7 @@ CREATE TABLE IF NOT EXISTS book_reading_states (
 `
 
 type Store struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
 type Book struct {
@@ -58,19 +60,50 @@ type Book struct {
 	LastPage             int
 }
 
+type bookRecord struct {
+	ID                   string `gorm:"column:id;primaryKey"`
+	Title                string `gorm:"column:title"`
+	FileName             string `gorm:"column:file_name"`
+	SourcePath           string `gorm:"column:source_path"`
+	FileHash             string `gorm:"column:file_hash"`
+	SizeBytes            int64  `gorm:"column:size_bytes"`
+	PageCount            int    `gorm:"column:page_count"`
+	CoverThumbnailPath   string `gorm:"column:cover_thumbnail_path"`
+	CoverThumbnailStatus string `gorm:"column:cover_thumbnail_status"`
+	ImportedAt           string `gorm:"column:imported_at"`
+	LastOpenedAt         string `gorm:"column:last_opened_at"`
+	UpdatedAt            string `gorm:"column:updated_at"`
+}
+
+func (bookRecord) TableName() string { return "books" }
+
+type readingStateRecord struct {
+	BookID     string `gorm:"column:book_id;primaryKey"`
+	PageNumber int    `gorm:"column:page_number"`
+	UpdatedAt  string `gorm:"column:updated_at"`
+}
+
+func (readingStateRecord) TableName() string { return "book_reading_states" }
+
 func Open(path string) (*Store, error) {
 	if err := ensureParentDirectory(path); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("open library database: %w", err)
 	}
-	db.SetMaxOpenConns(1)
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("open library database: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
 
 	store := &Store{db: db}
 	if err := store.migrate(context.Background()); err != nil {
-		_ = db.Close()
+		_ = sqlDB.Close()
 		return nil, err
 	}
 	return store, nil
@@ -87,36 +120,34 @@ func ensureParentDirectory(path string) error {
 }
 
 func (store *Store) migrate(ctx context.Context) error {
+	db := store.db.WithContext(ctx)
 	for _, statement := range []string{
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA busy_timeout = 5000",
 		"PRAGMA journal_mode = WAL",
 	} {
-		if _, err := store.db.ExecContext(ctx, statement); err != nil {
+		if err := db.Exec(statement).Error; err != nil {
 			return fmt.Errorf("migrate library database: %w", err)
 		}
 	}
 	var version int
-	if err := store.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+	if err := db.Raw("PRAGMA user_version").Row().Scan(&version); err != nil {
 		return fmt.Errorf("read library schema version: %w", err)
 	}
 	if version > schemaVersion {
 		return fmt.Errorf("library schema version %d is newer than supported version %d", version, schemaVersion)
 	}
 	if version == 0 {
-		tx, err := store.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin library migration: %w", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-		if _, err := tx.ExecContext(ctx, schema); err != nil {
-			return fmt.Errorf("apply library schema version 1: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
-			return fmt.Errorf("record library schema version: %w", err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit library migration: %w", err)
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec(schema).Error; err != nil {
+				return fmt.Errorf("apply library schema version 1: %w", err)
+			}
+			if err := tx.Exec("PRAGMA user_version = 1").Error; err != nil {
+				return fmt.Errorf("record library schema version: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -126,7 +157,11 @@ func (store *Store) Close() error {
 	if store == nil || store.db == nil {
 		return nil
 	}
-	return store.db.Close()
+	sqlDB, err := store.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }
 
 func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash string, size int64, now time.Time) (Book, error) {
@@ -137,51 +172,46 @@ func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash string,
 	title := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	timestamp := now.UTC().Format(time.RFC3339Nano)
 
-	_, err := store.db.ExecContext(ctx, `
-        INSERT INTO books (
-            id, title, file_name, source_path, file_hash, size_bytes,
-            cover_thumbnail_status, imported_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-		ON CONFLICT(file_hash) DO UPDATE SET
-			title = excluded.title,
-			source_path = excluded.source_path,
-            file_name = excluded.file_name,
-            size_bytes = excluded.size_bytes,
-            updated_at = excluded.updated_at
-    `, id, title, fileName, sourcePath, fileHash, size, timestamp, timestamp)
+	record := bookRecord{
+		ID:                   id,
+		Title:                title,
+		FileName:             fileName,
+		SourcePath:           sourcePath,
+		FileHash:             fileHash,
+		SizeBytes:            size,
+		CoverThumbnailStatus: "pending",
+		ImportedAt:           timestamp,
+		UpdatedAt:            timestamp,
+	}
+	err := store.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "file_hash"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"title", "source_path", "file_name", "size_bytes", "updated_at",
+		}),
+	}).Create(&record).Error
 	if err != nil {
 		return Book{}, fmt.Errorf("save imported book: %w", err)
 	}
 	return store.ByHash(ctx, fileHash)
 }
 
+const selectBookColumns = `b.id, b.title, b.file_name, b.source_path, b.file_hash,
+       b.size_bytes, b.page_count, b.cover_thumbnail_path,
+       b.cover_thumbnail_status, b.imported_at, b.last_opened_at,
+       COALESCE(r.page_number, 1) AS last_page`
+
 func (store *Store) List(ctx context.Context) ([]Book, error) {
-	rows, err := store.db.QueryContext(ctx, `
-        SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash,
-               b.size_bytes, b.page_count, b.cover_thumbnail_path,
-               b.cover_thumbnail_status, b.imported_at, b.last_opened_at,
-               COALESCE(r.page_number, 1)
+	var books []Book
+	err := store.db.WithContext(ctx).Raw(`
+        SELECT `+selectBookColumns+`
           FROM books b
           LEFT JOIN book_reading_states r ON r.book_id = b.id
          ORDER BY CASE WHEN b.last_opened_at = '' THEN 1 ELSE 0 END,
                   b.last_opened_at DESC,
                   b.imported_at DESC
-    `)
+    `).Scan(&books).Error
 	if err != nil {
 		return nil, fmt.Errorf("list books: %w", err)
-	}
-	defer rows.Close()
-
-	var books []Book
-	for rows.Next() {
-		book, err := scanBook(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan book: %w", err)
-		}
-		books = append(books, book)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate books: %w", err)
 	}
 	return books, nil
 }
@@ -195,30 +225,30 @@ func (store *Store) ByHash(ctx context.Context, hash string) (Book, error) {
 }
 
 func (store *Store) queryBook(ctx context.Context, where string, value any) (Book, error) {
-	row := store.db.QueryRowContext(ctx, `
-        SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash,
-               b.size_bytes, b.page_count, b.cover_thumbnail_path,
-               b.cover_thumbnail_status, b.imported_at, b.last_opened_at,
-               COALESCE(r.page_number, 1)
+	var book Book
+	result := store.db.WithContext(ctx).Raw(`
+        SELECT `+selectBookColumns+`
           FROM books b
           LEFT JOIN book_reading_states r ON r.book_id = b.id
-         WHERE `+where, value)
-	book, err := scanBook(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Book{}, ErrBookNotFound
+         WHERE `+where, value).Scan(&book)
+	if result.Error != nil {
+		return Book{}, fmt.Errorf("get book: %w", result.Error)
 	}
-	if err != nil {
-		return Book{}, fmt.Errorf("get book: %w", err)
+	if result.RowsAffected == 0 {
+		return Book{}, ErrBookNotFound
 	}
 	return book, nil
 }
 
 func (store *Store) MarkOpened(ctx context.Context, id string, now time.Time) error {
-	result, err := store.db.ExecContext(ctx,
-		"UPDATE books SET last_opened_at = ?, updated_at = ? WHERE id = ?",
-		now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano), id,
-	)
-	return requireChanged(result, err, "mark book opened")
+	timestamp := now.UTC().Format(time.RFC3339Nano)
+	result := store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"last_opened_at": timestamp,
+			"updated_at":     timestamp,
+		})
+	return requireChanged(result, "mark book opened")
 }
 
 func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumber, pageCount int, now time.Time) error {
@@ -226,59 +256,62 @@ func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumb
 		return errors.New("reading position is outside the document")
 	}
 	timestamp := now.UTC().Format(time.RFC3339Nano)
-	tx, err := store.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin reading position update: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	result, err := tx.ExecContext(ctx,
-		"UPDATE books SET page_count = ?, updated_at = ? WHERE id = ?",
-		pageCount, timestamp, id,
-	)
-	if err := requireChanged(result, err, "update book page count"); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-        INSERT INTO book_reading_states (book_id, page_number, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(book_id) DO UPDATE SET
-            page_number = excluded.page_number,
-            updated_at = excluded.updated_at
-    `, id, pageNumber, timestamp); err != nil {
-		return fmt.Errorf("save reading position: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit reading position: %w", err)
-	}
-	return nil
+	return store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&bookRecord{}).
+			Where("id = ?", id).
+			Updates(map[string]any{
+				"page_count": pageCount,
+				"updated_at": timestamp,
+			})
+		if err := requireChanged(result, "update book page count"); err != nil {
+			return err
+		}
+		state := readingStateRecord{
+			BookID:     id,
+			PageNumber: pageNumber,
+			UpdatedAt:  timestamp,
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "book_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"page_number", "updated_at"}),
+		}).Create(&state).Error; err != nil {
+			return fmt.Errorf("save reading position: %w", err)
+		}
+		return nil
+	})
 }
 
 func (store *Store) SaveCover(ctx context.Context, id, path string, now time.Time) error {
-	result, err := store.db.ExecContext(ctx, `
-        UPDATE books
-           SET cover_thumbnail_path = ?, cover_thumbnail_status = 'ready', updated_at = ?
-         WHERE id = ?
-    `, path, now.UTC().Format(time.RFC3339Nano), id)
-	return requireChanged(result, err, "save book cover")
+	result := store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"cover_thumbnail_path":   path,
+			"cover_thumbnail_status": "ready",
+			"updated_at":             now.UTC().Format(time.RFC3339Nano),
+		})
+	return requireChanged(result, "save book cover")
 }
 
 func (store *Store) MarkCoverFailed(ctx context.Context, id string, now time.Time) error {
-	result, err := store.db.ExecContext(ctx, `
-        UPDATE books
-           SET cover_thumbnail_path = '', cover_thumbnail_status = 'failed', updated_at = ?
-         WHERE id = ?
-    `, now.UTC().Format(time.RFC3339Nano), id)
-	return requireChanged(result, err, "mark book cover failed")
+	result := store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"cover_thumbnail_path":   "",
+			"cover_thumbnail_status": "failed",
+			"updated_at":             now.UTC().Format(time.RFC3339Nano),
+		})
+	return requireChanged(result, "mark book cover failed")
 }
 
 func (store *Store) ResetCover(ctx context.Context, id string, now time.Time) error {
-	result, err := store.db.ExecContext(ctx, `
-        UPDATE books
-           SET cover_thumbnail_path = '', cover_thumbnail_status = 'pending', updated_at = ?
-         WHERE id = ?
-    `, now.UTC().Format(time.RFC3339Nano), id)
-	return requireChanged(result, err, "reset book cover")
+	result := store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"cover_thumbnail_path":   "",
+			"cover_thumbnail_status": "pending",
+			"updated_at":             now.UTC().Format(time.RFC3339Nano),
+		})
+	return requireChanged(result, "reset book cover")
 }
 
 func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string, size int64, now time.Time) (Book, error) {
@@ -293,13 +326,20 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 		coverPath = ""
 		coverStatus = "pending"
 	}
-	_, err = store.db.ExecContext(ctx, `
-        UPDATE books
-           SET title = ?, file_name = ?, source_path = ?, file_hash = ?, size_bytes = ?,
-               cover_thumbnail_path = ?, cover_thumbnail_status = ?, updated_at = ?
-         WHERE id = ?
-    `, strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath)), filepath.Base(sourcePath),
-		sourcePath, fileHash, size, coverPath, coverStatus, timestamp, id)
+	fileName := filepath.Base(sourcePath)
+	title := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	err = store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"title":                  title,
+			"file_name":              fileName,
+			"source_path":            sourcePath,
+			"file_hash":              fileHash,
+			"size_bytes":             size,
+			"cover_thumbnail_path":   coverPath,
+			"cover_thumbnail_status": coverStatus,
+			"updated_at":             timestamp,
+		}).Error
 	if err != nil {
 		return Book{}, fmt.Errorf("relink book: %w", err)
 	}
@@ -308,29 +348,11 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 
 var ErrBookNotFound = errors.New("book not found")
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanBook(row rowScanner) (Book, error) {
-	var book Book
-	err := row.Scan(
-		&book.ID, &book.Title, &book.FileName, &book.SourcePath, &book.FileHash,
-		&book.SizeBytes, &book.PageCount, &book.CoverThumbnailPath,
-		&book.CoverThumbnailStatus, &book.ImportedAt, &book.LastOpenedAt, &book.LastPage,
-	)
-	return book, err
-}
-
-func requireChanged(result sql.Result, err error, operation string) error {
-	if err != nil {
-		return fmt.Errorf("%s: %w", operation, err)
+func requireChanged(result *gorm.DB, operation string) error {
+	if result.Error != nil {
+		return fmt.Errorf("%s: %w", operation, result.Error)
 	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("%s: inspect result: %w", operation, err)
-	}
-	if changed == 0 {
+	if result.RowsAffected == 0 {
 		return ErrBookNotFound
 	}
 	return nil

@@ -16,7 +16,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	store, err := Open(path)
 	require.NoError(t, err)
 	var schemaVersionValue int
-	require.NoError(t, store.db.QueryRow("PRAGMA user_version").Scan(&schemaVersionValue))
+	require.NoError(t, store.db.Raw("PRAGMA user_version").Row().Scan(&schemaVersionValue))
 	assert.Equal(t, schemaVersion, schemaVersionValue)
 
 	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", 120, now)
