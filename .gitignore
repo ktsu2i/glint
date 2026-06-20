@@ -12,6 +12,7 @@ build/bin/
 # Go build and test output
 coverage.out
 *.test
+*.tsbuildinfo
 
 # Local configuration
 .env
