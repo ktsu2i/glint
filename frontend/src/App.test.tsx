@@ -99,6 +99,9 @@ describe("App", () => {
     const { unmount } = render(<App />);
 
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "メインナビゲーション" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "本棚" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: "読書" })).toHaveProperty("disabled", true);
     fireEvent.pointerMove(window, { clientX: 10 });
     fireEvent.pointerUp(window);
 
@@ -110,7 +113,7 @@ describe("App", () => {
     mocks.openPDF.mockResolvedValueOnce(openedBook);
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     await waitFor(() => expect(screen.getByText("initial-3")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "本棚へ" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "読書" }).getAttribute("aria-current")).toBe("page");
 
     fireEvent.click(screen.getByRole("button", { name: "set-page" }));
     expect(screen.getByLabelText("4ページ")).toBeTruthy();
@@ -118,9 +121,10 @@ describe("App", () => {
     expect(screen.getByTestId("chat-context").textContent).toContain('"pageNumber":4');
     expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12);
 
-    fireEvent.click(screen.getByRole("button", { name: "設定を開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "設定" }));
     expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "読書へ戻る" }));
+    expect(screen.getByRole("button", { name: "設定" }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(screen.getByRole("button", { name: "読書" }));
     expect(await screen.findByText("initial-4")).toBeTruthy();
 
     const separator = screen.getByRole("separator");
@@ -139,7 +143,7 @@ describe("App", () => {
     fireEvent.pointerUp(window);
     expect(document.body.classList.contains("is-resizing")).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "本棚へ" }));
+    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
     expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
     unmount();
   });
@@ -158,11 +162,11 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("最初の一冊を、本棚へ。");
 
-    fireEvent.click(screen.getByRole("button", { name: "設定を開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "設定" }));
     expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
     expect(screen.getByDisplayValue("provider/model")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "本棚へ戻る" }));
+    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
     expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
   });
 

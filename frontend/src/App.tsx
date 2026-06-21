@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { ArrowLeft, BookOpenText, Books, FolderOpen, GearSix } from "@phosphor-icons/react";
+import { BookOpenText, Books, FolderOpen, GearSix } from "@phosphor-icons/react";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { Library } from "./features/library/Library";
@@ -200,6 +200,9 @@ export default function App() {
   const workspaceStyle = { "--assistant-width": `${assistantWidth}px` } as CSSProperties;
 
   const openSettings = useCallback(() => {
+    if (view === "settings") {
+      return;
+    }
     const returnView = view === "reader" && book ? "reader" : "library";
     if (returnView === "reader" && pageContext.pageNumber > 0) {
       setBook((current) => current ? { ...current, initialPage: pageContext.pageNumber } : current);
@@ -212,6 +215,23 @@ export default function App() {
   const closeSettings = useCallback(() => {
     setView(settingsReturnView === "reader" && book ? "reader" : "library");
   }, [book, settingsReturnView]);
+
+  const showLibrary = useCallback(() => {
+    setView("library");
+    setOpenError("");
+    void refreshLibrary();
+  }, [refreshLibrary]);
+
+  const resumeReader = useCallback(() => {
+    if (!book) {
+      return;
+    }
+    if (pageContext.pageNumber > 0) {
+      setBook((current) => current ? { ...current, initialPage: pageContext.pageNumber } : current);
+    }
+    setView("reader");
+    setOpenError("");
+  }, [book, pageContext.pageNumber]);
 
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
@@ -228,102 +248,114 @@ export default function App() {
           </div>
           <div className="toolbar-actions">
             {openError && <span className="open-error" role="alert">{openError}</span>}
-            {view === "reader" && (
-              <button
-                type="button"
-                className="library-back-button"
-                onClick={() => {
-                  setView("library");
-                  setBook(null);
-                  setOpenError("");
-                  void refreshLibrary();
-                }}
-              >
-                <Books size={15} />
-                本棚へ
-              </button>
-            )}
-            {view === "settings" ? (
-              <button type="button" className="library-back-button" onClick={closeSettings}>
-                <ArrowLeft size={15} />
-                {settingsReturnView === "reader" && book ? "読書へ戻る" : "本棚へ戻る"}
-              </button>
-            ) : (
-              <>
-                <button type="button" className="toolbar-settings-button" onClick={openSettings} aria-label="設定を開く">
-                  <GearSix size={16} />
-                  設定
-                </button>
-                <button type="button" className="open-book-button" onClick={handleImportPDF} disabled={opening}>
-                  <FolderOpen size={16} />
-                  {opening ? "選択しています…" : "PDFを追加"}
-                </button>
-              </>
-            )}
+            <button type="button" className="open-book-button" onClick={handleImportPDF} disabled={opening}>
+              <FolderOpen size={16} />
+              {opening ? "選択しています…" : "PDFを追加"}
+            </button>
           </div>
         </header>
 
-        {view === "settings" ? (
-          <LLMSettingsPage onBack={closeSettings} />
-        ) : view === "library" ? (
-          <Library
-            books={books}
-            loading={libraryLoading}
-            error={libraryError}
-            busyBookId={busyBookId}
-            onImport={handleImportPDF}
-            onOpen={handleOpenBook}
-            onRelink={handleRelinkBook}
-            onRemove={handleRemoveBook}
-          />
-        ) : (
-          <div className="workspace" style={workspaceStyle}>
-            <aside className="reading-rail" aria-label="Reading status">
-              <div className="rail-position" aria-label={pageContext.pageNumber ? `${pageContext.pageNumber}ページ` : "ページ未選択"}>
-                <span className={pageContext.pageNumber ? "rail-tick is-current" : "rail-tick"} />
-                <span className="rail-page">{pageContext.pageNumber ? String(pageContext.pageNumber).padStart(3, "0") : "—"}</span>
-              </div>
-            </aside>
+        <div className="app-body">
+          <aside className="app-navigation" aria-label="メインナビゲーション">
+            <nav className="app-navigation-primary">
+              <button
+                type="button"
+                className={view === "library" ? "app-nav-button is-active" : "app-nav-button"}
+                aria-current={view === "library" ? "page" : undefined}
+                onClick={showLibrary}
+              >
+                <Books size={20} weight={view === "library" ? "fill" : "regular"} />
+                <span>本棚</span>
+              </button>
+              <button
+                type="button"
+                className={view === "reader" ? "app-nav-button is-active" : "app-nav-button"}
+                aria-current={view === "reader" ? "page" : undefined}
+                onClick={resumeReader}
+                disabled={!book}
+              >
+                <BookOpenText size={20} weight={view === "reader" ? "fill" : "regular"} />
+                <span>読書</span>
+              </button>
+            </nav>
 
-            <PdfReader
-              book={book}
-              initialPage={book?.initialPage ?? 1}
-              onPageContextChange={handlePageContextChange}
-              onSelectionChange={handleSelectionChange}
-            />
-
-            <div
-              className="panel-resizer"
-              role="separator"
-              aria-label="アシスタントパネルの幅を変更"
-              aria-orientation="vertical"
-              aria-valuemin={328}
-              aria-valuemax={520}
-              aria-valuenow={Math.round(assistantWidth)}
-              tabIndex={0}
-              onPointerDown={(event) => {
-                resizeState.current = { startX: event.clientX, startWidth: assistantWidth };
-                document.body.classList.add("is-resizing");
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowLeft") setAssistantWidth((width) => Math.min(520, width + 12));
-                if (event.key === "ArrowRight") setAssistantWidth((width) => Math.max(328, width - 12));
-              }}
-            >
-              <span />
+            <div className="app-navigation-secondary">
+              {book && pageContext.pageNumber > 0 && (
+                <div className="nav-reading-position" aria-label={`${pageContext.pageNumber}ページ`}>
+                  <span>PAGE</span>
+                  <i aria-hidden="true" />
+                  <strong>{String(pageContext.pageNumber).padStart(3, "0")}</strong>
+                </div>
+              )}
+              <button
+                type="button"
+                className={view === "settings" ? "app-nav-button is-active" : "app-nav-button"}
+                aria-current={view === "settings" ? "page" : undefined}
+                onClick={openSettings}
+              >
+                <GearSix size={20} weight={view === "settings" ? "fill" : "regular"} />
+                <span>設定</span>
+              </button>
             </div>
+          </aside>
 
-            <ChatSidebar
-              context={{
-                bookName: book?.title ?? "",
-                pageNumber: pageContext.pageNumber,
-                text: pageContext.text,
-              }}
-              selection={selection}
-              onOpenSettings={openSettings}
-            />
+          <div className="app-content">
+            {view === "settings" ? (
+              <LLMSettingsPage onBack={closeSettings} />
+            ) : view === "library" ? (
+              <Library
+                books={books}
+                loading={libraryLoading}
+                error={libraryError}
+                busyBookId={busyBookId}
+                onImport={handleImportPDF}
+                onOpen={handleOpenBook}
+                onRelink={handleRelinkBook}
+                onRemove={handleRemoveBook}
+              />
+            ) : (
+              <div className="workspace" style={workspaceStyle}>
+                <PdfReader
+                  book={book}
+                  initialPage={book?.initialPage ?? 1}
+                  onPageContextChange={handlePageContextChange}
+                  onSelectionChange={handleSelectionChange}
+                />
+
+                <div
+                  className="panel-resizer"
+                  role="separator"
+                  aria-label="アシスタントパネルの幅を変更"
+                  aria-orientation="vertical"
+                  aria-valuemin={328}
+                  aria-valuemax={520}
+                  aria-valuenow={Math.round(assistantWidth)}
+                  tabIndex={0}
+                  onPointerDown={(event) => {
+                    resizeState.current = { startX: event.clientX, startWidth: assistantWidth };
+                    document.body.classList.add("is-resizing");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowLeft") setAssistantWidth((width) => Math.min(520, width + 12));
+                    if (event.key === "ArrowRight") setAssistantWidth((width) => Math.max(328, width - 12));
+                  }}
+                >
+                  <span />
+                </div>
+
+                <ChatSidebar
+                  context={{
+                    bookName: book?.title ?? "",
+                    pageNumber: pageContext.pageNumber,
+                    text: pageContext.text,
+                  }}
+                  selection={selection}
+                  onOpenSettings={openSettings}
+                />
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </main>
     </Tooltip.Provider>
   );
