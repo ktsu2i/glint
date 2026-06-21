@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { BookOpenText, Books, FolderOpen } from "@phosphor-icons/react";
+import { ArrowLeft, BookOpenText, Books, FolderOpen, GearSix } from "@phosphor-icons/react";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { Library } from "./features/library/Library";
 import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
+import { LLMSettingsPage } from "./features/settings/LLMSettingsPage";
 import {
   listBooks,
   markBookCoverFailed,
@@ -24,7 +25,8 @@ type PageContext = {
 };
 
 export default function App() {
-  const [view, setView] = useState<"library" | "reader">("library");
+  const [view, setView] = useState<"library" | "reader" | "settings">("library");
+  const [settingsReturnView, setSettingsReturnView] = useState<"library" | "reader">("library");
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState("");
@@ -197,6 +199,20 @@ export default function App() {
 
   const workspaceStyle = { "--assistant-width": `${assistantWidth}px` } as CSSProperties;
 
+  const openSettings = useCallback(() => {
+    const returnView = view === "reader" && book ? "reader" : "library";
+    if (returnView === "reader" && pageContext.pageNumber > 0) {
+      setBook((current) => current ? { ...current, initialPage: pageContext.pageNumber } : current);
+    }
+    setSettingsReturnView(returnView);
+    setView("settings");
+    setOpenError("");
+  }, [book, pageContext.pageNumber, view]);
+
+  const closeSettings = useCallback(() => {
+    setView(settingsReturnView === "reader" && book ? "reader" : "library");
+  }, [book, settingsReturnView]);
+
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
       <main className="app-shell">
@@ -207,8 +223,8 @@ export default function App() {
             <span className="workspace-label">Technical reader</span>
           </div>
           <div className="toolbar-book" title={book?.name}>
-            {view === "reader" && book ? <BookOpenText size={15} /> : <Books size={15} />}
-            <span>{view === "reader" ? book?.title : "Library"}</span>
+            {view === "reader" && book ? <BookOpenText size={15} /> : view === "settings" ? <GearSix size={15} /> : <Books size={15} />}
+            <span>{view === "reader" ? book?.title : view === "settings" ? "Settings" : "Library"}</span>
           </div>
           <div className="toolbar-actions">
             {openError && <span className="open-error" role="alert">{openError}</span>}
@@ -227,14 +243,29 @@ export default function App() {
                 本棚へ
               </button>
             )}
-            <button type="button" className="open-book-button" onClick={handleImportPDF} disabled={opening}>
-              <FolderOpen size={16} />
-              {opening ? "選択しています…" : "PDFを追加"}
-            </button>
+            {view === "settings" ? (
+              <button type="button" className="library-back-button" onClick={closeSettings}>
+                <ArrowLeft size={15} />
+                {settingsReturnView === "reader" && book ? "読書へ戻る" : "本棚へ戻る"}
+              </button>
+            ) : (
+              <>
+                <button type="button" className="toolbar-settings-button" onClick={openSettings} aria-label="設定を開く">
+                  <GearSix size={16} />
+                  設定
+                </button>
+                <button type="button" className="open-book-button" onClick={handleImportPDF} disabled={opening}>
+                  <FolderOpen size={16} />
+                  {opening ? "選択しています…" : "PDFを追加"}
+                </button>
+              </>
+            )}
           </div>
         </header>
 
-        {view === "library" ? (
+        {view === "settings" ? (
+          <LLMSettingsPage onBack={closeSettings} />
+        ) : view === "library" ? (
           <Library
             books={books}
             loading={libraryLoading}
@@ -289,6 +320,7 @@ export default function App() {
                 text: pageContext.text,
               }}
               selection={selection}
+              onOpenSettings={openSettings}
             />
           </div>
         )}

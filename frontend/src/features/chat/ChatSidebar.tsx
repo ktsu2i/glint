@@ -4,6 +4,7 @@ import {
   ArrowUp,
   BookOpenText,
   ChatCircleDots,
+  GearSix,
   Paperclip,
   TextAa,
 } from "@phosphor-icons/react";
@@ -15,7 +16,6 @@ import {
   type LLMSettings,
 } from "../../shared/api/backend";
 import { contextPreview, trimChatContext } from "../../shared/lib/text";
-import { LLMSettingsDialog } from "../settings/LLMSettingsDialog";
 
 type ReadingContext = {
   bookName: string;
@@ -37,11 +37,12 @@ type Message = {
 type ChatSidebarProps = {
   context: ReadingContext;
   selection?: SelectionContext | null;
+  onOpenSettings?: () => void;
 };
 
 type ContextSource = "selection" | "page";
 
-export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
+export function ChatSidebar({ context, selection = null, onOpenSettings }: ChatSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -180,16 +181,21 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
             <p>読書中の疑問を整理する</p>
           </div>
         </div>
-        <LLMSettingsDialog
-          settings={llmSettings}
-          loadError={settingsError}
-          onSaved={(saved) => {
-            setLLMSettings(saved);
-            setSettingsError("");
-            setError("");
-          }}
-        />
+        <button
+          type="button"
+          className={`provider-status-button ${llmSettings?.configured ? "is-connected" : ""}`}
+          onClick={onOpenSettings}
+          aria-label="LLM接続設定を開く"
+        >
+          <span className="provider-status-dot" />
+          <span>{llmSettings === null ? "確認中" : llmSettings.configured ? "OpenRouter" : "設定する"}</span>
+          <GearSix size={12} aria-hidden="true" />
+        </button>
       </header>
+
+      <div className="chat-settings-feedback" aria-live="polite">
+        {settingsError && <p className="chat-settings-error" role="alert">{settingsError}</p>}
+      </div>
 
       <section className="context-panel" aria-label="送信する読書文脈">
         <div className="context-heading">

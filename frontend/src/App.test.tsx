@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   saveBookCover: vi.fn(),
   saveReadingPosition: vi.fn(),
   generateCoverThumbnail: vi.fn(),
+  getLLMSettings: vi.fn(),
+  saveLLMSettings: vi.fn(),
 }));
 
 vi.mock("./shared/api/backend", () => ({
@@ -20,6 +22,8 @@ vi.mock("./shared/api/backend", () => ({
   relinkPDF: mocks.relinkPDF,
   saveBookCover: mocks.saveBookCover,
   saveReadingPosition: mocks.saveReadingPosition,
+  getLLMSettings: mocks.getLLMSettings,
+  saveLLMSettings: mocks.saveLLMSettings,
 }));
 vi.mock("./features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
@@ -77,6 +81,13 @@ beforeEach(() => {
   mocks.saveBookCover.mockResolvedValue(undefined);
   mocks.markBookCoverFailed.mockResolvedValue(undefined);
   mocks.generateCoverThumbnail.mockResolvedValue("data:image/png;base64,cover");
+  mocks.getLLMSettings.mockResolvedValue({
+    provider: "openrouter",
+    model: "provider/model",
+    zdr: true,
+    hasApiKey: true,
+    configured: true,
+  });
 });
 
 describe("App", () => {
@@ -107,6 +118,11 @@ describe("App", () => {
     expect(screen.getByTestId("chat-context").textContent).toContain('"pageNumber":4');
     expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12);
 
+    fireEvent.click(screen.getByRole("button", { name: "設定を開く" }));
+    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "読書へ戻る" }));
+    expect(await screen.findByText("initial-4")).toBeTruthy();
+
     const separator = screen.getByRole("separator");
     fireEvent.keyDown(separator, { key: "Other" });
     for (let index = 0; index < 12; index += 1) fireEvent.keyDown(separator, { key: "ArrowLeft" });
@@ -136,6 +152,18 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Guideを開く" }));
     expect(await screen.findByText("initial-3")).toBeTruthy();
     expect(mocks.openBook).toHaveBeenCalledWith("book-1");
+  });
+
+  it("opens the settings page from the library and returns", async () => {
+    render(<App />);
+    await screen.findByText("最初の一冊を、本棚へ。");
+
+    fireEvent.click(screen.getByRole("button", { name: "設定を開く" }));
+    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
+    expect(screen.getByDisplayValue("provider/model")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "本棚へ戻る" }));
+    expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
   });
 
   it("generates a pending cover without blocking the reader", async () => {
