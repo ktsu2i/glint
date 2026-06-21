@@ -12,7 +12,7 @@ import (
 	"github.com/kaito/glint/internal/books"
 	"github.com/kaito/glint/internal/chat"
 	"github.com/kaito/glint/internal/library"
-	"github.com/kaito/glint/internal/llm"
+	"github.com/kaito/glint/internal/settings"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -36,7 +36,9 @@ func main() {
 
 	assetSrv := assetserver.New()
 	booksSvc := books.New(store, assetSrv, dataDirectory)
-	chatSvc := chat.New(llm.NewMockGateway())
+	settingsManager := settings.NewManager(store, settings.KeyringStore{})
+	settingsSvc := settings.NewService(settingsManager)
+	chatSvc := chat.NewConfigured(settingsManager)
 
 	err = wails.Run(&options.App{
 		Title:     "Glint",
@@ -57,10 +59,12 @@ func main() {
 		OnStartup: func(ctx context.Context) {
 			books.Startup(booksSvc, ctx)
 			chat.Startup(chatSvc, ctx)
+			settings.Startup(settingsSvc, ctx)
 		},
 		Bind: []any{
 			booksSvc,
 			chatSvc,
+			settingsSvc,
 		},
 	})
 	if err != nil {

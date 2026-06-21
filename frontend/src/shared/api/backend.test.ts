@@ -8,7 +8,9 @@ const bindings = vi.hoisted(() => ({
   relinkPDF: vi.fn(),
   saveBookCover: vi.fn(),
   saveReadingPosition: vi.fn(),
-  startMockChat: vi.fn(),
+  getLLMSettings: vi.fn(),
+  saveLLMSettings: vi.fn(),
+  startChat: vi.fn(),
   eventsOn: vi.fn(),
   eventsOff: vi.fn(),
 }));
@@ -24,7 +26,12 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
 }));
 
 vi.mock("../../../wailsjs/go/chat/Service", () => ({
-  StartMockChat: bindings.startMockChat,
+  StartChat: bindings.startChat,
+}));
+
+vi.mock("../../../wailsjs/go/settings/Service", () => ({
+  GetLLMSettings: bindings.getLLMSettings,
+  SaveLLMSettings: bindings.saveLLMSettings,
 }));
 
 vi.mock("../../../wailsjs/runtime/runtime", () => ({
@@ -34,6 +41,7 @@ vi.mock("../../../wailsjs/runtime/runtime", () => ({
 
 import {
   listBooks,
+  getLLMSettings,
   markBookCoverFailed,
   onAnswerDelta,
   openBook,
@@ -41,7 +49,8 @@ import {
   relinkPDF,
   saveBookCover,
   saveReadingPosition,
-  startMockChat,
+  saveLLMSettings,
+  startChat,
 } from "./backend";
 
 beforeEach(() => {
@@ -62,11 +71,27 @@ describe("backend facade", () => {
       pageNumber: 2,
     };
     bindings.openPDF.mockResolvedValue(book);
-    bindings.startMockChat.mockResolvedValue(undefined);
+    bindings.startChat.mockResolvedValue(undefined);
 
     await expect(openPDF()).resolves.toEqual(book);
-    await expect(startMockChat(request)).resolves.toBeUndefined();
-    expect(bindings.startMockChat).toHaveBeenCalledWith(request);
+    await expect(startChat(request)).resolves.toBeUndefined();
+    expect(bindings.startChat).toHaveBeenCalledWith(request);
+  });
+
+  it("delegates LLM settings without exposing credential implementation", async () => {
+    const settings = {
+      provider: "openrouter", model: "provider/model", zdr: true,
+      hasApiKey: true, configured: true,
+    };
+    const request = {
+      model: "provider/model", apiKey: "new-key", zdr: true, clearApiKey: false,
+    };
+    bindings.getLLMSettings.mockResolvedValue(settings);
+    bindings.saveLLMSettings.mockResolvedValue(settings);
+
+    await expect(getLLMSettings()).resolves.toEqual(settings);
+    await expect(saveLLMSettings(request)).resolves.toEqual(settings);
+    expect(bindings.saveLLMSettings).toHaveBeenCalledWith(request);
   });
 
   it("delegates library persistence operations", async () => {

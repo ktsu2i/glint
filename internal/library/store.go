@@ -61,6 +61,14 @@ type readingStateRecord struct {
 
 func (readingStateRecord) TableName() string { return "book_reading_states" }
 
+type appSettingRecord struct {
+	Key       string `gorm:"column:key;primaryKey"`
+	Value     string `gorm:"column:value"`
+	UpdatedAt string `gorm:"column:updated_at"`
+}
+
+func (appSettingRecord) TableName() string { return "app_settings" }
+
 func Open(path string) (*Store, error) {
 	if err := ensureParentDirectory(path); err != nil {
 		return nil, err
@@ -168,7 +176,7 @@ const selectBookColumns = `b.id, b.title, b.file_name, b.source_path, b.file_has
 func (store *Store) List(ctx context.Context) ([]Book, error) {
 	var books []Book
 	err := store.db.WithContext(ctx).Raw(`
-        SELECT `+selectBookColumns+`
+        SELECT ` + selectBookColumns + `
           FROM books b
           LEFT JOIN book_reading_states r ON r.book_id = b.id
          ORDER BY CASE WHEN b.last_opened_at = '' THEN 1 ELSE 0 END,
@@ -237,7 +245,7 @@ func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumb
 			UpdatedAt:  timestamp,
 		}
 		if err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "book_id"}},
+			Columns:   []clause.Column{{Name: "book_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"page_number", "updated_at"}),
 		}).Create(&state).Error; err != nil {
 			return fmt.Errorf("save reading position: %w", err)
@@ -314,6 +322,45 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 		return Book{}, fmt.Errorf("relink book: %w", err)
 	}
 	return store.Get(ctx, id)
+}
+
+// Setting returns a non-secret application setting. Missing keys are returned
+// as an empty value so callers can apply their own defaults.
+func (store *Store) Setting(ctx context.Context, key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", errors.New("setting key is required")
+	}
+	var record appSettingRecord
+	result := store.db.WithContext(ctx).Where("key = ?", key).Take(&record)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if result.Error != nil {
+		return "", fmt.Errorf("read app setting: %w", result.Error)
+	}
+	return record.Value, nil
+}
+
+// SaveSetting persists non-secret configuration. Credentials must use the OS
+// credential store and must never be passed to this method.
+func (store *Store) SaveSetting(ctx context.Context, key, value string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errors.New("setting key is required")
+	}
+	record := appSettingRecord{
+		Key:       key,
+		Value:     value,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if err := store.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+	}).Create(&record).Error; err != nil {
+		return fmt.Errorf("save app setting: %w", err)
+	}
+	return nil
 }
 
 var ErrBookNotFound = errors.New("book not found")

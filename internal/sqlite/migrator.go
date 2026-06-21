@@ -2,7 +2,7 @@
 // Migrations are picked up from an fs.FS in lexical order, each filename must
 // start with a numeric version prefix (e.g. "0001_init.sql"), and each is run
 // inside its own transaction. Applied versions are recorded in the
-// schema_migrations table so subsequent runs skip them.
+// app-owned schema_migrations table so subsequent runs skip them.
 package sqlite
 
 import (
@@ -29,6 +29,9 @@ func (m *Migrator) Up(ctx context.Context) error {
             applied_at TEXT NOT NULL
         )`); err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)
+	}
+	if err := m.upgradeLegacyMigrationTable(ctx); err != nil {
+		return err
 	}
 
 	applied := map[int]struct{}{}
@@ -73,6 +76,68 @@ func (m *Migrator) Up(ctx context.Context) error {
 		if err := m.applyOne(ctx, version, name, string(body)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// Earlier development builds used golang-migrate's (version, dirty) table.
+// Preserve its applied versions while moving to the app-owned schema used by
+// this migrator. This runs before any new migration is applied.
+func (m *Migrator) upgradeLegacyMigrationTable(ctx context.Context) error {
+	rows, err := m.DB.QueryContext(ctx, "PRAGMA table_info(schema_migrations)")
+	if err != nil {
+		return fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("inspect schema_migrations column: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if columns["name"] && columns["applied_at"] {
+		return nil
+	}
+
+	tx, err := m.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("upgrade schema_migrations: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	statements := []string{
+		"ALTER TABLE schema_migrations RENAME TO schema_migrations_legacy",
+		`CREATE TABLE schema_migrations (
+            version    INTEGER PRIMARY KEY,
+            name       TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )`,
+		"INSERT INTO schema_migrations (version, name, applied_at) SELECT version, 'legacy', ? FROM schema_migrations_legacy",
+		"DROP TABLE schema_migrations_legacy",
+	}
+	for _, statement := range statements {
+		var execErr error
+		if strings.Contains(statement, "SELECT version") {
+			_, execErr = tx.ExecContext(ctx, statement, time.Now().UTC().Format(time.RFC3339))
+		} else {
+			_, execErr = tx.ExecContext(ctx, statement)
+		}
+		if execErr != nil {
+			return fmt.Errorf("upgrade schema_migrations: %w", execErr)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("upgrade schema_migrations: %w", err)
 	}
 	return nil
 }

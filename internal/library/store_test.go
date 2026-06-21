@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
+	gormsqlite "github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
@@ -17,7 +19,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 1, version)
+	assert.Equal(t, 2, version)
 
 	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", 120, now)
 	require.NoError(t, err)
@@ -40,6 +42,49 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	assert.Equal(t, 20, persisted.PageCount)
 	assert.Equal(t, "ready", persisted.CoverThumbnailStatus)
 	assert.NotEmpty(t, persisted.LastOpenedAt)
+}
+
+func TestStorePersistsNonSecretAppSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	store, err := Open(path)
+	require.NoError(t, err)
+
+	value, err := store.Setting(context.Background(), "missing")
+	require.NoError(t, err)
+	assert.Empty(t, value)
+	require.NoError(t, store.SaveSetting(context.Background(), "llm.openrouter", `{"model":"provider/model"}`))
+	require.NoError(t, store.Close())
+
+	store, err = Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	value, err = store.Setting(context.Background(), "llm.openrouter")
+	require.NoError(t, err)
+	assert.Equal(t, `{"model":"provider/model"}`, value)
+}
+
+func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	db, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`CREATE TABLE schema_migrations (
+        version INTEGER NOT NULL PRIMARY KEY,
+        dirty BOOLEAN NOT NULL
+    )`).Error)
+	require.NoError(t, db.Exec("INSERT INTO schema_migrations (version, dirty) VALUES (1, 0)").Error)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+
+	store, err := Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	var version int
+	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
+	assert.Equal(t, 2, version)
+	var settingsTable string
+	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
+	assert.Equal(t, "app_settings", settingsTable)
 }
 
 func TestStoreDeduplicatesByFileHashAndUpdatesLocation(t *testing.T) {

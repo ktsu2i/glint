@@ -8,7 +8,11 @@ import {
   SaveBookCover,
   SaveReadingPosition,
 } from "../../../wailsjs/go/books/Service";
-import { StartMockChat } from "../../../wailsjs/go/chat/Service";
+import { StartChat } from "../../../wailsjs/go/chat/Service";
+import {
+  GetLLMSettings,
+  SaveLLMSettings,
+} from "../../../wailsjs/go/settings/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
 
 export type BookFile = {
@@ -50,6 +54,21 @@ export type AnswerDelta = {
   error?: string;
 };
 
+export type LLMSettings = {
+  provider: "openrouter";
+  model: string;
+  zdr: boolean;
+  hasApiKey: boolean;
+  configured: boolean;
+};
+
+export type SaveLLMSettingsRequest = {
+  model: string;
+  apiKey: string;
+  zdr: boolean;
+  clearApiKey: boolean;
+};
+
 export async function openPDF(): Promise<BookFile> {
   return (await OpenPDF()) as BookFile;
 }
@@ -86,8 +105,16 @@ export async function markBookCoverFailed(bookId: string): Promise<void> {
   await MarkBookCoverFailed(bookId);
 }
 
-export async function startMockChat(request: ChatRequest): Promise<void> {
-  await StartMockChat(request);
+export async function startChat(request: ChatRequest): Promise<void> {
+  await StartChat(request);
+}
+
+export async function getLLMSettings(): Promise<LLMSettings> {
+  return (await GetLLMSettings()) as LLMSettings;
+}
+
+export async function saveLLMSettings(request: SaveLLMSettingsRequest): Promise<LLMSettings> {
+  return (await SaveLLMSettings(request)) as LLMSettings;
 }
 
 export function onAnswerDelta(callback: (delta: AnswerDelta) => void): () => void {

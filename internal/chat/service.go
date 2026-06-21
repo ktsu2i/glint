@@ -9,12 +9,26 @@ import (
 )
 
 type Service struct {
-	ctx     context.Context
-	gateway llm.Gateway
+	ctx      context.Context
+	provider GatewayProvider
+}
+
+type GatewayProvider interface {
+	Gateway(ctx context.Context) (llm.Gateway, error)
+}
+
+type staticGatewayProvider struct{ gateway llm.Gateway }
+
+func (provider staticGatewayProvider) Gateway(context.Context) (llm.Gateway, error) {
+	return provider.gateway, nil
 }
 
 func New(gateway llm.Gateway) *Service {
-	return &Service{gateway: gateway}
+	return &Service{provider: staticGatewayProvider{gateway: gateway}}
+}
+
+func NewConfigured(provider GatewayProvider) *Service {
+	return &Service{provider: provider}
 }
 
 // Startup wires the Wails runtime context into the service. It is a package
@@ -24,11 +38,15 @@ func Startup(s *Service, ctx context.Context) {
 	s.ctx = ctx
 }
 
-func (s *Service) StartMockChat(request llm.ChatRequest) error {
+func (s *Service) StartChat(request llm.ChatRequest) error {
 	if s.ctx == nil {
 		return errors.New("application is not ready")
 	}
-	stream, err := s.gateway.Complete(s.ctx, request)
+	gateway, err := s.provider.Gateway(s.ctx)
+	if err != nil {
+		return err
+	}
+	stream, err := gateway.Complete(s.ctx, request)
 	if err != nil {
 		return err
 	}

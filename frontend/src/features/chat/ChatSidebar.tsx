@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Switch } from "@base-ui/react/switch";
 import {
   ArrowUp,
@@ -8,11 +8,14 @@ import {
   TextAa,
 } from "@phosphor-icons/react";
 import {
+  getLLMSettings,
   onAnswerDelta,
-  startMockChat,
+  startChat,
   type AnswerDelta,
+  type LLMSettings,
 } from "../../shared/api/backend";
 import { contextPreview, trimChatContext } from "../../shared/lib/text";
+import { LLMSettingsDialog } from "../settings/LLMSettingsDialog";
 
 type ReadingContext = {
   bookName: string;
@@ -43,7 +46,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     {
       id: "welcome",
       role: "assistant",
-      content: "PDFを開くと、表示中のページを文脈として添付できます。現在はmock providerで応答を確認できます。",
+      content: "OpenRouterを設定すると、選択範囲や指定したページについて質問できます。",
     },
   ]);
   const [question, setQuestion] = useState("");
@@ -51,10 +54,25 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
   const [source, setSource] = useState<ContextSource>("page");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [llmSettings, setLLMSettings] = useState<LLMSettings | null>(null);
+  const [settingsError, setSettingsError] = useState("");
   const activeRequest = useRef("");
   const messageEndRef = useRef<HTMLDivElement>(null);
 
   const hasSelection = !!selection && selection.text.length > 0;
+
+  const refreshSettings = useCallback(async () => {
+    try {
+      setLLMSettings(await getLLMSettings());
+      setSettingsError("");
+    } catch (reason) {
+      setSettingsError(reason instanceof Error ? reason.message : "LLM設定を読み込めませんでした。");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSettings();
+  }, [refreshSettings]);
 
   useEffect(() => {
     if (hasSelection) {
@@ -99,6 +117,10 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     if (!normalizedQuestion || sending) {
       return;
     }
+    if (!llmSettings?.configured) {
+      setError("OpenRouterのmodelとAPI keyを設定してください。");
+      return;
+    }
 
     const requestId = crypto.randomUUID();
     activeRequest.current = requestId;
@@ -116,7 +138,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     const contextPageNumber = activeSource === "selection" ? selection!.pageNumber : context.pageNumber;
 
     try {
-      await startMockChat({
+      await startChat({
         requestId,
         question: normalizedQuestion,
         contextText: includeContext ? trimChatContext(rawContextText) : "",
@@ -158,7 +180,15 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
             <p>読書中の疑問を整理する</p>
           </div>
         </div>
-        <span className="provider-status"><span /> Mock</span>
+        <LLMSettingsDialog
+          settings={llmSettings}
+          loadError={settingsError}
+          onSaved={(saved) => {
+            setLLMSettings(saved);
+            setSettingsError("");
+            setError("");
+          }}
+        />
       </header>
 
       <section className="context-panel" aria-label="送信する読書文脈">
@@ -248,8 +278,8 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
           }}
         />
         <div className="composer-footer">
-          <span>{composerLabel}</span>
-          <button type="submit" disabled={!question.trim() || sending}>
+          <span>{llmSettings?.configured ? composerLabel : "OpenRouter設定が必要です"}</span>
+          <button type="submit" disabled={!question.trim() || sending || !llmSettings?.configured}>
             <span>{sending ? "応答中" : "送信"}</span>
             <ArrowUp size={14} weight="bold" />
           </button>

@@ -1,6 +1,12 @@
 package llm
 
-import "context"
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/kaito/glint/internal/privacy"
+)
 
 const MaxContextRunes = 6000
 
@@ -21,4 +27,20 @@ type AnswerDelta struct {
 
 type Gateway interface {
 	Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error)
+}
+
+func normalizeChatRequest(request ChatRequest) (ChatRequest, error) {
+	request.RequestID = strings.TrimSpace(request.RequestID)
+	request.Question = strings.TrimSpace(request.Question)
+	request.ContextText = trimRunes(request.ContextText, MaxContextRunes)
+	request.Question = privacy.RedactKnownSecrets(request.Question)
+	request.ContextText = privacy.RedactKnownSecrets(request.ContextText)
+	request.BookName = strings.TrimSpace(request.BookName)
+	if request.RequestID == "" {
+		return ChatRequest{}, errors.New("request ID is required")
+	}
+	if request.Question == "" {
+		return ChatRequest{}, errors.New("question is required")
+	}
+	return request, nil
 }

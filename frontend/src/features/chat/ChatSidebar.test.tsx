@@ -9,13 +9,17 @@ const backend = vi.hoisted(() => ({
     error?: string;
   }) => void) | undefined,
   unsubscribe: vi.fn(),
+  getLLMSettings: vi.fn(),
   onAnswerDelta: vi.fn(),
-  startMockChat: vi.fn(),
+  saveLLMSettings: vi.fn(),
+  startChat: vi.fn(),
 }));
 
 vi.mock("../../shared/api/backend", () => ({
+  getLLMSettings: backend.getLLMSettings,
   onAnswerDelta: backend.onAnswerDelta,
-  startMockChat: backend.startMockChat,
+  saveLLMSettings: backend.saveLLMSettings,
+  startChat: backend.startChat,
 }));
 
 import { ChatSidebar } from "./ChatSidebar";
@@ -27,21 +31,29 @@ beforeEach(() => {
     backend.listener = listener;
     return backend.unsubscribe;
   });
-  backend.startMockChat.mockResolvedValue(undefined);
+  backend.getLLMSettings.mockResolvedValue({
+    provider: "openrouter",
+    model: "provider/model",
+    zdr: true,
+    hasApiKey: true,
+    configured: true,
+  });
+  backend.startChat.mockResolvedValue(undefined);
   vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "request-1") });
 });
 
 describe("ChatSidebar", () => {
-  it("renders the empty-context state, ignores empty submissions, and unsubscribes", () => {
+  it("renders the empty-context state, ignores empty submissions, and unsubscribes", async () => {
     const { container, unmount } = render(
       <ChatSidebar context={{ bookName: "", pageNumber: 0, text: "" }} />,
     );
 
+    await screen.findByText("OpenRouter");
     expect(screen.getByText("PDF未選択")).toBeTruthy();
     expect(screen.getByText("文脈なし")).toBeTruthy();
     expect(screen.getByRole("switch")).toBeTruthy();
     fireEvent.submit(container.querySelector("form")!);
-    expect(backend.startMockChat).not.toHaveBeenCalled();
+    expect(backend.startChat).not.toHaveBeenCalled();
 
     window.dispatchEvent(new Event("unused"));
     unmount();
@@ -56,14 +68,16 @@ describe("ChatSidebar", () => {
     );
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
 
+    await screen.findByText("OpenRouter");
+
     fireEvent.change(textarea, { target: { value: "  Explain this  " } });
     fireEvent.keyDown(textarea, { key: "A", shiftKey: false });
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
-    expect(backend.startMockChat).not.toHaveBeenCalled();
+    expect(backend.startChat).not.toHaveBeenCalled();
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
 
     await waitFor(() => {
-      expect(backend.startMockChat).toHaveBeenCalledWith({
+      expect(backend.startChat).toHaveBeenCalledWith({
         requestId: "request-1",
         question: "Explain this",
         contextText: "page context",
@@ -91,24 +105,26 @@ describe("ChatSidebar", () => {
 
   it("omits disabled context and blocks a second request while sending", async () => {
     let resolveRequest!: () => void;
-    backend.startMockChat.mockReturnValue(new Promise<void>((resolve) => {
+    backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
       resolveRequest = resolve;
     }));
     const { container } = render(
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
     );
 
+    await screen.findByText("OpenRouter");
+
     fireEvent.click(screen.getByRole("switch"));
     expect(screen.getByText("添付しない")).toBeTruthy();
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
     fireEvent.change(textarea, { target: { value: "first" } });
     fireEvent.submit(container.querySelector("form")!);
-    await waitFor(() => expect(backend.startMockChat).toHaveBeenCalledOnce());
-    expect(backend.startMockChat.mock.calls[0][0].contextText).toBe("");
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledOnce());
+    expect(backend.startChat.mock.calls[0][0].contextText).toBe("");
 
     fireEvent.change(textarea, { target: { value: "second" } });
     fireEvent.submit(container.querySelector("form")!);
-    expect(backend.startMockChat).toHaveBeenCalledOnce();
+    expect(backend.startChat).toHaveBeenCalledOnce();
     resolveRequest();
   });
 
@@ -116,10 +132,12 @@ describe("ChatSidebar", () => {
     [new Error("network down"), "network down"],
     ["unknown failure", "質問を送信できませんでした。"],
   ])("shows submission failures", async (reason, message) => {
-    backend.startMockChat.mockRejectedValue(reason);
+    backend.startChat.mockRejectedValue(reason);
     const { container } = render(
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 1, text: "context" }} />,
     );
+
+    await screen.findByText("OpenRouter");
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "question" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -141,6 +159,8 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 5, text: "page text" }} />,
     );
 
+    await screen.findByText("OpenRouter");
+
     expect(screen.getByText("Page 5")).toBeTruthy();
 
     rerender(
@@ -155,7 +175,7 @@ describe("ChatSidebar", () => {
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
     fireEvent.submit(container.querySelector("form")!);
-    await waitFor(() => expect(backend.startMockChat).toHaveBeenCalledWith({
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
       requestId: "request-1",
       question: "explain",
       contextText: "highlighted phrase",
@@ -172,13 +192,15 @@ describe("ChatSidebar", () => {
       />,
     );
 
+    await screen.findByText("OpenRouter");
+
     fireEvent.click(screen.getByRole("tab", { name: "ページ全体" }));
     expect(screen.getByText("Page 5")).toBeTruthy();
     expect(screen.getByText("Page 5 を添付")).toBeTruthy();
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "what is this" } });
     fireEvent.submit(container.querySelector("form")!);
-    await waitFor(() => expect(backend.startMockChat).toHaveBeenCalledWith({
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
       requestId: "request-1",
       question: "what is this",
       contextText: "full page body",

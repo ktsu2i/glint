@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,14 +21,9 @@ func newMockGatewayWithDelay(delay time.Duration) *MockGateway {
 }
 
 func (gateway *MockGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request.RequestID = strings.TrimSpace(request.RequestID)
-	request.Question = strings.TrimSpace(request.Question)
-	request.ContextText = trimRunes(request.ContextText, MaxContextRunes)
-	if request.RequestID == "" {
-		return nil, errors.New("request ID is required")
-	}
-	if request.Question == "" {
-		return nil, errors.New("question is required")
+	request, err := normalizeChatRequest(request)
+	if err != nil {
+		return nil, err
 	}
 
 	contextDescription := "ページcontextは添付されていません。"
@@ -37,7 +31,7 @@ func (gateway *MockGateway) Complete(ctx context.Context, request ChatRequest) (
 		contextDescription = fmt.Sprintf("current pageから%d文字のcontextを受け取りました。", utf8.RuneCountInString(request.ContextText))
 	}
 	answer := fmt.Sprintf(
-		"Mock providerの応答です。%s 質問「%s」を受け付けました。実際のLLM接続は次のmilestoneでprovider-neutral gatewayへ追加します。",
+		"テスト用mock providerの応答です。%s 質問「%s」を受け付けました。",
 		contextDescription,
 		trimRunes(request.Question, 80),
 	)

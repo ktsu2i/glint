@@ -1,6 +1,6 @@
 # Glint
 
-Glint は、技術書PDFを読みながら、その内容を自分のコードベースへ接続して理解するためのdesktop appです。現在は最初のvertical sliceとして、local library、PDF reader、mock AI chat sidebarを実装しています。
+Glint は、技術書PDFを読みながら、その内容を自分のコードベースへ接続して理解するためのdesktop appです。現在は最初のvertical sliceとして、local library、PDF reader、OpenRouter対応のAI chat sidebarを実装しています。
 
 ## 現在できること
 
@@ -13,10 +13,23 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 - 前後ページ移動とzoom
 - current page textの抽出と送信前preview
 - current page textを明示的に含める／含めないchat操作
-- Goのprovider-neutral gatewayを通したmock streaming answer
+- Goのprovider-neutral gatewayを通したOpenRouter streaming answer
+- OpenRouter model、API key、Zero Data Retentionの設定UI
+- API keyのOS credential store保存。SQLiteにはmodelとprivacy設定だけを保存
 - token付きlocal endpointによるPDF配信。frontendへlocal pathは渡さない
 
-実LLM provider、API key保存、repo indexing、book-to-repo mappingはまだ含みません。
+repo indexing、book-to-repo mappingはまだ含みません。
+
+## OpenRouter設定
+
+1. Reader右上の`設定する`を開く。
+2. OpenRouterのmodel IDを`provider/model`形式で入力する。
+3. OpenRouter API keyを入力する。
+4. `Zero Data Retention`を確認して設定を保存する。
+
+API keyはOS credential storeへ保存し、通常のSQLite rowには保存しません。`Zero Data Retention`はdefaultで有効です。有効時はOpenRouter requestに`provider.zdr = true`を指定し、ZDR endpointだけにroutingを制限します。
+
+質問とユーザーが明示的に添付したPDF textは、OpenRouterと選択されたmodel providerへ送信されます。API keyとmodelが未設定でもLibraryとPDF readerは利用できます。
 
 ## 技術構成
 
