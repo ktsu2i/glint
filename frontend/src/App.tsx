@@ -225,11 +225,6 @@ export default function App() {
         ) : (
           <div className="workspace" style={workspaceStyle}>
             <aside className="reading-rail" aria-label="Reading status">
-              <div className="rail-mark" aria-hidden="true">G</div>
-              <div className="rail-mode">
-                <BookOpenText size={18} />
-                <span>READING</span>
-              </div>
               <div className="rail-position" aria-label={pageContext.pageNumber ? `${pageContext.pageNumber}ページ` : "ページ未選択"}>
                 <span className={pageContext.pageNumber ? "rail-tick is-current" : "rail-tick"} />
                 <span className="rail-page">{pageContext.pageNumber ? String(pageContext.pageNumber).padStart(3, "0") : "—"}</span>
