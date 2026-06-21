@@ -26,6 +26,10 @@ export function RemoveBook(arg1) {
   return window['go']['books']['Service']['RemoveBook'](arg1);
 }
 
+export function RenameBook(arg1, arg2) {
+  return window['go']['books']['Service']['RenameBook'](arg1, arg2);
+}
+
 export function SaveBookCover(arg1, arg2) {
   return window['go']['books']['Service']['SaveBookCover'](arg1, arg2);
 }

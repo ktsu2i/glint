@@ -26,6 +26,7 @@ const defaultProps = {
   onOpen: vi.fn(),
   onRelink: vi.fn(),
   onRemove: vi.fn(),
+  onRename: vi.fn(),
 };
 
 describe("Library", () => {
@@ -71,6 +72,38 @@ describe("Library", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideを本棚から削除" }));
     expect(onRemove).toHaveBeenCalledWith(availableBook);
+  });
+
+  it("renames a book through the inline editor and trims whitespace", () => {
+    const onRename = vi.fn();
+    render(<Library {...defaultProps} books={[availableBook]} onRename={onRename} />);
+
+    const titleButton = screen.getByRole("button", { name: "Systems Guideの名前を変更" });
+    expect(titleButton).toHaveProperty("textContent", "Systems Guide");
+    fireEvent.click(titleButton);
+    const input = screen.getByLabelText("Systems Guideの表示名") as HTMLInputElement;
+    expect(input.value).toBe("Systems Guide");
+    fireEvent.change(input, { target: { value: "  Real Title  " } });
+    fireEvent.submit(input.closest("form")!);
+    expect(onRename).toHaveBeenCalledWith(availableBook, "Real Title");
+    expect(screen.queryByLabelText("Systems Guideの表示名")).toBeNull();
+  });
+
+  it("cancels with Escape and skips blank names on blur", () => {
+    const onRename = vi.fn();
+    render(<Library {...defaultProps} books={[availableBook]} onRename={onRename} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Systems Guideの名前を変更" }));
+    fireEvent.keyDown(screen.getByLabelText("Systems Guideの表示名"), { key: "Escape" });
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Systems Guideの表示名")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Systems Guideの名前を変更" }));
+    const input = screen.getByLabelText("Systems Guideの表示名") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Systems Guideの表示名")).toBeNull();
   });
 
   it("shows loading and error states", () => {

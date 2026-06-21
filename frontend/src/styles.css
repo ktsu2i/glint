@@ -655,6 +655,59 @@ input:focus-visible,
   color: var(--danger) !important;
 }
 
+.book-title-edit {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 3px;
+}
+
+.book-title-edit:hover:not(:disabled) {
+  background: rgb(32 37 42 / 4%);
+}
+
+.book-title-edit:focus-visible {
+  outline: 2px solid var(--signal-deep);
+  outline-offset: 2px;
+}
+
+.book-title-edit:disabled {
+  cursor: not-allowed;
+}
+
+.book-rename-form {
+  display: block;
+}
+
+.book-rename-input {
+  width: 100%;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.4;
+}
+
+.book-rename-input:focus {
+  outline: 2px solid var(--signal-deep);
+  outline-offset: 0;
+}
+
 .workspace {
   --assistant-width: 390px;
   min-width: 0;

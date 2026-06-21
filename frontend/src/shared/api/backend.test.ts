@@ -6,6 +6,8 @@ const bindings = vi.hoisted(() => ({
   openBook: vi.fn(),
   openPDF: vi.fn(),
   relinkPDF: vi.fn(),
+  removeBook: vi.fn(),
+  renameBook: vi.fn(),
   saveBookCover: vi.fn(),
   saveReadingPosition: vi.fn(),
   getLLMSettings: vi.fn(),
@@ -21,6 +23,8 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   OpenBook: bindings.openBook,
   OpenPDF: bindings.openPDF,
   RelinkPDF: bindings.relinkPDF,
+  RemoveBook: bindings.removeBook,
+  RenameBook: bindings.renameBook,
   SaveBookCover: bindings.saveBookCover,
   SaveReadingPosition: bindings.saveReadingPosition,
 }));
@@ -47,6 +51,8 @@ import {
   openBook,
   openPDF,
   relinkPDF,
+  removeBook,
+  renameBook,
   saveBookCover,
   saveReadingPosition,
   saveLLMSettings,
@@ -100,15 +106,23 @@ describe("backend facade", () => {
     bindings.listBooks.mockResolvedValue(summaries);
     bindings.openBook.mockResolvedValue(book);
     bindings.relinkPDF.mockResolvedValue(book);
+    bindings.removeBook.mockResolvedValue(true);
+    bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
 
     await expect(listBooks()).resolves.toEqual(summaries);
     await expect(openBook("book-1")).resolves.toEqual(book);
     await expect(relinkPDF("book-1")).resolves.toEqual(book);
+    await expect(removeBook("book-1")).resolves.toBe(true);
+    await expect(renameBook("book-1", "Renamed")).resolves.toEqual({
+      ...summaries[0],
+      title: "Renamed",
+    });
     await saveReadingPosition("book-1", 3, 10);
     await saveBookCover("book-1", "data:image/png;base64,cover");
     await markBookCoverFailed("book-1");
 
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10);
+    expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
     expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
     expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");
   });

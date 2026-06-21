@@ -156,6 +156,35 @@ func TestRemoveBookDeletesRecordAndCoverButKeepsSourcePDF(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRenameBookUpdatesDisplayedTitleWithoutTouchingFileName(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Original Title.pdf", "%PDF-1.7\nfixture")
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Original Title", book.Title)
+	assert.Equal(t, "Original Title.pdf", book.Name)
+
+	summary, err := h.service.RenameBook(book.ID, "  My Custom Name  ")
+	require.NoError(t, err)
+	assert.Equal(t, "My Custom Name", summary.Title)
+	assert.Equal(t, "Original Title.pdf", summary.FileName, "file name must keep tracking the PDF on disk")
+
+	listed, err := h.service.ListBooks()
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, "My Custom Name", listed[0].Title)
+	assert.Equal(t, "Original Title.pdf", listed[0].FileName)
+
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "My Custom Name", opened.Title)
+
+	_, err = h.service.RenameBook(book.ID, "   ")
+	assert.Error(t, err)
+	_, err = h.service.RenameBook("missing", "anything")
+	assert.Error(t, err)
+}
+
 func TestSaveBookCoverRejectsInvalidContent(t *testing.T) {
 	h := newHarness(t)
 	assert.Error(t, h.service.SaveBookCover("missing", "data:text/plain;base64,SGk="))

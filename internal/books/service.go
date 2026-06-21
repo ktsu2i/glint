@@ -135,6 +135,17 @@ func (s *Service) RelinkPDF(id string) (BookFile, error) {
 	return s.bookFile(book)
 }
 
+func (s *Service) RenameBook(id, name string) (BookSummary, error) {
+	book, err := s.library.Rename(context.Background(), id, name, time.Now())
+	if err != nil {
+		if errors.Is(err, library.ErrInvalidDisplayName) {
+			return BookSummary{}, errors.New("本の名前は1〜200文字で入力してください。")
+		}
+		return BookSummary{}, err
+	}
+	return s.bookSummary(book)
+}
+
 func (s *Service) RemoveBook(id string) (bool, error) {
 	book, err := s.library.Get(context.Background(), id)
 	if err != nil {
@@ -144,7 +155,7 @@ func (s *Service) RemoveBook(id string) (bool, error) {
 		response, err := runtime.MessageDialog(s.ctx, runtime.MessageDialogOptions{
 			Type:          runtime.QuestionDialog,
 			Title:         "本棚から削除",
-			Message:       fmt.Sprintf("「%s」を本棚から削除しますか？\nPDFファイル自体は残ります。", book.Title),
+			Message:       fmt.Sprintf("「%s」を本棚から削除しますか？\nPDFファイル自体は残ります。", book.Display()),
 			Buttons:       []string{"削除", "キャンセル"},
 			DefaultButton: "キャンセル",
 			CancelButton:  "キャンセル",
@@ -172,32 +183,41 @@ func (s *Service) ListBooks() ([]BookSummary, error) {
 	}
 	summaries := make([]BookSummary, 0, len(books))
 	for _, book := range books {
-		summary := BookSummary{
-			ID:          book.ID,
-			Title:       book.Title,
-			FileName:    book.FileName,
-			Size:        book.SizeBytes,
-			PageCount:   book.PageCount,
-			LastPage:    book.LastPage,
-			ImportedAt:  book.ImportedAt,
-			LastOpened:  book.LastOpenedAt,
-			CoverStatus: book.CoverThumbnailStatus,
-			Available:   fileExists(book.SourcePath),
-		}
-		if book.CoverThumbnailStatus == "ready" && fileExists(book.CoverThumbnailPath) {
-			summary.CoverURL, err = s.assets.Register(book.CoverThumbnailPath, "image/png")
-			if err != nil {
-				return nil, err
-			}
-		} else if book.CoverThumbnailStatus == "ready" {
-			summary.CoverStatus = "pending"
-			if err := s.library.ResetCover(context.Background(), book.ID, time.Now()); err != nil {
-				return nil, err
-			}
+		summary, err := s.bookSummary(book)
+		if err != nil {
+			return nil, err
 		}
 		summaries = append(summaries, summary)
 	}
 	return summaries, nil
+}
+
+func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
+	summary := BookSummary{
+		ID:          book.ID,
+		Title:       book.Display(),
+		FileName:    book.FileName,
+		Size:        book.SizeBytes,
+		PageCount:   book.PageCount,
+		LastPage:    book.LastPage,
+		ImportedAt:  book.ImportedAt,
+		LastOpened:  book.LastOpenedAt,
+		CoverStatus: book.CoverThumbnailStatus,
+		Available:   fileExists(book.SourcePath),
+	}
+	if book.CoverThumbnailStatus == "ready" && fileExists(book.CoverThumbnailPath) {
+		url, err := s.assets.Register(book.CoverThumbnailPath, "image/png")
+		if err != nil {
+			return BookSummary{}, err
+		}
+		summary.CoverURL = url
+	} else if book.CoverThumbnailStatus == "ready" {
+		summary.CoverStatus = "pending"
+		if err := s.library.ResetCover(context.Background(), book.ID, time.Now()); err != nil {
+			return BookSummary{}, err
+		}
+	}
+	return summary, nil
 }
 
 func (s *Service) SaveReadingPosition(bookID string, pageNumber, pageCount int) error {
@@ -234,7 +254,7 @@ func (s *Service) bookFile(book library.Book) (BookFile, error) {
 	}
 	return BookFile{
 		ID:          book.ID,
-		Title:       book.Title,
+		Title:       book.Display(),
 		Name:        book.FileName,
 		URL:         url,
 		Size:        book.SizeBytes,

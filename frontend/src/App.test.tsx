@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   openBook: vi.fn(),
   openPDF: vi.fn(),
   relinkPDF: vi.fn(),
+  removeBook: vi.fn(),
+  renameBook: vi.fn(),
   saveBookCover: vi.fn(),
   saveReadingPosition: vi.fn(),
   generateCoverThumbnail: vi.fn(),
@@ -20,6 +22,8 @@ vi.mock("./shared/api/backend", () => ({
   openBook: mocks.openBook,
   openPDF: mocks.openPDF,
   relinkPDF: mocks.relinkPDF,
+  removeBook: mocks.removeBook,
+  renameBook: mocks.renameBook,
   saveBookCover: mocks.saveBookCover,
   saveReadingPosition: mocks.saveReadingPosition,
   getLLMSettings: mocks.getLLMSettings,
@@ -156,6 +160,25 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Guideを開く" }));
     expect(await screen.findByText("initial-3")).toBeTruthy();
     expect(mocks.openBook).toHaveBeenCalledWith("book-1");
+  });
+
+  it("renames a saved book from its title", async () => {
+    mocks.listBooks.mockResolvedValue([summary]);
+    mocks.renameBook.mockResolvedValue({ ...summary, title: "Architecture Guide" });
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Guideの名前を変更" }));
+    const input = screen.getByLabelText("Guideの表示名");
+    fireEvent.change(input, { target: { value: "Architecture Guide" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(mocks.renameBook).toHaveBeenCalledWith(
+      "book-1",
+      "Architecture Guide",
+    ));
+    expect(await screen.findByRole("button", {
+      name: "Architecture Guideの名前を変更",
+    })).toBeTruthy();
   });
 
   it("opens the settings page from the library and returns", async () => {

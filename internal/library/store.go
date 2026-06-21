@@ -24,6 +24,7 @@ type Store struct {
 type Book struct {
 	ID                   string
 	Title                string
+	DisplayName          string
 	FileName             string
 	SourcePath           string
 	FileHash             string
@@ -36,9 +37,20 @@ type Book struct {
 	LastPage             int
 }
 
+// Display returns the user-facing book title. DisplayName wins when set so the
+// auto-derived Title can keep tracking the underlying PDF file name without
+// overwriting a rename the user made.
+func (b Book) Display() string {
+	if b.DisplayName != "" {
+		return b.DisplayName
+	}
+	return b.Title
+}
+
 type bookRecord struct {
 	ID                   string `gorm:"column:id;primaryKey"`
 	Title                string `gorm:"column:title"`
+	DisplayName          string `gorm:"column:display_name"`
 	FileName             string `gorm:"column:file_name"`
 	SourcePath           string `gorm:"column:source_path"`
 	FileHash             string `gorm:"column:file_hash"`
@@ -168,7 +180,7 @@ func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash string,
 	return store.ByHash(ctx, fileHash)
 }
 
-const selectBookColumns = `b.id, b.title, b.file_name, b.source_path, b.file_hash,
+const selectBookColumns = `b.id, b.title, b.display_name, b.file_name, b.source_path, b.file_hash,
        b.size_bytes, b.page_count, b.cover_thumbnail_path,
        b.cover_thumbnail_status, b.imported_at, b.last_opened_at,
        COALESCE(r.page_number, 1) AS last_page`
@@ -285,6 +297,37 @@ func (store *Store) ResetCover(ctx context.Context, id string, now time.Time) er
 			"updated_at":             now.UTC().Format(time.RFC3339Nano),
 		})
 	return requireChanged(result, "reset book cover")
+}
+
+// MaxDisplayNameLength bounds user-supplied book titles so renames cannot bloat
+// the SQLite row or the toolbar / library card layout.
+const MaxDisplayNameLength = 200
+
+// ErrInvalidDisplayName signals that a rename request would store an empty or
+// oversized title.
+var ErrInvalidDisplayName = errors.New("invalid book display name")
+
+// Rename persists a user-supplied display title for the given book. The
+// auto-derived Title (tracking the PDF file name) is left untouched so it can
+// keep serving as a fallback if the user later clears their custom name.
+func (store *Store) Rename(ctx context.Context, id, name string, now time.Time) (Book, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return Book{}, ErrInvalidDisplayName
+	}
+	if len([]rune(trimmed)) > MaxDisplayNameLength {
+		return Book{}, ErrInvalidDisplayName
+	}
+	result := store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"display_name": trimmed,
+			"updated_at":   now.UTC().Format(time.RFC3339Nano),
+		})
+	if err := requireChanged(result, "rename book"); err != nil {
+		return Book{}, err
+	}
+	return store.Get(ctx, id)
 }
 
 func (store *Store) Remove(ctx context.Context, id string) error {

@@ -14,6 +14,8 @@ export function RelinkPDF(arg1:string):Promise<books.BookFile>;
 
 export function RemoveBook(arg1:string):Promise<boolean>;
 
+export function RenameBook(arg1:string,arg2:string):Promise<books.BookSummary>;
+
 export function SaveBookCover(arg1:string,arg2:string):Promise<void>;
 
 export function SaveReadingPosition(arg1:string,arg2:number,arg3:number):Promise<void>;

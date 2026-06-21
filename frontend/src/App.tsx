@@ -13,6 +13,7 @@ import {
   openPDF,
   relinkPDF,
   removeBook,
+  renameBook,
   saveBookCover,
   saveReadingPosition,
   type BookFile,
@@ -138,6 +139,26 @@ export default function App() {
       }
     } catch (reason) {
       setLibraryError(reason instanceof Error ? reason.message : "本を削除できませんでした。");
+    } finally {
+      setBusyBookId("");
+    }
+  }
+
+  async function handleRenameBook(summary: BookSummary, name: string) {
+    setBusyBookId(summary.id);
+    setLibraryError("");
+    try {
+      const renamed = await renameBook(summary.id, name);
+      setBooks((current) =>
+        current.map((entry) => (entry.id === renamed.id ? renamed : entry)),
+      );
+      setBook((current) =>
+        current && current.id === renamed.id
+          ? { ...current, title: renamed.title }
+          : current,
+      );
+    } catch (reason) {
+      setLibraryError(reason instanceof Error ? reason.message : "本の名前を変更できませんでした。");
     } finally {
       setBusyBookId("");
     }
@@ -312,6 +333,7 @@ export default function App() {
                 onOpen={handleOpenBook}
                 onRelink={handleRelinkBook}
                 onRemove={handleRemoveBook}
+                onRename={handleRenameBook}
               />
             ) : (
               <div className="workspace" style={workspaceStyle}>

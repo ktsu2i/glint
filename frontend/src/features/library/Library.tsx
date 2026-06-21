@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowCounterClockwise,
   ArrowRight,
@@ -9,6 +10,8 @@ import {
 } from "@phosphor-icons/react";
 import type { BookSummary } from "../../shared/api/backend";
 
+const MAX_DISPLAY_NAME_LENGTH = 200;
+
 type LibraryProps = {
   books: BookSummary[];
   loading: boolean;
@@ -18,6 +21,7 @@ type LibraryProps = {
   onOpen: (book: BookSummary) => void;
   onRelink: (book: BookSummary) => void;
   onRemove: (book: BookSummary) => void;
+  onRename: (book: BookSummary, name: string) => void;
 };
 
 function formatDate(value: string): string {
@@ -50,7 +54,40 @@ export function Library({
   onOpen,
   onRelink,
   onRemove,
+  onRename,
 }: LibraryProps) {
+  const [editingId, setEditingId] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
+
+  function startEdit(book: BookSummary) {
+    setEditingId(book.id);
+    setDraftName(book.title);
+  }
+
+  function cancelEdit() {
+    setEditingId("");
+    setDraftName("");
+  }
+
+  function commitEdit(book: BookSummary) {
+    if (editingId !== book.id) {
+      return;
+    }
+    const next = draftName.trim();
+    if (next && next !== book.title) {
+      onRename(book, next);
+    }
+    cancelEdit();
+  }
+
   return (
     <section className="library" aria-labelledby="library-title">
       <header className="library-heading">
@@ -122,7 +159,44 @@ export function Library({
                   </span>
                 </button>
                 <div className="book-card-copy">
-                  <h2 title={book.title}>{book.title}</h2>
+                  {editingId === book.id ? (
+                    <form
+                      className="book-rename-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        commitEdit(book);
+                      }}
+                    >
+                      <input
+                        ref={inputRef}
+                        className="book-rename-input"
+                        type="text"
+                        value={draftName}
+                        maxLength={MAX_DISPLAY_NAME_LENGTH}
+                        onChange={(event) => setDraftName(event.target.value)}
+                        onBlur={() => commitEdit(book)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelEdit();
+                          }
+                        }}
+                        aria-label={`${book.title}の表示名`}
+                      />
+                    </form>
+                  ) : (
+                    <h2 title={book.title}>
+                      <button
+                        type="button"
+                        className="book-title-edit"
+                        onClick={() => startEdit(book)}
+                        disabled={busy}
+                        aria-label={`${book.title}の名前を変更`}
+                      >
+                        {book.title}
+                      </button>
+                    </h2>
+                  )}
                   <p className="book-progress-copy">{progressLabel(book)}</p>
                   <div className="book-card-footer">
                     <span>{formatDate(book.lastOpenedAt)}</span>
