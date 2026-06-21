@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   saveBookCover: vi.fn(),
   saveReadingPosition: vi.fn(),
   generateCoverThumbnail: vi.fn(),
+  getAppearanceSettings: vi.fn(),
   getLLMSettings: vi.fn(),
+  saveAppearanceSettings: vi.fn(),
   saveLLMSettings: vi.fn(),
 }));
 
@@ -26,7 +28,9 @@ vi.mock("./shared/api/backend", () => ({
   renameBook: mocks.renameBook,
   saveBookCover: mocks.saveBookCover,
   saveReadingPosition: mocks.saveReadingPosition,
+  getAppearanceSettings: mocks.getAppearanceSettings,
   getLLMSettings: mocks.getLLMSettings,
+  saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLLMSettings: mocks.saveLLMSettings,
 }));
 vi.mock("./features/library/generateCover", () => ({
@@ -80,11 +84,16 @@ const summary = {
 beforeEach(() => {
   vi.clearAllMocks();
   document.body.className = "";
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.themePreference;
+  document.documentElement.style.colorScheme = "";
   mocks.listBooks.mockResolvedValue([]);
   mocks.saveReadingPosition.mockResolvedValue(undefined);
   mocks.saveBookCover.mockResolvedValue(undefined);
   mocks.markBookCoverFailed.mockResolvedValue(undefined);
   mocks.generateCoverThumbnail.mockResolvedValue("data:image/png;base64,cover");
+  mocks.getAppearanceSettings.mockResolvedValue({ theme: "system" });
+  mocks.saveAppearanceSettings.mockImplementation(async (theme: string) => ({ theme }));
   mocks.getLLMSettings.mockResolvedValue({
     provider: "openrouter",
     model: "provider/model",
@@ -191,6 +200,35 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "本棚" }));
     expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
+  });
+
+  it("restores, applies, and persists the appearance theme", async () => {
+    mocks.getAppearanceSettings.mockResolvedValue({ theme: "dark" });
+    render(<App />);
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
+    fireEvent.click(screen.getByRole("button", { name: "設定" }));
+    const light = await screen.findByRole("button", { name: /ライト/ });
+    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(light);
+    await waitFor(() => expect(mocks.saveAppearanceSettings).toHaveBeenCalledWith("light"));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(light.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("rolls back the visible theme when persistence fails", async () => {
+    mocks.getAppearanceSettings.mockResolvedValue({ theme: "dark" });
+    mocks.saveAppearanceSettings.mockRejectedValue(new Error("settings unavailable"));
+    render(<App />);
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
+    fireEvent.click(screen.getByRole("button", { name: "設定" }));
+    fireEvent.click(await screen.findByRole("button", { name: /ライト/ }));
+
+    expect(await screen.findByText("settings unavailable")).toBeTruthy();
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("generates a pending cover without blocking the reader", async () => {

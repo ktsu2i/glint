@@ -85,7 +85,19 @@ export namespace llm {
 }
 
 export namespace settings {
-	
+
+	export class AppearanceSettings {
+	    theme: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AppearanceSettings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.theme = source["theme"];
+	    }
+	}
 	export class LLMSettings {
 	    provider: string;
 	    model: string;
@@ -104,6 +116,18 @@ export namespace settings {
 	        this.zdr = source["zdr"];
 	        this.hasApiKey = source["hasApiKey"];
 	        this.configured = source["configured"];
+	    }
+	}
+	export class SaveAppearanceSettingsRequest {
+	    theme: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SaveAppearanceSettingsRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.theme = source["theme"];
 	    }
 	}
 	export class SaveLLMSettingsRequest {
@@ -126,4 +150,3 @@ export namespace settings {
 	}
 
 }
-

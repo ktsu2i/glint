@@ -7,19 +7,44 @@ import {
   EyeSlash,
   Key,
   LockKey,
+  Monitor,
+  Moon,
   ShieldCheck,
+  Sun,
 } from "@phosphor-icons/react";
 import {
   getLLMSettings,
   saveLLMSettings,
   type LLMSettings,
+  type ThemePreference,
 } from "../../shared/api/backend";
 
 type LLMSettingsPageProps = {
   onBack: () => void;
+  theme?: ThemePreference;
+  themeLoading?: boolean;
+  themeError?: string;
+  onThemeChange?: (theme: ThemePreference) => Promise<void>;
 };
 
-export function LLMSettingsPage({ onBack }: LLMSettingsPageProps) {
+const themeOptions: Array<{
+  value: ThemePreference;
+  label: string;
+  description: string;
+  icon: typeof Sun;
+}> = [
+  { value: "light", label: "ライト", description: "明るい読書机", icon: Sun },
+  { value: "dark", label: "ダーク", description: "光を抑えた書斎", icon: Moon },
+  { value: "system", label: "システム", description: "OSの設定に合わせる", icon: Monitor },
+];
+
+export function LLMSettingsPage({
+  onBack,
+  theme = "system",
+  themeLoading = false,
+  themeError = "",
+  onThemeChange = async () => {},
+}: LLMSettingsPageProps) {
   const [settings, setSettings] = useState<LLMSettings | null>(null);
   const [model, setModel] = useState("");
   const [apiKey, setAPIKey] = useState("");
@@ -28,6 +53,8 @@ export function LLMSettingsPage({ onBack }: LLMSettingsPageProps) {
   const [clearAPIKey, setClearAPIKey] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [localThemeError, setLocalThemeError] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
@@ -79,6 +106,19 @@ export function LLMSettingsPage({ onBack }: LLMSettingsPageProps) {
     }
   }
 
+  async function handleThemeChange(next: ThemePreference) {
+    if (savingTheme || next === theme) return;
+    setSavingTheme(true);
+    setLocalThemeError("");
+    try {
+      await onThemeChange(next);
+    } catch (reason) {
+      setLocalThemeError(reason instanceof Error ? reason.message : "表示設定を保存できませんでした。");
+    } finally {
+      setSavingTheme(false);
+    }
+  }
+
   const hasCredential = settings?.hasApiKey ?? false;
   const willHaveCredential = apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
   const canSave = !loading && !saving && model.trim() !== "" && (willHaveCredential || clearAPIKey);
@@ -90,7 +130,7 @@ export function LLMSettingsPage({ onBack }: LLMSettingsPageProps) {
           <div>
             <span className="section-label">Application settings</span>
             <h1 id="settings-title">設定</h1>
-            <p>AIへの接続先と、読書contextを送るときのprivacy制約を管理します。</p>
+            <p>画面の表示と、AIへ読書contextを送るときの接続・privacy制約を管理します。</p>
           </div>
           <div className={settings?.configured ? "settings-connection is-ready" : "settings-connection"}>
             <span className="settings-connection-dot" />
@@ -103,15 +143,59 @@ export function LLMSettingsPage({ onBack }: LLMSettingsPageProps) {
 
         <div className="settings-layout">
           <nav className="settings-index" aria-label="設定項目">
-            <span>AI</span>
+            <span>Application</span>
             <button type="button" className="is-active" aria-current="page">
               <span aria-hidden="true" />
-              Model connection
+              Appearance
             </button>
+            <button type="button">Model connection</button>
             <p>API keyはOSのcredential storeに分離して保存します。</p>
           </nav>
 
           <form className="settings-page-form" onSubmit={handleSave}>
+            <section className="appearance-settings" aria-labelledby="appearance-heading">
+              <div className="settings-section-heading">
+                <div>
+                  <span className="settings-kicker">Reading environment</span>
+                  <h2 id="appearance-heading">表示</h2>
+                </div>
+                <span className="provider-badge">Theme</span>
+              </div>
+              <p className="appearance-description">
+                PDFの紙面は保ったまま、Library・Reader・Chatの明るさを切り替えます。
+              </p>
+              {(themeError || localThemeError) && (
+                <div className="settings-error appearance-error" role="alert">
+                  <span>{localThemeError || themeError}</span>
+                </div>
+              )}
+              <div className="theme-options" aria-label="表示テーマ">
+                {themeOptions.map((option) => {
+                  const Icon = option.icon;
+                  const selected = theme === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={selected ? "theme-option is-selected" : "theme-option"}
+                      aria-pressed={selected}
+                      disabled={themeLoading || savingTheme}
+                      onClick={() => void handleThemeChange(option.value)}
+                    >
+                      <Icon size={18} weight={selected ? "fill" : "regular"} />
+                      <span>
+                        <strong>{option.label}</strong>
+                        <small>{option.description}</small>
+                      </span>
+                      <i aria-hidden="true">{selected ? <Check size={12} /> : null}</i>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="settings-form-divider" />
+
             <div className="settings-section-heading">
               <div>
                 <span className="settings-kicker">Remote model route</span>

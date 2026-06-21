@@ -31,6 +31,20 @@ beforeEach(() => {
 });
 
 describe("LLMSettingsPage", () => {
+  it("selects and saves the appearance independently from LLM settings", async () => {
+    const onThemeChange = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <LLMSettingsPage onBack={vi.fn()} theme="system" onThemeChange={onThemeChange} />,
+    );
+
+    expect((await screen.findByRole("button", { name: /システム/ })).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /ダーク/ }));
+    await waitFor(() => expect(onThemeChange).toHaveBeenCalledWith("dark"));
+
+    rerender(<LLMSettingsPage onBack={vi.fn()} theme="dark" onThemeChange={onThemeChange} />);
+    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("loads persisted settings and updates the model without reading the credential", async () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 

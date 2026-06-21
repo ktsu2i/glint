@@ -11,7 +11,9 @@ import {
 } from "../../../wailsjs/go/books/Service";
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
+  GetAppearanceSettings,
   GetLLMSettings,
+  SaveAppearanceSettings,
   SaveLLMSettings,
 } from "../../../wailsjs/go/settings/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
@@ -70,6 +72,12 @@ export type SaveLLMSettingsRequest = {
   clearApiKey: boolean;
 };
 
+export type ThemePreference = "light" | "dark" | "system";
+
+export type AppearanceSettings = {
+  theme: ThemePreference;
+};
+
 export async function openPDF(): Promise<BookFile> {
   return (await OpenPDF()) as BookFile;
 }
@@ -120,6 +128,14 @@ export async function cancelChat(requestId: string): Promise<void> {
 
 export async function getLLMSettings(): Promise<LLMSettings> {
   return (await GetLLMSettings()) as LLMSettings;
+}
+
+export async function getAppearanceSettings(): Promise<AppearanceSettings> {
+  return (await GetAppearanceSettings()) as AppearanceSettings;
+}
+
+export async function saveAppearanceSettings(theme: ThemePreference): Promise<AppearanceSettings> {
+  return (await SaveAppearanceSettings({ theme })) as AppearanceSettings;
 }
 
 export async function saveLLMSettings(request: SaveLLMSettingsRequest): Promise<LLMSettings> {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import { BookOpenText, Books, FolderOpen, GearSix } from "@phosphor-icons/react";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
@@ -6,7 +6,9 @@ import { generateCoverThumbnail } from "./features/library/generateCover";
 import { Library } from "./features/library/Library";
 import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
 import { LLMSettingsPage } from "./features/settings/LLMSettingsPage";
+import { syncDocumentTheme } from "./features/settings/theme";
 import {
+  getAppearanceSettings,
   listBooks,
   markBookCoverFailed,
   openBook,
@@ -15,9 +17,11 @@ import {
   removeBook,
   renameBook,
   saveBookCover,
+  saveAppearanceSettings,
   saveReadingPosition,
   type BookFile,
   type BookSummary,
+  type ThemePreference,
 } from "./shared/api/backend";
 
 type PageContext = {
@@ -37,6 +41,9 @@ export default function App() {
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState("");
+  const [theme, setTheme] = useState<ThemePreference>("system");
+  const [themeLoading, setThemeLoading] = useState(true);
+  const [themeError, setThemeError] = useState("");
   const [assistantWidth, setAssistantWidth] = useState(390);
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null);
   const generatingCovers = useRef(new Set<string>());
@@ -59,6 +66,43 @@ export default function App() {
   useEffect(() => {
     void refreshLibrary(true);
   }, [refreshLibrary]);
+
+  useLayoutEffect(() => syncDocumentTheme(theme), [theme]);
+
+  useEffect(() => {
+    let active = true;
+    void getAppearanceSettings()
+      .then((loaded) => {
+        if (!active) return;
+        setTheme(loaded.theme);
+        setThemeError("");
+      })
+      .catch((reason) => {
+        if (!active) return;
+        setThemeError(reason instanceof Error ? reason.message : "表示設定を読み込めませんでした。");
+      })
+      .finally(() => {
+        if (active) setThemeLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleThemeChange = useCallback(async (next: ThemePreference) => {
+    const previous = theme;
+    setTheme(next);
+    setThemeError("");
+    try {
+      const saved = await saveAppearanceSettings(next);
+      setTheme(saved.theme);
+    } catch (reason) {
+      setTheme(previous);
+      const message = reason instanceof Error ? reason.message : "表示設定を保存できませんでした。";
+      setThemeError(message);
+      throw new Error(message);
+    }
+  }, [theme]);
 
   const ensureCover = useCallback(async (selected: BookFile) => {
     if (selected.coverStatus !== "pending" || generatingCovers.current.has(selected.id)) {
@@ -322,7 +366,13 @@ export default function App() {
 
           <div className="app-content">
             {view === "settings" ? (
-              <LLMSettingsPage onBack={closeSettings} />
+              <LLMSettingsPage
+                onBack={closeSettings}
+                theme={theme}
+                themeLoading={themeLoading}
+                themeError={themeError}
+                onThemeChange={handleThemeChange}
+              />
             ) : view === "library" ? (
               <Library
                 books={books}

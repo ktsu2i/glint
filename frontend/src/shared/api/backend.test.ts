@@ -10,7 +10,9 @@ const bindings = vi.hoisted(() => ({
   renameBook: vi.fn(),
   saveBookCover: vi.fn(),
   saveReadingPosition: vi.fn(),
+  getAppearanceSettings: vi.fn(),
   getLLMSettings: vi.fn(),
+  saveAppearanceSettings: vi.fn(),
   saveLLMSettings: vi.fn(),
   startChat: vi.fn(),
   eventsOn: vi.fn(),
@@ -34,7 +36,9 @@ vi.mock("../../../wailsjs/go/chat/Service", () => ({
 }));
 
 vi.mock("../../../wailsjs/go/settings/Service", () => ({
+  GetAppearanceSettings: bindings.getAppearanceSettings,
   GetLLMSettings: bindings.getLLMSettings,
+  SaveAppearanceSettings: bindings.saveAppearanceSettings,
   SaveLLMSettings: bindings.saveLLMSettings,
 }));
 
@@ -44,6 +48,7 @@ vi.mock("../../../wailsjs/runtime/runtime", () => ({
 }));
 
 import {
+  getAppearanceSettings,
   listBooks,
   getLLMSettings,
   markBookCoverFailed,
@@ -54,6 +59,7 @@ import {
   removeBook,
   renameBook,
   saveBookCover,
+  saveAppearanceSettings,
   saveReadingPosition,
   saveLLMSettings,
   startChat,
@@ -98,6 +104,15 @@ describe("backend facade", () => {
     await expect(getLLMSettings()).resolves.toEqual(settings);
     await expect(saveLLMSettings(request)).resolves.toEqual(settings);
     expect(bindings.saveLLMSettings).toHaveBeenCalledWith(request);
+  });
+
+  it("delegates appearance settings through a typed theme contract", async () => {
+    bindings.getAppearanceSettings.mockResolvedValue({ theme: "dark" });
+    bindings.saveAppearanceSettings.mockResolvedValue({ theme: "system" });
+
+    await expect(getAppearanceSettings()).resolves.toEqual({ theme: "dark" });
+    await expect(saveAppearanceSettings("system")).resolves.toEqual({ theme: "system" });
+    expect(bindings.saveAppearanceSettings).toHaveBeenCalledWith({ theme: "system" });
   });
 
   it("delegates library persistence operations", async () => {

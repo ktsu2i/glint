@@ -15,6 +15,7 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 - current page textを明示的に含める／含めないchat操作
 - Goのprovider-neutral gatewayを通したOpenRouter streaming answer
 - OpenRouter model、API key、Zero Data Retentionの設定UI
+- light / dark / system theme切替と、選択内容のlocal保存
 - API keyのOS credential store保存。SQLiteにはmodelとprivacy設定だけを保存
 - token付きlocal endpointによるPDF配信。frontendへlocal pathは渡さない
 
