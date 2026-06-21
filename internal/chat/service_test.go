@@ -107,7 +107,6 @@ func TestStartChatEmitsDeltasUntilStreamCloses(t *testing.T) {
 
 	gateway.delivered <- llm.AnswerDelta{RequestID: "req-1", Content: "a"}
 	gateway.delivered <- llm.AnswerDelta{RequestID: "req-1", Done: true}
-	close(gateway.finish)
 
 	first := receiveEvent(t, events)
 	if delta := first.data[0].(llm.AnswerDelta); delta.Content != "a" || delta.RequestID != "req-1" {
@@ -118,6 +117,7 @@ func TestStartChatEmitsDeltasUntilStreamCloses(t *testing.T) {
 		t.Fatalf("expected Done=true, got %#v", delta)
 	}
 
+	close(gateway.finish)
 	waitForRelease(t, svc, "req-1")
 }
 
@@ -156,6 +156,72 @@ func TestCancelChatIgnoresUnknownAndEmptyIDs(t *testing.T) {
 
 	svc.CancelChat("")
 	svc.CancelChat("nothing-here")
+}
+
+func TestStartChatEmitsTimeoutWhenStreamStalls(t *testing.T) {
+	gateway := newFakeGateway()
+	svc, events := newRecordingService(fixedProvider{gateway: gateway})
+	svc.idleTimeout = 50 * time.Millisecond
+	svc.totalTimeout = 2 * time.Second
+
+	if err := svc.StartChat(llm.ChatRequest{RequestID: "req-3", Question: "hello"}); err != nil {
+		t.Fatalf("StartChat: %v", err)
+	}
+	<-gateway.started
+
+	event := receiveEvent(t, events)
+	delta := event.data[0].(llm.AnswerDelta)
+	if !delta.Done {
+		t.Fatalf("expected Done=true on timeout, got %#v", delta)
+	}
+	if delta.Error == "" {
+		t.Fatalf("expected timeout error message, got %#v", delta)
+	}
+	if delta.RequestID != "req-3" {
+		t.Fatalf("expected timeout delta for req-3, got %#v", delta)
+	}
+
+	gateway.mu.Lock()
+	ctx := gateway.receivedCtx
+	gateway.mu.Unlock()
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("gateway context was not canceled by idle timeout")
+	}
+
+	waitForRelease(t, svc, "req-3")
+}
+
+func TestStartChatResetsIdleTimerOnEachDelta(t *testing.T) {
+	gateway := newFakeGateway()
+	svc, events := newRecordingService(fixedProvider{gateway: gateway})
+	svc.idleTimeout = 80 * time.Millisecond
+	svc.totalTimeout = 2 * time.Second
+
+	if err := svc.StartChat(llm.ChatRequest{RequestID: "req-4", Question: "hello"}); err != nil {
+		t.Fatalf("StartChat: %v", err)
+	}
+	<-gateway.started
+
+	for range 4 {
+		gateway.delivered <- llm.AnswerDelta{RequestID: "req-4", Content: "x"}
+		time.Sleep(40 * time.Millisecond)
+		event := receiveEvent(t, events)
+		delta := event.data[0].(llm.AnswerDelta)
+		if delta.Done || delta.Error != "" {
+			t.Fatalf("unexpected delta: %#v", delta)
+		}
+	}
+
+	gateway.delivered <- llm.AnswerDelta{RequestID: "req-4", Done: true}
+	final := receiveEvent(t, events)
+	delta := final.data[0].(llm.AnswerDelta)
+	if !delta.Done || delta.Error != "" {
+		t.Fatalf("expected clean Done delta, got %#v", delta)
+	}
+
+	waitForRelease(t, svc, "req-4")
 }
 
 func receiveEvent(t *testing.T, events <-chan recordedEvent) recordedEvent {
