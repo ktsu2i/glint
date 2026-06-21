@@ -4,7 +4,6 @@ import {
   ArrowUp,
   BookOpenText,
   ChatCircleDots,
-  GearSix,
   Paperclip,
   TextAa,
 } from "@phosphor-icons/react";
@@ -37,12 +36,11 @@ type Message = {
 type ChatSidebarProps = {
   context: ReadingContext;
   selection?: SelectionContext | null;
-  onOpenSettings?: () => void;
 };
 
 type ContextSource = "selection" | "page";
 
-export function ChatSidebar({ context, selection = null, onOpenSettings }: ChatSidebarProps) {
+export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -181,16 +179,6 @@ export function ChatSidebar({ context, selection = null, onOpenSettings }: ChatS
             <p>読書中の疑問を整理する</p>
           </div>
         </div>
-        <button
-          type="button"
-          className={`provider-status-button ${llmSettings?.configured ? "is-connected" : ""}`}
-          onClick={onOpenSettings}
-          aria-label="LLM接続設定を開く"
-        >
-          <span className="provider-status-dot" />
-          <span>{llmSettings === null ? "確認中" : llmSettings.configured ? "OpenRouter" : "設定する"}</span>
-          <GearSix size={12} aria-hidden="true" />
-        </button>
       </header>
 
       <div className="chat-settings-feedback" aria-live="polite">

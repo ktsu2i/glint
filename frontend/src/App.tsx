@@ -350,7 +350,6 @@ export default function App() {
                     text: pageContext.text,
                   }}
                   selection={selection}
-                  onOpenSettings={openSettings}
                 />
               </div>
             )}

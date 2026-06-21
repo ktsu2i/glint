@@ -48,7 +48,8 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "", pageNumber: 0, text: "" }} />,
     );
 
-    await screen.findByText("OpenRouter");
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("button", { name: "LLM接続設定を開く" })).toBeNull();
     expect(screen.getByText("PDF未選択")).toBeTruthy();
     expect(screen.getByText("文脈なし")).toBeTruthy();
     expect(screen.getByRole("switch")).toBeTruthy();
@@ -68,7 +69,7 @@ describe("ChatSidebar", () => {
     );
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
 
-    await screen.findByText("OpenRouter");
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
     fireEvent.change(textarea, { target: { value: "  Explain this  " } });
     fireEvent.keyDown(textarea, { key: "A", shiftKey: false });
@@ -112,7 +113,7 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
     );
 
-    await screen.findByText("OpenRouter");
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
     fireEvent.click(screen.getByRole("switch"));
     expect(screen.getByText("添付しない")).toBeTruthy();
@@ -137,7 +138,7 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 1, text: "context" }} />,
     );
 
-    await screen.findByText("OpenRouter");
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "question" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -159,7 +160,7 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 5, text: "page text" }} />,
     );
 
-    await screen.findByText("OpenRouter");
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
     expect(screen.getByText("Page 5")).toBeTruthy();
 
@@ -192,7 +193,7 @@ describe("ChatSidebar", () => {
       />,
     );
 
-    await screen.findByText("OpenRouter");
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
     fireEvent.click(screen.getByRole("tab", { name: "ページ全体" }));
     expect(screen.getByText("Page 5")).toBeTruthy();

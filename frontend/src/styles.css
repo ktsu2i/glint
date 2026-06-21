@@ -1019,8 +1019,6 @@ input:focus-visible,
   min-height: 66px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
 }
@@ -1054,42 +1052,6 @@ input:focus-visible,
   margin: 3px 0 0;
   color: var(--muted);
   font-size: 10px;
-}
-
-.provider-status-button {
-  min-height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 7px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--faint);
-  background: transparent;
-  font-family: var(--utility-font);
-  font-size: 8px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.provider-status-button:hover {
-  border-color: var(--line);
-  color: var(--slate);
-  background: var(--surface);
-}
-
-.provider-status-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #9c8a69;
-  box-shadow: 0 0 0 3px rgb(156 138 105 / 10%);
-}
-
-.provider-status-button.is-connected .provider-status-dot {
-  background: var(--signal);
-  box-shadow: 0 0 0 3px rgb(112 141 145 / 13%);
 }
 
 .chat-settings-feedback {
