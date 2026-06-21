@@ -277,6 +277,14 @@ export function PdfReader({
   }, [document, viewMode]);
 
   useEffect(() => {
+    if (!document || !stageNodeRef.current) {
+      return;
+    }
+    stageNodeRef.current.scrollTop = 0;
+    stageNodeRef.current.scrollLeft = 0;
+  }, [document, pageNumber]);
+
+  useEffect(() => {
     if (!document) {
       return;
     }

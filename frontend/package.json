@@ -17,6 +17,7 @@
     "dev": "vite",
     "prebuild": "node scripts/require-pnpm.mjs",
     "build": "tsc --noEmit && vite build",
+    "fixture:pdf": "node ../scripts/generate-reader-fixture.mjs",
     "pretest": "node scripts/require-pnpm.mjs",
     "test": "vitest run",
     "pretest:coverage": "node scripts/require-pnpm.mjs",

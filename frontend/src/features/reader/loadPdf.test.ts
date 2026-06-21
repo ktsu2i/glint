@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import generatedReaderPdf from "../../../testdata/generated-reader.pdf?raw";
 import { createPdfLoadingTask } from "./loadPdf";
 
 function createOnePagePdf(): Uint8Array {
@@ -27,6 +28,30 @@ afterEach(() => {
 });
 
 describe("createPdfLoadingTask", () => {
+  it("parses the generated reader fixture with text and outline", async () => {
+    vi.stubGlobal("DOMMatrix", class DOMMatrix {});
+    vi.stubGlobal("ImageData", class ImageData {});
+    vi.stubGlobal("Path2D", class Path2D {});
+    const fixture = new TextEncoder().encode(generatedReaderPdf);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(fixture)));
+
+    const task = await createPdfLoadingTask("/book/generated-reader", new AbortController().signal);
+    const document = await task.promise;
+    const outline = await document.getOutline();
+    const firstPage = await document.getPage(1);
+    const text = await firstPage.getTextContent();
+
+    expect(document.numPages).toBe(3);
+    expect(outline?.map((item) => item.title)).toEqual([
+      "Section 1: Context Budgets",
+      "Section 2: Evidence",
+    ]);
+    expect(
+      text.items.some((item) => "str" in item && item.str.includes("Context Budgets")),
+    ).toBe(true);
+    await task.destroy();
+  });
+
   it("fetches and parses a valid PDF", async () => {
     vi.stubGlobal("DOMMatrix", class DOMMatrix {});
     vi.stubGlobal("ImageData", class ImageData {});

@@ -213,6 +213,46 @@ describe("PdfReader", () => {
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
   });
 
+  it("resets the reader scroll position after button, page input, and TOC navigation", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 12;
+    resolveDocument(pdfDocument);
+    loader.loadPdfOutline.mockResolvedValue([
+      { title: "第2章", pageNumber: 9, children: [] },
+    ]);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
+    stage.scrollTop = 180;
+    stage.scrollLeft = 90;
+    fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
+    expect(stage.scrollTop).toBe(0);
+    expect(stage.scrollLeft).toBe(0);
+
+    stage.scrollTop = 180;
+    stage.scrollLeft = 90;
+    fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
+    const input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "7" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(7));
+    expect(stage.scrollTop).toBe(0);
+    expect(stage.scrollLeft).toBe(0);
+
+    stage.scrollTop = 180;
+    stage.scrollLeft = 90;
+    fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
+    fireEvent.click(await screen.findByRole("button", { name: /第2章/ }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(9));
+    expect(stage.scrollTop).toBe(0);
+    expect(stage.scrollLeft).toBe(0);
+  });
+
   it("turns pages with arrow keys and ignores them inside editable elements", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
