@@ -135,4 +135,55 @@ describe("ChatSidebar", () => {
 
     expect(screen.getByText("PDF未選択")).toBeTruthy();
   });
+
+  it("prefers the active selection over the current page when available", async () => {
+    const { container, rerender } = render(
+      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 5, text: "page text" }} />,
+    );
+
+    expect(screen.getByText("Page 5")).toBeTruthy();
+
+    rerender(
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 5, text: "page text" }}
+        selection={{ pageNumber: 6, text: "highlighted phrase" }}
+      />,
+    );
+
+    expect(screen.getByText("選択範囲（Page 6）")).toBeTruthy();
+    expect(screen.getByText("Page 6 の選択範囲を添付")).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(backend.startMockChat).toHaveBeenCalledWith({
+      requestId: "request-1",
+      question: "explain",
+      contextText: "highlighted phrase",
+      bookName: "Guide.pdf",
+      pageNumber: 6,
+    }));
+  });
+
+  it("lets the user switch between selection and full page context", async () => {
+    const { container } = render(
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 5, text: "full page body" }}
+        selection={{ pageNumber: 6, text: "highlighted phrase" }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "ページ全体" }));
+    expect(screen.getByText("Page 5")).toBeTruthy();
+    expect(screen.getByText("Page 5 を添付")).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "what is this" } });
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(backend.startMockChat).toHaveBeenCalledWith({
+      requestId: "request-1",
+      question: "what is this",
+      contextText: "full page body",
+      bookName: "Guide.pdf",
+      pageNumber: 5,
+    }));
+  });
 });

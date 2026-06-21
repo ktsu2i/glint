@@ -4,7 +4,7 @@ import { BookOpenText, Books, FolderOpen } from "@phosphor-icons/react";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { Library } from "./features/library/Library";
-import { PdfReader } from "./features/reader/PdfReader";
+import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
 import {
   listBooks,
   markBookCoverFailed,
@@ -30,6 +30,7 @@ export default function App() {
   const [busyBookId, setBusyBookId] = useState("");
   const [book, setBook] = useState<BookFile | null>(null);
   const [pageContext, setPageContext] = useState<PageContext>({ pageNumber: 0, text: "" });
+  const [selection, setSelection] = useState<ReaderSelection | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState("");
   const [assistantWidth, setAssistantWidth] = useState(390);
@@ -78,11 +79,16 @@ export default function App() {
   const showReader = useCallback((selected: BookFile) => {
     lastSavedPosition.current = "";
     setPageContext({ pageNumber: 0, text: "" });
+    setSelection(null);
     setBook(selected);
     setView("reader");
     setOpenError("");
     void ensureCover(selected);
   }, [ensureCover]);
+
+  const handleSelectionChange = useCallback((next: ReaderSelection | null) => {
+    setSelection(next);
+  }, []);
 
   async function handleImportPDF() {
     setOpening(true);
@@ -235,6 +241,7 @@ export default function App() {
               book={book}
               initialPage={book?.initialPage ?? 1}
               onPageContextChange={handlePageContextChange}
+              onSelectionChange={handleSelectionChange}
             />
 
             <div
@@ -264,6 +271,7 @@ export default function App() {
                 pageNumber: pageContext.pageNumber,
                 text: pageContext.text,
               }}
+              selection={selection}
             />
           </div>
         )}

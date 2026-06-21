@@ -790,12 +790,76 @@ input:focus-visible,
   gap: 4px;
 }
 
-.pdf-canvas {
-  display: block;
+.pdf-page {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
   background: white;
   box-shadow:
     0 1px 1px rgb(32 37 42 / 7%),
     0 16px 38px rgb(32 37 42 / 14%);
+}
+
+.pdf-canvas {
+  display: block;
+}
+
+.text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 1;
+}
+
+.text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.text-layer > :not(.markedContent),
+.text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size, 1));
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x))
+    scale(calc(1 / var(--min-font-size, 1)));
+}
+
+.text-layer .markedContent {
+  display: contents;
+}
+
+.text-layer ::selection {
+  background: rgb(110 168 254 / 32%);
+}
+
+.text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.text-layer.selecting .endOfContent {
+  top: 0;
 }
 
 .reader-status,
@@ -1007,6 +1071,35 @@ input:focus-visible,
 
 .context-switch-thumb[data-checked] {
   transform: translateX(11px);
+}
+
+.context-source-tabs {
+  display: inline-flex;
+  margin: 10px 0 0 23px;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.context-source-tabs button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: var(--utility-font);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.context-source-tabs button.is-active {
+  background: var(--slate);
+  color: white;
 }
 
 .context-preview {

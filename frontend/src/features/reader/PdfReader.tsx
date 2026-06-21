@@ -17,7 +17,7 @@ import {
 import type { BookFile } from "../../shared/api/backend";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
-import { createPdfLoadingTask } from "./loadPdf";
+import { createPdfLoadingTask, createPdfTextLayer, type PdfTextLayer } from "./loadPdf";
 
 const loadTimeoutMilliseconds = 60_000;
 const minScale = 0.4;
@@ -27,16 +27,34 @@ const manualZoomStep = 0.1;
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
 
+export type ReaderSelection = {
+  text: string;
+  pageNumber: number;
+};
+
 type PdfReaderProps = {
   book: BookFile | null;
   initialPage?: number;
   onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
+  onSelectionChange?: (selection: ReaderSelection | null) => void;
 };
 
-export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfReaderProps) {
+export function PdfReader({
+  book,
+  initialPage = 1,
+  onPageContextChange,
+  onSelectionChange,
+}: PdfReaderProps) {
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
+  const textLayerLeftRef = useRef<HTMLDivElement>(null);
+  const textLayerRightRef = useRef<HTMLDivElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
+  const selectionCallbackRef = useRef(onSelectionChange);
+
+  useEffect(() => {
+    selectionCallbackRef.current = onSelectionChange;
+  }, [onSelectionChange]);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
@@ -228,8 +246,14 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       canvases.push(rightCanvas);
     }
 
+    const textLayerContainers = [textLayerLeftRef.current];
+    if (pageNumbers.length === 2) {
+      textLayerContainers.push(textLayerRightRef.current);
+    }
+
     let active = true;
     const renderTasks: RenderTask[] = [];
+    const textLayers: PdfTextLayer[] = [];
 
     async function renderPages() {
       const pages = await Promise.all(pageNumbers.map((n) => document!.getPage(n)));
@@ -250,10 +274,11 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
         : Math.min(maxScale, Math.max(minScale, rawScale || 1));
 
       const outputScale = window.devicePixelRatio || 1;
+      const viewports = pages.map((page) => page.getViewport({ scale }));
       for (let i = 0; i < pages.length; i += 1) {
         const page = pages[i];
         const canvas = canvases[i];
-        const viewport = page.getViewport({ scale });
+        const viewport = viewports[i];
         const context = canvas.getContext("2d");
         if (!context) {
           throw new Error("Canvasを初期化できませんでした。");
@@ -279,17 +304,57 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       }
 
       const textContents = await Promise.all(pages.map((page) => page.getTextContent()));
-      if (active) {
-        const text = textContents
-          .map((textContent) =>
-            normalizePageText(
-              textContent.items
-                .filter((item) => "str" in item)
-                .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
-            ),
-          )
-          .join("\n\n");
-        onPageContextChange(pageNumber, text, document!.numPages);
+      if (!active) {
+        return;
+      }
+
+      const text = textContents
+        .map((textContent) =>
+          normalizePageText(
+            textContent.items
+              .filter((item) => "str" in item)
+              .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
+          ),
+        )
+        .join("\n\n");
+      onPageContextChange(pageNumber, text, document!.numPages);
+
+      for (let i = 0; i < pages.length; i += 1) {
+        const container = textLayerContainers[i];
+        if (!container) {
+          continue;
+        }
+        while (container.firstChild) {
+          container.removeChild(container.firstChild);
+        }
+        container.dataset.page = String(pageNumbers[i]);
+        container.style.setProperty("--total-scale-factor", String(viewports[i].scale));
+        container.style.setProperty("--scale-round-x", "1px");
+        container.style.setProperty("--scale-round-y", "1px");
+        const textLayer = await createPdfTextLayer({
+          textContentSource: textContents[i],
+          container,
+          viewport: viewports[i],
+        });
+        if (!active) {
+          textLayer.cancel();
+          return;
+        }
+        textLayers.push(textLayer);
+        try {
+          await textLayer.render();
+        } catch (reason) {
+          if (!active) {
+            return;
+          }
+          if (reason instanceof Error && reason.name === "AbortException") {
+            return;
+          }
+          throw reason;
+        }
+        if (!active) {
+          return;
+        }
       }
     }
 
@@ -302,8 +367,44 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
     return () => {
       active = false;
       renderTasks.forEach((task) => task.cancel());
+      textLayers.forEach((layer) => layer.cancel());
     };
   }, [document, onPageContextChange, pageNumber, stageSize, viewMode, zoomMode]);
+
+  useEffect(() => {
+    function handleSelectionChange() {
+      const emit = selectionCallbackRef.current;
+      if (!emit) {
+        return;
+      }
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        emit(null);
+        return;
+      }
+      const anchorParent = selection.anchorNode instanceof Element
+        ? selection.anchorNode
+        : selection.anchorNode?.parentElement ?? null;
+      const focusParent = selection.focusNode instanceof Element
+        ? selection.focusNode
+        : selection.focusNode?.parentElement ?? null;
+      const anchorLayer = anchorParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
+      const focusLayer = focusParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
+      if (!anchorLayer || anchorLayer !== focusLayer) {
+        emit(null);
+        return;
+      }
+      const sourcePage = Number(anchorLayer.dataset.page);
+      const text = selection.toString().trim();
+      if (!text || !Number.isFinite(sourcePage) || sourcePage < 1) {
+        emit(null);
+        return;
+      }
+      emit({ text, pageNumber: sourcePage });
+    }
+    window.document.addEventListener("selectionchange", handleSelectionChange);
+    return () => window.document.removeEventListener("selectionchange", handleSelectionChange);
+  }, []);
 
   function adjustZoom(delta: number) {
     setZoomMode((current) => {
@@ -394,17 +495,33 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
         {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
         {error && <div className="reader-error" role="alert">{error}</div>}
         <div className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}>
-          <canvas
-            ref={canvasLeftRef}
-            className="pdf-canvas"
-            aria-label={`${pageNumber}ページ`}
-          />
-          {showRightCanvas && (
+          <div className="pdf-page">
             <canvas
-              ref={canvasRightRef}
+              ref={canvasLeftRef}
               className="pdf-canvas"
-              aria-label={`${rightPageNumber}ページ`}
+              aria-label={`${pageNumber}ページ`}
             />
+            <div
+              ref={textLayerLeftRef}
+              className="text-layer"
+              data-page={pageNumber}
+              aria-hidden="true"
+            />
+          </div>
+          {showRightCanvas && (
+            <div className="pdf-page">
+              <canvas
+                ref={canvasRightRef}
+                className="pdf-canvas"
+                aria-label={`${rightPageNumber}ページ`}
+              />
+              <div
+                ref={textLayerRightRef}
+                className="text-layer"
+                data-page={rightPageNumber}
+                aria-hidden="true"
+              />
+            </div>
           )}
         </div>
       </div>

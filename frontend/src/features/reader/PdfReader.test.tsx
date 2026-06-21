@@ -1,9 +1,15 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const loader = vi.hoisted(() => ({ createPdfLoadingTask: vi.fn() }));
+const loader = vi.hoisted(() => ({
+  createPdfLoadingTask: vi.fn(),
+  createPdfTextLayer: vi.fn(),
+}));
 
-vi.mock("./loadPdf", () => ({ createPdfLoadingTask: loader.createPdfLoadingTask }));
+vi.mock("./loadPdf", () => ({
+  createPdfLoadingTask: loader.createPdfLoadingTask,
+  createPdfTextLayer: loader.createPdfTextLayer,
+}));
 vi.mock("../../shared/components/ToolButton", () => ({
   ToolButton: ({
     label,
@@ -98,6 +104,10 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
   Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 1 });
+  loader.createPdfTextLayer.mockImplementation(async () => ({
+    render: vi.fn(async () => undefined),
+    cancel: vi.fn(),
+  }));
 });
 
 describe("PdfReader", () => {
@@ -550,6 +560,121 @@ describe("PdfReader", () => {
     await waitFor(
       () => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(1),
     );
+  });
+
+  it("renders the text layer over each rendered page and cancels on unmount", async () => {
+    const pageOne = makePage({
+      getTextContent: vi.fn(async () => ({
+        items: [{ str: "Left", hasEOL: false }],
+      })),
+    });
+    const pageTwo = makePage({
+      getTextContent: vi.fn(async () => ({
+        items: [{ str: "Right", hasEOL: false }],
+      })),
+    });
+    const pdfDocument = {
+      numPages: 4,
+      getPage: vi.fn(async (...args: unknown[]) => (args[0] === 1 ? pageOne : pageTwo)),
+    };
+    resolveDocument(pdfDocument);
+    const textLayerOne = { render: vi.fn(async () => undefined), cancel: vi.fn() };
+    const textLayerTwo = { render: vi.fn(async () => undefined), cancel: vi.fn() };
+    loader.createPdfTextLayer
+      .mockResolvedValueOnce(textLayerOne)
+      .mockResolvedValueOnce(textLayerTwo);
+    const { unmount } = render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
+    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+
+    await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalledTimes(2));
+    const containers = globalThis.document.querySelectorAll(".text-layer[data-page]");
+    expect(containers.length).toBe(2);
+    expect(containers[0].getAttribute("data-page")).toBe("1");
+    expect(containers[1].getAttribute("data-page")).toBe("2");
+    expect((containers[0] as HTMLElement).style.getPropertyValue("--total-scale-factor")).not.toBe("");
+    expect(textLayerOne.render).toHaveBeenCalled();
+    expect(textLayerTwo.render).toHaveBeenCalled();
+
+    unmount();
+    expect(textLayerOne.cancel).toHaveBeenCalled();
+    expect(textLayerTwo.cancel).toHaveBeenCalled();
+  });
+
+  it("emits selection details when the user selects text inside a page layer", async () => {
+    resolveDocument();
+    const onSelectionChange = vi.fn();
+    render(
+      <PdfReader
+        book={makeBook()}
+        onPageContextChange={vi.fn()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalled());
+
+    const layer = globalThis.document.querySelector(".text-layer[data-page]") as HTMLElement;
+    const span = globalThis.document.createElement("span");
+    span.textContent = "selected text";
+    layer.appendChild(span);
+    const textNode = span.firstChild as Text;
+
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      anchorNode: textNode,
+      focusNode: textNode,
+      isCollapsed: false,
+      toString: () => "  selected text  ",
+    } as unknown as Selection);
+    act(() => {
+      globalThis.document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith({ text: "selected text", pageNumber: 1 });
+
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      anchorNode: textNode,
+      focusNode: textNode,
+      isCollapsed: true,
+      toString: () => "",
+    } as unknown as Selection);
+    act(() => {
+      globalThis.document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("ignores selections that fall outside a text layer", async () => {
+    resolveDocument();
+    const onSelectionChange = vi.fn();
+    render(
+      <PdfReader
+        book={makeBook()}
+        onPageContextChange={vi.fn()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalled());
+
+    const outside = globalThis.document.createElement("p");
+    outside.textContent = "elsewhere";
+    globalThis.document.body.appendChild(outside);
+    const outsideText = outside.firstChild as Text;
+
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      anchorNode: outsideText,
+      focusNode: outsideText,
+      isCollapsed: false,
+      toString: () => "elsewhere",
+    } as unknown as Selection);
+    onSelectionChange.mockClear();
+    act(() => {
+      globalThis.document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+    outside.remove();
   });
 
   it("does not publish scale or text after an in-flight render is unmounted", async () => {

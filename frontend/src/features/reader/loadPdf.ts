@@ -1,8 +1,15 @@
 import "./pdfPolyfills";
 import "pdfjs-dist/build/pdf.worker.min.mjs";
-import type { PDFDocumentLoadingTask } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PageViewport, PDFPageProxy } from "pdfjs-dist";
+
+type TextContent = Awaited<ReturnType<PDFPageProxy["getTextContent"]>>;
 
 const pdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
+
+export type PdfTextLayer = {
+  render: () => Promise<void>;
+  cancel: () => void;
+};
 
 function hasPdfHeader(data: Uint8Array): boolean {
   return pdfHeader.every((byte, index) => data[index] === byte);
@@ -37,4 +44,13 @@ export async function createPdfLoadingTask(
     cMapPacked: true,
     standardFontDataUrl: resolveAssetUrl("pdfjs/standard_fonts/"),
   });
+}
+
+export async function createPdfTextLayer(params: {
+  textContentSource: TextContent | ReadableStream;
+  container: HTMLElement;
+  viewport: PageViewport;
+}): Promise<PdfTextLayer> {
+  const pdfjs = await import("pdfjs-dist");
+  return new pdfjs.TextLayer(params);
 }
