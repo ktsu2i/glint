@@ -61,7 +61,7 @@ describe("ChatSidebar", () => {
     expect(backend.unsubscribe).toHaveBeenCalledOnce();
   });
 
-  it("sends context, streams matching deltas, and handles keyboard submission", async () => {
+  it("sends context with Command+Enter and keeps Enter available for newlines and IME", async () => {
     const { container } = render(
       <ChatSidebar
         context={{ bookName: "Guide.pdf", pageNumber: 7, text: "  page context  " }}
@@ -72,10 +72,14 @@ describe("ChatSidebar", () => {
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
     fireEvent.change(textarea, { target: { value: "  Explain this  " } });
-    fireEvent.keyDown(textarea, { key: "A", shiftKey: false });
-    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+    expect(fireEvent.keyDown(textarea, { key: "Enter" })).toBe(true);
+    expect(fireEvent.keyDown(textarea, {
+      key: "Enter",
+      metaKey: true,
+      isComposing: true,
+    })).toBe(true);
     expect(backend.startChat).not.toHaveBeenCalled();
-    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    expect(fireEvent.keyDown(textarea, { key: "Enter", metaKey: true })).toBe(false);
 
     await waitFor(() => {
       expect(backend.startChat).toHaveBeenCalledWith({

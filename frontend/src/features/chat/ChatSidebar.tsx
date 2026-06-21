@@ -265,7 +265,11 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
           rows={3}
           disabled={sending}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (
+              event.key === "Enter"
+              && event.metaKey
+              && !event.nativeEvent.isComposing
+            ) {
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }
