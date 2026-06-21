@@ -8,7 +8,7 @@ import {
   SaveBookCover,
   SaveReadingPosition,
 } from "../../../wailsjs/go/books/Service";
-import { StartChat } from "../../../wailsjs/go/chat/Service";
+import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
   GetLLMSettings,
   SaveLLMSettings,
@@ -107,6 +107,10 @@ export async function markBookCoverFailed(bookId: string): Promise<void> {
 
 export async function startChat(request: ChatRequest): Promise<void> {
   await StartChat(request);
+}
+
+export async function cancelChat(requestId: string): Promise<void> {
+  await CancelChat(requestId);
 }
 
 export async function getLLMSettings(): Promise<LLMSettings> {

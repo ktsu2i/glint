@@ -57,6 +57,9 @@ export function PdfReader({
   }, [onSelectionChange]);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [isEditingPage, setIsEditingPage] = useState(false);
+  const pageInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -406,6 +409,40 @@ export function PdfReader({
     return () => window.document.removeEventListener("selectionchange", handleSelectionChange);
   }, []);
 
+  useEffect(() => {
+    if (!isEditingPage) {
+      setPageInput(String(pageNumber));
+    }
+  }, [pageNumber, isEditingPage]);
+
+  function commitPageInput() {
+    const numPages = document?.numPages ?? 0;
+    if (numPages < 1) {
+      setPageInput(String(pageNumber));
+      return;
+    }
+    const parsed = Number.parseInt(pageInput, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      setPageInput(String(pageNumber));
+      return;
+    }
+    const next = Math.min(numPages, parsed);
+    setPageNumber(next);
+    setPageInput(String(next));
+  }
+
+  function startEditingPage() {
+    if (!document) {
+      return;
+    }
+    setPageInput(String(pageNumber));
+    setIsEditingPage(true);
+    window.requestAnimationFrame(() => {
+      pageInputRef.current?.focus();
+      pageInputRef.current?.select();
+    });
+  }
+
   function adjustZoom(delta: number) {
     setZoomMode((current) => {
       const base = current.kind === "manual" ? current.value : effectiveScale;
@@ -435,6 +472,7 @@ export function PdfReader({
   const pageRangeLabel = showRightCanvas
     ? `${pageNumber}–${rightPageNumber}`
     : `${pageNumber}`;
+  const pageInputWidth = Math.max(2, String(numPages || 1).length);
 
   return (
     <section className="reader" aria-label="PDF reader">
@@ -451,9 +489,49 @@ export function PdfReader({
           >
             <CaretLeft size={15} weight="bold" />
           </ToolButton>
-          <span className="page-count">
-            {pageRangeLabel} <span>/ {document?.numPages ?? "–"}</span>
-          </span>
+          {isEditingPage ? (
+            <form
+              className="page-count is-editing"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitPageInput();
+                setIsEditingPage(false);
+              }}
+            >
+              <input
+                ref={pageInputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                aria-label="ページ番号"
+                value={pageInput}
+                size={pageInputWidth}
+                onChange={(event) => setPageInput(event.target.value.replace(/[^0-9]/g, ""))}
+                onBlur={() => {
+                  commitPageInput();
+                  setIsEditingPage(false);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setPageInput(String(pageNumber));
+                    setIsEditingPage(false);
+                  }
+                }}
+              />
+              <span>/ {document?.numPages ?? "–"}</span>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="page-count"
+              aria-label="ページ番号を指定"
+              onClick={startEditingPage}
+              disabled={!document}
+            >
+              {pageRangeLabel} <span>/ {document?.numPages ?? "–"}</span>
+            </button>
+          )}
           <ToolButton
             label="次のページ"
             disabled={!document || pageNumber + step > document.numPages}

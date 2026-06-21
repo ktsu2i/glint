@@ -172,6 +172,44 @@ describe("PdfReader", () => {
     expect(task.destroy).toHaveBeenCalled();
   });
 
+  it("jumps to a page typed in the toolbar input and clamps invalid values", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 12;
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
+    let input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "7" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(7));
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("7 ");
+
+    fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
+    input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "999" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(12));
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
+
+    fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
+    input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "abc" } });
+    fireEvent.blur(input);
+    expect(pdfDocument.getPage).toHaveBeenLastCalledWith(12);
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
+
+    fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
+    input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "3" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
+  });
+
   it("turns pages with arrow keys and ignores them inside editable elements", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
@@ -284,7 +322,7 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
-    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("/ 2");
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("2 / 2");
   });
 
   it.each([
@@ -538,7 +576,7 @@ describe("PdfReader", () => {
 
     const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
     expect(canvases.length).toBe(1);
-    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("1 ");
+    expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("1 / 1");
   });
 
   it("toggles back from spread to single page view", async () => {

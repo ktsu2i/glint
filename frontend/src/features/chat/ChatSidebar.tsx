@@ -5,9 +5,11 @@ import {
   BookOpenText,
   ChatCircleDots,
   Paperclip,
+  Stop,
   TextAa,
 } from "@phosphor-icons/react";
 import {
+  cancelChat,
   getLLMSettings,
   onAnswerDelta,
   startChat,
@@ -104,6 +106,20 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         activeRequest.current = "";
       }
     });
+  }, []);
+
+  const handleCancel = useCallback(async () => {
+    const requestId = activeRequest.current;
+    if (!requestId) {
+      return;
+    }
+    activeRequest.current = "";
+    setSending(false);
+    try {
+      await cancelChat(requestId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "質問の中止に失敗しました。");
+    }
   }, []);
 
   useEffect(() => {
@@ -277,10 +293,17 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         />
         <div className="composer-footer">
           <span>{llmSettings?.configured ? composerLabel : "OpenRouter設定が必要です"}</span>
-          <button type="submit" disabled={!question.trim() || sending || !llmSettings?.configured}>
-            <span>{sending ? "応答中" : "送信"}</span>
-            <ArrowUp size={14} weight="bold" />
-          </button>
+          {sending ? (
+            <button type="button" className="chat-cancel" onClick={() => void handleCancel()}>
+              <span>中止</span>
+              <Stop size={12} weight="fill" />
+            </button>
+          ) : (
+            <button type="submit" disabled={!question.trim() || !llmSettings?.configured}>
+              <span>送信</span>
+              <ArrowUp size={14} weight="bold" />
+            </button>
+          )}
         </div>
       </form>
     </aside>

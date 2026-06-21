@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/kaito/glint/internal/llm"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -11,6 +12,9 @@ import (
 type Service struct {
 	ctx      context.Context
 	provider GatewayProvider
+	emit     func(ctx context.Context, eventName string, optionalData ...any)
+	mu       sync.Mutex
+	cancels  map[string]context.CancelFunc
 }
 
 type GatewayProvider interface {
@@ -24,11 +28,19 @@ func (provider staticGatewayProvider) Gateway(context.Context) (llm.Gateway, err
 }
 
 func New(gateway llm.Gateway) *Service {
-	return &Service{provider: staticGatewayProvider{gateway: gateway}}
+	return &Service{
+		provider: staticGatewayProvider{gateway: gateway},
+		emit:     runtime.EventsEmit,
+		cancels:  map[string]context.CancelFunc{},
+	}
 }
 
 func NewConfigured(provider GatewayProvider) *Service {
-	return &Service{provider: provider}
+	return &Service{
+		provider: provider,
+		emit:     runtime.EventsEmit,
+		cancels:  map[string]context.CancelFunc{},
+	}
 }
 
 // Startup wires the Wails runtime context into the service. It is a package
@@ -46,14 +58,57 @@ func (s *Service) StartChat(request llm.ChatRequest) error {
 	if err != nil {
 		return err
 	}
-	stream, err := gateway.Complete(s.ctx, request)
+	requestCtx, cancel := context.WithCancel(s.ctx)
+	stream, err := gateway.Complete(requestCtx, request)
 	if err != nil {
+		cancel()
 		return err
 	}
+	requestID := request.RequestID
+	s.register(requestID, cancel)
 	go func() {
+		defer s.release(requestID)
 		for delta := range stream {
-			runtime.EventsEmit(s.ctx, "chat:delta", delta)
+			s.emit(s.ctx, "chat:delta", delta)
 		}
 	}()
 	return nil
+}
+
+// CancelChat aborts an in-flight request started by StartChat. It is safe to
+// call with an unknown request ID; the call is a no-op in that case.
+func (s *Service) CancelChat(requestID string) {
+	if requestID == "" {
+		return
+	}
+	s.mu.Lock()
+	cancel, ok := s.cancels[requestID]
+	if ok {
+		delete(s.cancels, requestID)
+	}
+	s.mu.Unlock()
+	if ok {
+		cancel()
+	}
+}
+
+func (s *Service) register(requestID string, cancel context.CancelFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if previous, exists := s.cancels[requestID]; exists {
+		previous()
+	}
+	s.cancels[requestID] = cancel
+}
+
+func (s *Service) release(requestID string) {
+	s.mu.Lock()
+	cancel, ok := s.cancels[requestID]
+	if ok {
+		delete(s.cancels, requestID)
+	}
+	s.mu.Unlock()
+	if ok {
+		cancel()
+	}
 }

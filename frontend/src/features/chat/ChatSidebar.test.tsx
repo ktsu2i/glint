@@ -9,6 +9,7 @@ const backend = vi.hoisted(() => ({
     error?: string;
   }) => void) | undefined,
   unsubscribe: vi.fn(),
+  cancelChat: vi.fn(),
   getLLMSettings: vi.fn(),
   onAnswerDelta: vi.fn(),
   saveLLMSettings: vi.fn(),
@@ -16,6 +17,7 @@ const backend = vi.hoisted(() => ({
 }));
 
 vi.mock("../../shared/api/backend", () => ({
+  cancelChat: backend.cancelChat,
   getLLMSettings: backend.getLLMSettings,
   onAnswerDelta: backend.onAnswerDelta,
   saveLLMSettings: backend.saveLLMSettings,
@@ -39,6 +41,7 @@ beforeEach(() => {
     configured: true,
   });
   backend.startChat.mockResolvedValue(undefined);
+  backend.cancelChat.mockResolvedValue(undefined);
   vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "request-1") });
 });
 
@@ -90,7 +93,7 @@ describe("ChatSidebar", () => {
         pageNumber: 7,
       });
     });
-    expect(screen.getByText("応答中")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /中止/ })).toBeTruthy();
     expect(container.querySelector(".typing-indicator")).toBeTruthy();
 
     act(() => backend.listener?.({ requestId: "other", content: "ignored", done: false }));
@@ -187,6 +190,50 @@ describe("ChatSidebar", () => {
       bookName: "Guide.pdf",
       pageNumber: 6,
     }));
+  });
+
+  it("lets the user cancel an in-flight request and ignores its later deltas", async () => {
+    let resolveRequest!: () => void;
+    backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
+      resolveRequest = resolve;
+    }));
+    const { container } = render(
+      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "long question" } });
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledOnce());
+    resolveRequest();
+
+    const cancelButton = await screen.findByRole("button", { name: /中止/ });
+    fireEvent.click(cancelButton);
+    await waitFor(() => expect(backend.cancelChat).toHaveBeenCalledWith("request-1"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /送信/ })).toBeTruthy());
+
+    act(() => backend.listener?.({ requestId: "request-1", content: "stale", done: false }));
+    act(() => backend.listener?.({ requestId: "request-1", done: true }));
+    expect(screen.queryByText("stale")).toBeNull();
+  });
+
+  it("surfaces an error when cancel itself fails", async () => {
+    let resolveRequest!: () => void;
+    backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
+      resolveRequest = resolve;
+    }));
+    backend.cancelChat.mockRejectedValue(new Error("backend down"));
+    const { container } = render(
+      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "question" } });
+    fireEvent.submit(container.querySelector("form")!);
+    resolveRequest();
+
+    fireEvent.click(await screen.findByRole("button", { name: /中止/ }));
+    expect((await screen.findByRole("alert")).textContent).toBe("backend down");
   });
 
   it("lets the user switch between selection and full page context", async () => {
