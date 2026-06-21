@@ -72,18 +72,19 @@ input:focus-visible,
 .app-shell {
   height: 100%;
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
   background: var(--mist);
 }
 
 .app-toolbar {
   display: grid;
-  grid-template-columns: minmax(210px, auto) minmax(0, 1fr) minmax(210px, auto);
+  grid-template-columns: minmax(220px, auto) minmax(0, 1fr) minmax(220px, auto);
   align-items: center;
-  gap: 18px;
-  padding: 0 12px 0 18px;
+  gap: 20px;
+  padding: 0 14px 0 86px;
   background: var(--surface);
-  border-bottom: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 60%) inset;
   -webkit-app-region: drag;
 }
 
@@ -93,37 +94,41 @@ input:focus-visible,
   min-width: 0;
   display: flex;
   align-items: center;
+  -webkit-app-region: no-drag;
 }
 
 .window-brand {
-  gap: 10px;
+  gap: 12px;
 }
 
 .wordmark {
   color: var(--ink);
   font-size: 11px;
-  font-weight: 780;
-  letter-spacing: 0.19em;
+  font-weight: 760;
+  letter-spacing: 0.22em;
 }
 
 .toolbar-divider {
   width: 1px;
-  height: 14px;
-  background: var(--line-strong);
+  height: 12px;
+  background: var(--line);
 }
 
 .workspace-label {
   color: var(--muted);
   font-size: 11px;
+  letter-spacing: 0.01em;
 }
 
 .toolbar-book {
   justify-self: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   max-width: 460px;
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--slate);
+  font-size: 11.5px;
+  font-weight: 540;
+  letter-spacing: 0.01em;
 }
 
 .toolbar-book span {
@@ -136,7 +141,6 @@ input:focus-visible,
   justify-self: end;
   justify-content: flex-end;
   gap: 10px;
-  -webkit-app-region: no-drag;
 }
 
 .open-book-button {

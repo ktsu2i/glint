@@ -17,6 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsassetserver "github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
@@ -50,6 +51,9 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 243, G: 239, B: 231, A: 1},
 		LogLevel:         logger.WARNING,
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarHiddenInset(),
+		},
 		OnStartup: func(ctx context.Context) {
 			books.Startup(booksSvc, ctx)
 			chat.Startup(chatSvc, ctx)
