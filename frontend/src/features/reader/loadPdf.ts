@@ -1,8 +1,25 @@
 import "./pdfPolyfills";
 import "pdfjs-dist/build/pdf.worker.min.mjs";
-import type { PDFDocumentLoadingTask, PageViewport, PDFPageProxy } from "pdfjs-dist";
+import type {
+  PDFDocumentLoadingTask,
+  PDFDocumentProxy,
+  PageViewport,
+  PDFPageProxy,
+} from "pdfjs-dist";
 
 type TextContent = Awaited<ReturnType<PDFPageProxy["getTextContent"]>>;
+
+export type OutlineNode = {
+  title: string;
+  pageNumber: number | null;
+  children: OutlineNode[];
+};
+
+type RawOutlineItem = {
+  title: string;
+  dest?: string | unknown[] | null;
+  items?: RawOutlineItem[];
+};
 
 const pdfHeader = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
 
@@ -53,4 +70,43 @@ export async function createPdfTextLayer(params: {
 }): Promise<PdfTextLayer> {
   const pdfjs = await import("pdfjs-dist");
   return new pdfjs.TextLayer(params);
+}
+
+export async function loadPdfOutline(document: PDFDocumentProxy): Promise<OutlineNode[]> {
+  const outline = (await document.getOutline()) as RawOutlineItem[] | null;
+  if (!outline || outline.length === 0) {
+    return [];
+  }
+  return Promise.all(outline.map((item) => normalizeOutlineItem(document, item)));
+}
+
+async function normalizeOutlineItem(
+  document: PDFDocumentProxy,
+  item: RawOutlineItem,
+): Promise<OutlineNode> {
+  const [pageNumber, children] = await Promise.all([
+    resolveDestinationPage(document, item.dest),
+    Promise.all((item.items ?? []).map((child) => normalizeOutlineItem(document, child))),
+  ]);
+  return { title: item.title, pageNumber, children };
+}
+
+async function resolveDestinationPage(
+  document: PDFDocumentProxy,
+  dest: string | unknown[] | null | undefined,
+): Promise<number | null> {
+  if (!dest) {
+    return null;
+  }
+  try {
+    const explicit = typeof dest === "string" ? await document.getDestination(dest) : dest;
+    if (!Array.isArray(explicit) || explicit.length === 0) {
+      return null;
+    }
+    const ref = explicit[0] as { num: number; gen: number };
+    const index = await document.getPageIndex(ref);
+    return index + 1;
+  } catch {
+    return null;
+  }
 }

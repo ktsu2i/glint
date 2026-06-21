@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   BookOpenText,
@@ -6,6 +6,7 @@ import {
   CaretRight,
   CornersIn,
   File,
+  ListBullets,
   Minus,
   Plus,
 } from "@phosphor-icons/react";
@@ -17,12 +18,32 @@ import {
 import type { BookFile } from "../../shared/api/backend";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
-import { createPdfLoadingTask, createPdfTextLayer, type PdfTextLayer } from "./loadPdf";
+import {
+  createPdfLoadingTask,
+  createPdfTextLayer,
+  loadPdfOutline,
+  type OutlineNode,
+  type PdfTextLayer,
+} from "./loadPdf";
 
 const loadTimeoutMilliseconds = 60_000;
 const minScale = 0.4;
 const maxScale = 3;
 const manualZoomStep = 0.1;
+
+type FlatOutlineEntry = { path: string; pageNumber: number | null };
+
+function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry[] {
+  const result: FlatOutlineEntry[] = [];
+  nodes.forEach((node, index) => {
+    const path = parentPath ? `${parentPath}.${index}` : String(index);
+    result.push({ path, pageNumber: node.pageNumber });
+    if (node.children.length > 0) {
+      result.push(...flattenOutline(node.children, path));
+    }
+  });
+  return result;
+}
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
@@ -66,6 +87,9 @@ export function PdfReader({
   const [effectiveScale, setEffectiveScale] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [outline, setOutline] = useState<OutlineNode[]>([]);
+  const [outlineLoaded, setOutlineLoaded] = useState(false);
+  const [isTocOpen, setIsTocOpen] = useState(false);
 
   const stageNodeRef = useRef<HTMLDivElement | null>(null);
   const wheelCleanupRef = useRef<(() => void) | null>(null);
@@ -126,6 +150,8 @@ export function PdfReader({
       setDocument(null);
       setPageNumber(1);
       setError("");
+      setOutline([]);
+      setOutlineLoaded(false);
       onPageContextChange(0, "", 0);
       return;
     }
@@ -138,6 +164,8 @@ export function PdfReader({
     setLoading(true);
     setError("");
     setDocument(null);
+    setOutline([]);
+    setOutlineLoaded(false);
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
@@ -193,6 +221,30 @@ export function PdfReader({
       void loadingTask?.destroy();
     };
   }, [book, initialPage, onPageContextChange]);
+
+  useEffect(() => {
+    if (!document) {
+      return;
+    }
+    let active = true;
+    setOutlineLoaded(false);
+    loadPdfOutline(document)
+      .then((nodes) => {
+        if (active) {
+          setOutline(nodes);
+          setOutlineLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setOutline([]);
+          setOutlineLoaded(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [document]);
 
   useEffect(() => {
     if (!document) {
@@ -451,6 +503,25 @@ export function PdfReader({
     });
   }
 
+  const flatOutline = useMemo(() => flattenOutline(outline), [outline]);
+  const activeOutlineKey = useMemo(() => {
+    let last: string | null = null;
+    for (const entry of flatOutline) {
+      if (entry.pageNumber !== null && entry.pageNumber <= pageNumber) {
+        last = entry.path;
+      }
+    }
+    return last;
+  }, [flatOutline, pageNumber]);
+
+  const jumpToOutlinePage = useCallback((target: number) => {
+    if (!document) {
+      return;
+    }
+    const clamped = Math.min(document.numPages, Math.max(1, target));
+    setPageNumber(clamped);
+  }, [document]);
+
   if (!book) {
     return (
       <section className="reader-empty" aria-label="PDF reader">
@@ -478,8 +549,14 @@ export function PdfReader({
     <section className="reader" aria-label="PDF reader">
       <div className="reader-toolbar">
         <div className="reader-section-label">
-          <BookOpenText size={15} weight="regular" />
-          <span>Reader</span>
+          <ToolButton
+            label={isTocOpen ? "目次を閉じる" : "目次を開く"}
+            className={isTocOpen ? "is-active" : ""}
+            onClick={() => setIsTocOpen((open) => !open)}
+            disabled={!document}
+          >
+            <ListBullets size={15} weight="regular" />
+          </ToolButton>
         </div>
         <div className="reader-controls" aria-label="Page controls">
           <ToolButton
@@ -569,40 +646,111 @@ export function PdfReader({
         </div>
       </div>
 
-      <div className="pdf-stage" ref={stageRef}>
-        {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
-        {error && <div className="reader-error" role="alert">{error}</div>}
-        <div className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}>
-          <div className="pdf-page">
-            <canvas
-              ref={canvasLeftRef}
-              className="pdf-canvas"
-              aria-label={`${pageNumber}ページ`}
-            />
-            <div
-              ref={textLayerLeftRef}
-              className="text-layer"
-              data-page={pageNumber}
-              aria-hidden="true"
-            />
-          </div>
-          {showRightCanvas && (
+      <div className={`reader-body ${isTocOpen ? "toc-open" : "toc-closed"}`}>
+        {isTocOpen && (
+          <aside className="reader-toc" aria-label="目次">
+            <div className="reader-toc-header">
+              <span>目次</span>
+            </div>
+            <div className="reader-toc-scroll">
+              {outline.length === 0 ? (
+                <p className="reader-toc-empty">
+                  {outlineLoaded
+                    ? "目次データが見つかりませんでした。"
+                    : "目次を読み込んでいます…"}
+                </p>
+              ) : (
+                <OutlineList
+                  nodes={outline}
+                  parentPath=""
+                  depth={0}
+                  activeKey={activeOutlineKey}
+                  onSelect={jumpToOutlinePage}
+                />
+              )}
+            </div>
+          </aside>
+        )}
+        <div className="pdf-stage" ref={stageRef}>
+          {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
+          {error && <div className="reader-error" role="alert">{error}</div>}
+          <div className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}>
             <div className="pdf-page">
               <canvas
-                ref={canvasRightRef}
+                ref={canvasLeftRef}
                 className="pdf-canvas"
-                aria-label={`${rightPageNumber}ページ`}
+                aria-label={`${pageNumber}ページ`}
               />
               <div
-                ref={textLayerRightRef}
+                ref={textLayerLeftRef}
                 className="text-layer"
-                data-page={rightPageNumber}
+                data-page={pageNumber}
                 aria-hidden="true"
               />
             </div>
-          )}
+            {showRightCanvas && (
+              <div className="pdf-page">
+                <canvas
+                  ref={canvasRightRef}
+                  className="pdf-canvas"
+                  aria-label={`${rightPageNumber}ページ`}
+                />
+                <div
+                  ref={textLayerRightRef}
+                  className="text-layer"
+                  data-page={rightPageNumber}
+                  aria-hidden="true"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>
+  );
+}
+
+type OutlineListProps = {
+  nodes: OutlineNode[];
+  parentPath: string;
+  depth: number;
+  activeKey: string | null;
+  onSelect: (pageNumber: number) => void;
+};
+
+function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineListProps) {
+  return (
+    <ul className="reader-toc-list" role={depth === 0 ? "tree" : "group"}>
+      {nodes.map((node, index) => {
+        const path = parentPath ? `${parentPath}.${index}` : String(index);
+        const isActive = path === activeKey;
+        const hasPage = node.pageNumber !== null;
+        return (
+          <li key={path} role="treeitem" aria-expanded={node.children.length > 0 ? true : undefined}>
+            <button
+              type="button"
+              className={`reader-toc-item${isActive ? " is-active" : ""}`}
+              style={{ paddingLeft: `${10 + depth * 14}px` }}
+              disabled={!hasPage}
+              onClick={() => hasPage && onSelect(node.pageNumber as number)}
+            >
+              <span className="reader-toc-title">{node.title || "(無題)"}</span>
+              {hasPage && (
+                <span className="reader-toc-page">{node.pageNumber}</span>
+              )}
+            </button>
+            {node.children.length > 0 && (
+              <OutlineList
+                nodes={node.children}
+                parentPath={path}
+                depth={depth + 1}
+                activeKey={activeKey}
+                onSelect={onSelect}
+              />
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

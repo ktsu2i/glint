@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const loader = vi.hoisted(() => ({
   createPdfLoadingTask: vi.fn(),
   createPdfTextLayer: vi.fn(),
+  loadPdfOutline: vi.fn(),
 }));
 
 vi.mock("./loadPdf", () => ({
   createPdfLoadingTask: loader.createPdfLoadingTask,
   createPdfTextLayer: loader.createPdfTextLayer,
+  loadPdfOutline: loader.loadPdfOutline,
 }));
 vi.mock("../../shared/components/ToolButton", () => ({
   ToolButton: ({
@@ -108,6 +110,7 @@ beforeEach(() => {
     render: vi.fn(async () => undefined),
     cancel: vi.fn(),
   }));
+  loader.loadPdfOutline.mockResolvedValue([]);
 });
 
 describe("PdfReader", () => {
@@ -713,6 +716,80 @@ describe("PdfReader", () => {
     });
     expect(onSelectionChange).toHaveBeenLastCalledWith(null);
     outside.remove();
+  });
+
+  it("opens an empty TOC panel when the PDF has no outline", async () => {
+    resolveDocument();
+    loader.loadPdfOutline.mockResolvedValue([]);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(loader.loadPdfOutline).toHaveBeenCalled());
+
+    expect(screen.queryByRole("button", { name: "目次を閉じる" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
+    await screen.findByText("目次データが見つかりませんでした。");
+    expect(screen.getByRole("button", { name: "目次を閉じる" })).toBeTruthy();
+  });
+
+  it("renders nested outline items, jumps on click, and highlights the active section", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 50;
+    resolveDocument(pdfDocument);
+    loader.loadPdfOutline.mockResolvedValue([
+      {
+        title: "第1章 はじめに",
+        pageNumber: 1,
+        children: [
+          { title: "1.1 背景", pageNumber: 3, children: [] },
+          { title: "1.2 目的", pageNumber: 7, children: [] },
+        ],
+      },
+      { title: "第2章 設計", pageNumber: 12, children: [] },
+      { title: "巻末資料", pageNumber: null, children: [] },
+    ]);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(loader.loadPdfOutline).toHaveBeenCalled());
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
+    const introItem = await screen.findByRole("button", { name: /第1章 はじめに/ });
+    expect(introItem.className).toContain("is-active");
+    expect(screen.getByRole("button", { name: /巻末資料/ })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: /1\.2 目的/ }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(7));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /1\.2 目的/ }).className).toContain("is-active"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /第2章 設計/ }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(12));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /第2章 設計/ }).className).toContain("is-active"),
+    );
+  });
+
+  it("clamps outline destinations to the document length", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 4;
+    resolveDocument(pdfDocument);
+    loader.loadPdfOutline.mockResolvedValue([
+      { title: "巨大なセクション", pageNumber: 999, children: [] },
+    ]);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(loader.loadPdfOutline).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
+    fireEvent.click(await screen.findByRole("button", { name: /巨大なセクション/ }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(4));
   });
 
   it("does not publish scale or text after an in-flight render is unmounted", async () => {
