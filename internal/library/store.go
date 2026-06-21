@@ -279,6 +279,11 @@ func (store *Store) ResetCover(ctx context.Context, id string, now time.Time) er
 	return requireChanged(result, "reset book cover")
 }
 
+func (store *Store) Remove(ctx context.Context, id string) error {
+	result := store.db.WithContext(ctx).Where("id = ?", id).Delete(&bookRecord{})
+	return requireChanged(result, "remove book")
+}
+
 func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string, size int64, now time.Time) (Book, error) {
 	book, err := store.Get(ctx, id)
 	if err != nil {

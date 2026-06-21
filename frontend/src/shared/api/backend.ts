@@ -4,6 +4,7 @@ import {
   OpenBook,
   OpenPDF,
   RelinkPDF,
+  RemoveBook,
   SaveBookCover,
   SaveReadingPosition,
 } from "../../../wailsjs/go/books/Service";
@@ -63,6 +64,10 @@ export async function openBook(bookId: string): Promise<BookFile> {
 
 export async function relinkPDF(bookId: string): Promise<BookFile> {
   return (await RelinkPDF(bookId)) as BookFile;
+}
+
+export async function removeBook(bookId: string): Promise<boolean> {
+  return await RemoveBook(bookId);
 }
 
 export async function saveReadingPosition(

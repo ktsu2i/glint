@@ -60,6 +60,26 @@ func TestStoreDeduplicatesByFileHashAndUpdatesLocation(t *testing.T) {
 	assert.Len(t, books, 1)
 }
 
+func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	require.NoError(t, err)
+	require.NoError(t, store.SaveReadingPosition(context.Background(), book.ID, 4, 10, now))
+
+	require.NoError(t, store.Remove(context.Background(), book.ID))
+	_, err = store.Get(context.Background(), book.ID)
+	assert.ErrorIs(t, err, ErrBookNotFound)
+	assert.ErrorIs(t, store.Remove(context.Background(), book.ID), ErrBookNotFound)
+
+	var remaining int
+	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_reading_states WHERE book_id = ?", book.ID).Row().Scan(&remaining))
+	assert.Equal(t, 0, remaining)
+}
+
 func TestStoreValidatesUpdatesAndMissingBooks(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
 	require.NoError(t, err)

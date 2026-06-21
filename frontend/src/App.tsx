@@ -11,6 +11,7 @@ import {
   openBook,
   openPDF,
   relinkPDF,
+  removeBook,
   saveBookCover,
   saveReadingPosition,
   type BookFile,
@@ -125,6 +126,21 @@ export default function App() {
     }
   }
 
+  async function handleRemoveBook(summary: BookSummary) {
+    setBusyBookId(summary.id);
+    setLibraryError("");
+    try {
+      const removed = await removeBook(summary.id);
+      if (removed) {
+        await refreshLibrary();
+      }
+    } catch (reason) {
+      setLibraryError(reason instanceof Error ? reason.message : "本を削除できませんでした。");
+    } finally {
+      setBusyBookId("");
+    }
+  }
+
   async function handleRelinkBook(summary: BookSummary) {
     setBusyBookId(summary.id);
     setLibraryError("");
@@ -227,6 +243,7 @@ export default function App() {
             onImport={handleImportPDF}
             onOpen={handleOpenBook}
             onRelink={handleRelinkBook}
+            onRemove={handleRemoveBook}
           />
         ) : (
           <div className="workspace" style={workspaceStyle}>

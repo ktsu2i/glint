@@ -25,6 +25,7 @@ const defaultProps = {
   onImport: vi.fn(),
   onOpen: vi.fn(),
   onRelink: vi.fn(),
+  onRemove: vi.fn(),
 };
 
 describe("Library", () => {
@@ -62,6 +63,14 @@ describe("Library", () => {
     expect(screen.getByRole("button", { name: "Systems Guideを開く" })).toHaveProperty("disabled", true);
     fireEvent.click(screen.getByRole("button", { name: "再選択" }));
     expect(onRelink).toHaveBeenCalledWith(missing);
+  });
+
+  it("invokes onRemove when the delete button is clicked", () => {
+    const onRemove = vi.fn();
+    render(<Library {...defaultProps} books={[availableBook]} onRemove={onRemove} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Systems Guideを本棚から削除" }));
+    expect(onRemove).toHaveBeenCalledWith(availableBook);
   });
 
   it("shows loading and error states", () => {

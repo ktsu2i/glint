@@ -4,6 +4,7 @@ import {
   BookOpenText,
   Books,
   Plus,
+  Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
 import type { BookSummary } from "../../shared/api/backend";
@@ -16,6 +17,7 @@ type LibraryProps = {
   onImport: () => void;
   onOpen: (book: BookSummary) => void;
   onRelink: (book: BookSummary) => void;
+  onRemove: (book: BookSummary) => void;
 };
 
 function formatDate(value: string): string {
@@ -47,6 +49,7 @@ export function Library({
   onImport,
   onOpen,
   onRelink,
+  onRemove,
 }: LibraryProps) {
   return (
     <section className="library" aria-labelledby="library-title">
@@ -123,17 +126,29 @@ export function Library({
                   <p className="book-progress-copy">{progressLabel(book)}</p>
                   <div className="book-card-footer">
                     <span>{formatDate(book.lastOpenedAt)}</span>
-                    {book.available ? (
-                      <button type="button" onClick={() => onOpen(book)} disabled={busy}>
-                        {busy ? "開いています…" : book.lastPage > 1 ? "続きを読む" : "開く"}
-                        <ArrowRight size={13} weight="bold" />
+                    <div className="book-card-actions">
+                      <button
+                        type="button"
+                        className="book-card-remove"
+                        onClick={() => onRemove(book)}
+                        disabled={busy}
+                        aria-label={`${book.title}を本棚から削除`}
+                      >
+                        <Trash size={13} weight="bold" />
+                        削除
                       </button>
-                    ) : (
-                      <button type="button" onClick={() => onRelink(book)} disabled={busy}>
-                        <ArrowCounterClockwise size={13} weight="bold" />
-                        {busy ? "選択中…" : "再選択"}
-                      </button>
-                    )}
+                      {book.available ? (
+                        <button type="button" onClick={() => onOpen(book)} disabled={busy}>
+                          {busy ? "開いています…" : book.lastPage > 1 ? "続きを読む" : "開く"}
+                          <ArrowRight size={13} weight="bold" />
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => onRelink(book)} disabled={busy}>
+                          <ArrowCounterClockwise size={13} weight="bold" />
+                          {busy ? "選択中…" : "再選択"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </article>

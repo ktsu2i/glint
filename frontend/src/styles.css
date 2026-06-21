@@ -529,6 +529,20 @@ input:focus-visible,
   opacity: 0.55;
 }
 
+.book-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.book-card-remove {
+  color: var(--faint) !important;
+}
+
+.book-card-remove:hover:not(:disabled) {
+  color: var(--danger) !important;
+}
+
 .workspace {
   --assistant-width: 390px;
   min-width: 0;

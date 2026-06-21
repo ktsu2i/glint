@@ -22,6 +22,10 @@ export function RelinkPDF(arg1) {
   return window['go']['books']['Service']['RelinkPDF'](arg1);
 }
 
+export function RemoveBook(arg1) {
+  return window['go']['books']['Service']['RemoveBook'](arg1);
+}
+
 export function SaveBookCover(arg1, arg2) {
   return window['go']['books']['Service']['SaveBookCover'](arg1, arg2);
 }

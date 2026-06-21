@@ -135,6 +135,36 @@ func (s *Service) RelinkPDF(id string) (BookFile, error) {
 	return s.bookFile(book)
 }
 
+func (s *Service) RemoveBook(id string) (bool, error) {
+	book, err := s.library.Get(context.Background(), id)
+	if err != nil {
+		return false, err
+	}
+	if s.ctx != nil {
+		response, err := runtime.MessageDialog(s.ctx, runtime.MessageDialogOptions{
+			Type:          runtime.QuestionDialog,
+			Title:         "本棚から削除",
+			Message:       fmt.Sprintf("「%s」を本棚から削除しますか？\nPDFファイル自体は残ります。", book.Title),
+			Buttons:       []string{"削除", "キャンセル"},
+			DefaultButton: "キャンセル",
+			CancelButton:  "キャンセル",
+		})
+		if err != nil {
+			return false, fmt.Errorf("confirm book removal: %w", err)
+		}
+		if response != "削除" {
+			return false, nil
+		}
+	}
+	if err := s.library.Remove(context.Background(), id); err != nil {
+		return false, err
+	}
+	if book.CoverThumbnailPath != "" {
+		_ = os.Remove(book.CoverThumbnailPath)
+	}
+	return true, nil
+}
+
 func (s *Service) ListBooks() ([]BookSummary, error) {
 	books, err := s.library.List(context.Background())
 	if err != nil {

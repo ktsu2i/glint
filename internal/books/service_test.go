@@ -130,6 +130,32 @@ func TestLibraryReportsMissingSourceWithoutExposingPath(t *testing.T) {
 	assert.NotContains(t, err.Error(), path)
 }
 
+func TestRemoveBookDeletesRecordAndCoverButKeepsSourcePDF(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Removable.pdf", "%PDF-1.7\nfixture")
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("cover")...)
+	require.NoError(t, h.service.SaveBookCover(book.ID, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)))
+	covers, err := filepath.Glob(filepath.Join(h.dataDir, "covers", "*.png"))
+	require.NoError(t, err)
+	require.Len(t, covers, 1)
+
+	removed, err := h.service.RemoveBook(book.ID)
+	require.NoError(t, err)
+	assert.True(t, removed)
+
+	summaries, err := h.service.ListBooks()
+	require.NoError(t, err)
+	assert.Empty(t, summaries)
+	_, err = os.Stat(covers[0])
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(path)
+	assert.NoError(t, err, "RemoveBook must not delete the user's source PDF")
+	_, err = h.service.RemoveBook(book.ID)
+	assert.Error(t, err)
+}
+
 func TestSaveBookCoverRejectsInvalidContent(t *testing.T) {
 	h := newHarness(t)
 	assert.Error(t, h.service.SaveBookCover("missing", "data:text/plain;base64,SGk="))
