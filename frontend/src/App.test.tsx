@@ -41,21 +41,46 @@ vi.mock("./features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
 }));
 vi.mock("./features/reader/PdfReader", () => ({
-  PdfReader: ({ book, initialPage, onPageContextChange }: {
+  PdfReader: ({ book, initialPage, selection, onPageContextChange, onSelectionChange }: {
     book: { name: string } | null;
     initialPage: number;
+    selection: { text: string; pageNumber: number; startOffset: number; endOffset: number } | null;
     onPageContextChange: (page: number, text: string, pageCount: number) => void;
+    onSelectionChange: (selection: {
+      text: string;
+      pageNumber: number;
+      startOffset: number;
+      endOffset: number;
+    } | null) => void;
   }) => (
     <div data-testid="pdf-reader">
       <span>{book?.name ?? "no-book"}</span>
       <span>initial-{initialPage}</span>
+      <span data-testid="reader-selection">{JSON.stringify(selection)}</span>
       <button type="button" onClick={() => onPageContextChange(4, "page text", 12)}>set-page</button>
+      <button
+        type="button"
+        onClick={() => onSelectionChange({
+          text: "selected context",
+          pageNumber: 4,
+          startOffset: 8,
+          endOffset: 24,
+        })}
+      >select-context</button>
     </div>
   ),
 }));
 vi.mock("./features/chat/ChatSidebar", () => ({
-  ChatSidebar: ({ context }: { context: { bookName: string; pageNumber: number } }) => (
-    <div data-testid="chat-context">{JSON.stringify(context)}</div>
+  ChatSidebar: ({ context, selection, onClearSelection }: {
+    context: { bookName: string; pageNumber: number };
+    selection: { text: string } | null;
+    onClearSelection: () => void;
+  }) => (
+    <div>
+      <div data-testid="chat-context">{JSON.stringify(context)}</div>
+      <div data-testid="chat-selection">{JSON.stringify(selection)}</div>
+      <button type="button" onClick={onClearSelection}>remove-context</button>
+    </div>
   ),
 }));
 
@@ -204,6 +229,22 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Guideを開く" }));
     expect(await screen.findByText("initial-3")).toBeTruthy();
     expect(mocks.openBook).toHaveBeenCalledWith("book-1");
+  });
+
+  it("keeps the reader highlight synchronized with the attached chat context", async () => {
+    mocks.openPDF.mockResolvedValueOnce(openedBook);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "PDFを追加" }));
+    await screen.findByText("initial-3");
+    fireEvent.click(screen.getByRole("button", { name: "select-context" }));
+
+    expect(screen.getByTestId("reader-selection").textContent).toContain("selected context");
+    expect(screen.getByTestId("chat-selection").textContent).toContain("selected context");
+
+    fireEvent.click(screen.getByRole("button", { name: "remove-context" }));
+    expect(screen.getByTestId("reader-selection").textContent).toBe("null");
+    expect(screen.getByTestId("chat-selection").textContent).toBe("null");
   });
 
   it("renames a saved book from its title", async () => {

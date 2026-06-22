@@ -413,6 +413,7 @@ function AppContent() {
                 <PdfReader
                   book={book}
                   initialPage={book?.initialPage ?? 1}
+                  selection={selection}
                   onPageContextChange={handlePageContextChange}
                   onSelectionChange={handleSelectionChange}
                   onIndexedPageCountChange={handleIndexedPageCountChange}

@@ -752,13 +752,15 @@ describe("PdfReader", () => {
     expect(textLayerTwo.cancel).toHaveBeenCalled();
   });
 
-  it("emits selection details and keeps them sticky after the browser selection collapses", async () => {
+  it("keeps selected context while using chat and clears it after clicking elsewhere", async () => {
     resolveDocument();
     const onSelectionChange = vi.fn();
-    render(
+    const onPageContextChange = vi.fn();
+    const { rerender } = render(
       <PdfReader
         book={makeBook()}
-        onPageContextChange={vi.fn()}
+        selection={null}
+        onPageContextChange={onPageContextChange}
         onSelectionChange={onSelectionChange}
       />,
     );
@@ -767,23 +769,63 @@ describe("PdfReader", () => {
 
     const layer = globalThis.document.querySelector(".text-layer[data-page]") as HTMLElement;
     const span = globalThis.document.createElement("span");
-    span.textContent = "selected text";
+    span.textContent = "  selected text  ";
     layer.appendChild(span);
     const textNode = span.firstChild as Text;
+    const range = globalThis.document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, textNode.data.length);
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => [{ left: 10, top: 20, width: 80, height: 14 }],
+    });
+    vi.spyOn(layer, "getBoundingClientRect").mockReturnValue({
+      left: 5,
+      top: 10,
+      width: 200,
+      height: 100,
+    } as DOMRect);
 
-    vi.spyOn(window, "getSelection").mockReturnValue({
+    const getSelection = vi.spyOn(window, "getSelection").mockReturnValue({
       anchorNode: textNode,
       focusNode: textNode,
       isCollapsed: false,
-      toString: () => "  selected text  ",
+      rangeCount: 1,
+      getRangeAt: () => range,
+      toString: () => range.toString(),
     } as unknown as Selection);
+    fireEvent.pointerDown(layer);
     act(() => {
       globalThis.document.dispatchEvent(new Event("selectionchange"));
     });
-    expect(onSelectionChange).toHaveBeenLastCalledWith({ text: "selected text", pageNumber: 1 });
+    const selectedContext = {
+      text: "selected text",
+      pageNumber: 1,
+      startOffset: 2,
+      endOffset: 15,
+    };
+    expect(onSelectionChange).toHaveBeenLastCalledWith(selectedContext);
+    fireEvent.click(layer);
+    expect(onSelectionChange).toHaveBeenLastCalledWith(selectedContext);
+
+    rerender(
+      <PdfReader
+        book={makeBook()}
+        selection={selectedContext}
+        onPageContextChange={onPageContextChange}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const highlight = await waitFor(() => {
+      const segment = globalThis.document.querySelector(".context-highlight-segment") as HTMLElement | null;
+      expect(segment).toBeTruthy();
+      return segment!;
+    });
+    expect(highlight.style.left).toBe("5px");
+    expect(highlight.style.top).toBe("10px");
 
     onSelectionChange.mockClear();
-    vi.spyOn(window, "getSelection").mockReturnValue({
+    getSelection.mockReturnValue({
       anchorNode: textNode,
       focusNode: textNode,
       isCollapsed: true,
@@ -793,6 +835,30 @@ describe("PdfReader", () => {
       globalThis.document.dispatchEvent(new Event("selectionchange"));
     });
     expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(globalThis.document.querySelector(".context-highlight-segment")).toBeTruthy();
+
+    const chat = globalThis.document.createElement("aside");
+    chat.className = "chat-sidebar";
+    globalThis.document.body.appendChild(chat);
+    fireEvent.pointerDown(chat);
+    fireEvent.click(chat);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(globalThis.document.querySelector(".context-highlight-segment")).toBeTruthy();
+    chat.remove();
+
+    fireEvent.pointerDown(layer);
+    fireEvent.click(layer);
+    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+
+    rerender(
+      <PdfReader
+        book={makeBook()}
+        selection={null}
+        onPageContextChange={onPageContextChange}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    await waitFor(() => expect(globalThis.document.querySelector(".context-highlight-segment")).toBeNull());
   });
 
   it("clears the selection when the page changes", async () => {

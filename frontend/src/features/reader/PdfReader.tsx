@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   BookOpen,
   BookOpenText,
@@ -63,11 +71,22 @@ type ReaderPanel = "toc" | "search" | null;
 export type ReaderSelection = {
   text: string;
   pageNumber: number;
+  startOffset: number;
+  endOffset: number;
+};
+
+type HighlightRect = {
+  pageNumber: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 };
 
 type PdfReaderProps = {
   book: BookFile | null;
   initialPage?: number;
+  selection?: ReaderSelection | null;
   onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
   onSelectionChange?: (selection: ReaderSelection | null) => void;
   onIndexedPageCountChange?: (count: number) => void;
@@ -76,6 +95,7 @@ type PdfReaderProps = {
 export function PdfReader({
   book,
   initialPage = 1,
+  selection = null,
   onPageContextChange,
   onSelectionChange,
   onIndexedPageCountChange,
@@ -87,6 +107,7 @@ export function PdfReader({
   const textLayerRightRef = useRef<HTMLDivElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
   const selectionCallbackRef = useRef(onSelectionChange);
+  const selectionChangedSincePointerDownRef = useRef(false);
 
   useEffect(() => {
     selectionCallbackRef.current = onSelectionChange;
@@ -113,6 +134,8 @@ export function PdfReader({
   const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [textLayerRevision, setTextLayerRevision] = useState(0);
+  const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchRequestRef = useRef(0);
 
@@ -537,6 +560,7 @@ export function PdfReader({
           return;
         }
       }
+      setTextLayerRevision((revision) => revision + 1);
     }
 
     renderPages().catch((reason: unknown) => {
@@ -574,15 +598,70 @@ export function PdfReader({
         return;
       }
       const sourcePage = Number(anchorLayer.dataset.page);
-      const text = selection.toString().trim();
+      const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      if (
+        !range
+        || !anchorLayer.contains(range.startContainer)
+        || !anchorLayer.contains(range.endContainer)
+      ) {
+        return;
+      }
+      const rawText = range.toString();
+      const text = rawText.trim();
       if (!text || !Number.isFinite(sourcePage) || sourcePage < 1) {
         return;
       }
-      emit({ text, pageNumber: sourcePage });
+      const rawStartOffset = getTextOffset(anchorLayer, range.startContainer, range.startOffset);
+      const rawEndOffset = getTextOffset(anchorLayer, range.endContainer, range.endOffset);
+      const leadingWhitespace = rawText.length - rawText.trimStart().length;
+      const trailingWhitespace = rawText.length - rawText.trimEnd().length;
+      emit({
+        text,
+        pageNumber: sourcePage,
+        startOffset: rawStartOffset + leadingWhitespace,
+        endOffset: rawEndOffset - trailingWhitespace,
+      });
+      selectionChangedSincePointerDownRef.current = true;
     }
+
+    function handlePointerDown() {
+      selectionChangedSincePointerDownRef.current = false;
+    }
+
+    function handleDocumentClick(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest(".chat-sidebar")) {
+        return;
+      }
+      if (selectionChangedSincePointerDownRef.current) {
+        selectionChangedSincePointerDownRef.current = false;
+        return;
+      }
+      selectionCallbackRef.current?.(null);
+    }
+
     window.document.addEventListener("selectionchange", handleSelectionChange);
-    return () => window.document.removeEventListener("selectionchange", handleSelectionChange);
+    window.document.addEventListener("pointerdown", handlePointerDown);
+    window.document.addEventListener("click", handleDocumentClick);
+    return () => {
+      window.document.removeEventListener("selectionchange", handleSelectionChange);
+      window.document.removeEventListener("pointerdown", handlePointerDown);
+      window.document.removeEventListener("click", handleDocumentClick);
+    };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!selection) {
+      setHighlightRects([]);
+      return;
+    }
+
+    const layers = [textLayerLeftRef.current, textLayerRightRef.current].filter(
+      (layer): layer is HTMLDivElement => !!layer && Number(layer.dataset.page) === selection.pageNumber,
+    );
+    const rects = layers.flatMap((layer) => getSelectionHighlightRects(layer, selection));
+    setHighlightRects(rects);
+  }, [selection, textLayerRevision]);
 
   useEffect(() => {
     selectionCallbackRef.current?.(null);
@@ -933,6 +1012,10 @@ export function PdfReader({
                 className="pdf-canvas"
                 aria-label={t("app.pageLabel", { page: pageNumber })}
               />
+              <SelectionHighlight
+                pageNumber={pageNumber}
+                rects={highlightRects}
+              />
               <div
                 ref={textLayerLeftRef}
                 className="text-layer"
@@ -946,6 +1029,10 @@ export function PdfReader({
                   ref={canvasRightRef}
                   className="pdf-canvas"
                   aria-label={t("app.pageLabel", { page: rightPageNumber })}
+                />
+                <SelectionHighlight
+                  pageNumber={rightPageNumber}
+                  rects={highlightRects}
                 />
                 <div
                   ref={textLayerRightRef}
@@ -974,6 +1061,99 @@ export function PdfReader({
         />
       </div>
     </section>
+  );
+}
+
+function getTextOffset(root: HTMLElement, node: Node, offset: number): number {
+  const range = root.ownerDocument.createRange();
+  range.selectNodeContents(root);
+  range.setEnd(node, offset);
+  return range.toString().length;
+}
+
+function getTextBoundary(root: HTMLElement, targetOffset: number): { node: Text; offset: number } | null {
+  const showText = root.ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4;
+  const walker = root.ownerDocument.createTreeWalker(root, showText);
+  let consumed = 0;
+  let lastTextNode: Text | null = null;
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text;
+    const nextOffset = consumed + textNode.data.length;
+    if (targetOffset <= nextOffset) {
+      return { node: textNode, offset: Math.max(0, targetOffset - consumed) };
+    }
+    consumed = nextOffset;
+    lastTextNode = textNode;
+  }
+
+  return targetOffset === consumed && lastTextNode
+    ? { node: lastTextNode, offset: lastTextNode.data.length }
+    : null;
+}
+
+function getSelectionHighlightRects(
+  layer: HTMLElement,
+  selection: ReaderSelection,
+): HighlightRect[] {
+  const start = getTextBoundary(layer, selection.startOffset);
+  const end = getTextBoundary(layer, selection.endOffset);
+  if (!start || !end) {
+    return [];
+  }
+
+  const range = layer.ownerDocument.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  if (range.toString().trim() !== selection.text) {
+    return [];
+  }
+
+  const layerRect = layer.getBoundingClientRect();
+  const rawRects = Array.from(range.getClientRects())
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => ({
+      pageNumber: selection.pageNumber,
+      left: rect.left - layerRect.left,
+      top: rect.top - layerRect.top,
+      width: rect.width,
+      height: rect.height,
+    }))
+    .sort((a, b) => a.top - b.top || a.left - b.left);
+
+  return rawRects.reduce<HighlightRect[]>((merged, rect) => {
+    const previous = merged.at(-1);
+    const sameLine = previous
+      && Math.abs(previous.top - rect.top) <= 2
+      && Math.abs(previous.height - rect.height) <= 3;
+    const touchesPrevious = previous && rect.left <= previous.left + previous.width + 3;
+    if (previous && sameLine && touchesPrevious) {
+      previous.width = Math.max(previous.left + previous.width, rect.left + rect.width) - previous.left;
+      previous.height = Math.max(previous.height, rect.height);
+      return merged;
+    }
+    merged.push(rect);
+    return merged;
+  }, []);
+}
+
+function SelectionHighlight({ pageNumber, rects }: { pageNumber: number; rects: HighlightRect[] }) {
+  const pageRects = rects.filter((rect) => rect.pageNumber === pageNumber);
+  return (
+    <div className="context-highlight-layer" aria-hidden="true">
+      {pageRects.map((rect, index) => (
+        <span
+          key={`${rect.left}-${rect.top}-${index}`}
+          className="context-highlight-segment"
+          style={{
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 

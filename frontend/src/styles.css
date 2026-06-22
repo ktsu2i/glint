@@ -17,6 +17,8 @@
   --line-strong: #aeb7b6;
   --signal: #708d91;
   --signal-deep: #506e73;
+  --context-marker: rgb(244 190 72 / 42%);
+  --context-marker-edge: rgb(181 126 24 / 28%);
   --danger: #9a4e48;
   --nav-background: #353d43;
   --nav-border: #252c31;
@@ -1400,7 +1402,7 @@ button.page-count:disabled {
   forced-color-adjust: none;
   transform-origin: 0 0;
   caret-color: CanvasText;
-  z-index: 1;
+  z-index: 2;
 }
 
 .text-layer :is(span, br) {
@@ -1429,7 +1431,23 @@ button.page-count:disabled {
 }
 
 .text-layer ::selection {
-  background: rgb(110 168 254 / 32%);
+  background: rgb(244 190 72 / 30%);
+}
+
+.context-highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.context-highlight-segment {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--context-marker);
+  box-shadow: 0 -1px 0 var(--context-marker-edge) inset;
+  mix-blend-mode: multiply;
 }
 
 .text-layer .endOfContent {
