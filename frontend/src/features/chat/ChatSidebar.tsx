@@ -9,6 +9,8 @@ import {
   TextAa,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   cancelChat,
   getLLMSettings,
@@ -269,7 +271,19 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
               <span className="message-author">{message.role === "assistant" ? "Glint" : t("chat.you")}</span>
               {message.role === "assistant" && <span className="message-rule" />}
             </div>
-            <p>{message.id === "welcome" ? t("chat.welcome") : message.content || <span className="typing-indicator"><i /><i /><i /></span>}</p>
+            {message.id === "welcome" ? (
+              <p className="message-body">{t("chat.welcome")}</p>
+            ) : message.content ? (
+              message.role === "assistant" ? (
+                <div className="message-body message-markdown">
+                  <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                </div>
+              ) : (
+                <p className="message-body">{message.content}</p>
+              )
+            ) : (
+              <p className="message-body"><span className="typing-indicator"><i /><i /><i /></span></p>
+            )}
           </article>
         ))}
         <div ref={messageEndRef} />
