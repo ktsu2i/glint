@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { BookOpenText, Books, FolderOpen, GearSix } from "@phosphor-icons/react";
+import { BookOpenText, Books, GearSix } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
@@ -43,7 +43,6 @@ function AppContent() {
   const [pageContext, setPageContext] = useState<PageContext>({ pageNumber: 0, text: "" });
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
   const [opening, setOpening] = useState(false);
-  const [openError, setOpenError] = useState("");
   const [theme, setTheme] = useState<ThemePreference>("system");
   const [themeLoading, setThemeLoading] = useState(true);
   const [themeError, setThemeError] = useState("");
@@ -133,7 +132,6 @@ function AppContent() {
     setSelection(null);
     setBook(selected);
     setView("reader");
-    setOpenError("");
     void ensureCover(selected);
   }, [ensureCover]);
 
@@ -147,7 +145,6 @@ function AppContent() {
 
   async function handleImportPDF() {
     setOpening(true);
-    setOpenError("");
     setLibraryError("");
     try {
       const selected = await openPDF();
@@ -156,8 +153,7 @@ function AppContent() {
         await refreshLibrary();
       }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : t("error.addPdf");
-      view === "library" ? setLibraryError(message) : setOpenError(message);
+      setLibraryError(reason instanceof Error ? reason.message : t("error.addPdf"));
     } finally {
       setOpening(false);
     }
@@ -242,7 +238,7 @@ function AppContent() {
     }
     lastSavedPosition.current = positionKey;
     void saveReadingPosition(book.id, pageNumber, pageCount).catch((reason) => {
-      setOpenError(reason instanceof Error ? reason.message : t("error.savePosition"));
+      console.warn(reason instanceof Error ? reason.message : t("error.savePosition"));
     });
   }, [book, t]);
 
@@ -281,7 +277,6 @@ function AppContent() {
     }
     setSettingsReturnView(returnView);
     setView("settings");
-    setOpenError("");
   }, [book, pageContext.pageNumber, view]);
 
   const closeSettings = useCallback(() => {
@@ -290,7 +285,6 @@ function AppContent() {
 
   const showLibrary = useCallback(() => {
     setView("library");
-    setOpenError("");
     void refreshLibrary();
   }, [refreshLibrary]);
 
@@ -302,28 +296,27 @@ function AppContent() {
       setBook((current) => current ? { ...current, initialPage: pageContext.pageNumber } : current);
     }
     setView("reader");
-    setOpenError("");
   }, [book, pageContext.pageNumber]);
+
+  const contextLabel =
+    view === "reader" && book
+      ? book.title
+      : view === "settings"
+        ? t("app.settings")
+        : t("app.library");
+  const ContextIcon = view === "reader" && book ? BookOpenText : view === "settings" ? GearSix : Books;
 
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
       <main className="app-shell">
-        <header className="app-toolbar">
-          <div className="window-brand" aria-label="Glint">
+        <header className="app-toolbar" aria-label="Glint">
+          <div className="app-chrome">
             <span className="wordmark">GLINT</span>
-            <span className="toolbar-divider" />
-            <span className="workspace-label">{t("app.technicalReader")}</span>
-          </div>
-          <div className="toolbar-book" title={book?.name}>
-            {view === "reader" && book ? <BookOpenText size={15} /> : view === "settings" ? <GearSix size={15} /> : <Books size={15} />}
-            <span>{view === "reader" ? book?.title : view === "settings" ? t("app.settings") : t("app.library")}</span>
-          </div>
-          <div className="toolbar-actions">
-            {openError && <span className="open-error" role="alert">{openError}</span>}
-            <button type="button" className="open-book-button" onClick={handleImportPDF} disabled={opening}>
-              <FolderOpen size={16} />
-              {opening ? t("app.choosingPdf") : t("app.addPdf")}
-            </button>
+            <span className="chrome-separator" aria-hidden="true" />
+            <span className="chrome-view" title={contextLabel}>
+              <ContextIcon size={13} weight="regular" />
+              <span>{contextLabel}</span>
+            </span>
           </div>
         </header>
 
@@ -386,6 +379,7 @@ function AppContent() {
                 loading={libraryLoading}
                 error={libraryError}
                 busyBookId={busyBookId}
+                opening={opening}
                 onImport={handleImportPDF}
                 onOpen={handleOpenBook}
                 onRelink={handleRelinkBook}

@@ -28,6 +28,7 @@ const defaultProps = {
   loading: false,
   error: "",
   busyBookId: "",
+  opening: false,
   onImport: vi.fn(),
   onOpen: vi.fn(),
   onRelink: vi.fn(),

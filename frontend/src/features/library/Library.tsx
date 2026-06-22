@@ -18,6 +18,7 @@ type LibraryProps = {
   loading: boolean;
   error: string;
   busyBookId: string;
+  opening: boolean;
   onImport: () => void;
   onOpen: (book: BookSummary) => void;
   onRelink: (book: BookSummary) => void;
@@ -30,6 +31,7 @@ export function Library({
   loading,
   error,
   busyBookId,
+  opening,
   onImport,
   onOpen,
   onRelink,
@@ -94,6 +96,15 @@ export function Library({
           <h1 id="library-title">{t("library.title")}</h1>
           <p>{t("library.description")}</p>
         </div>
+        <button
+          type="button"
+          className="library-import-button"
+          onClick={onImport}
+          disabled={opening}
+        >
+          <Plus size={14} weight="bold" />
+          {opening ? t("app.choosingPdf") : t("app.addPdf")}
+        </button>
       </header>
 
       {error && (
