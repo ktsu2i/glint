@@ -253,6 +253,34 @@ describe("PdfReader", () => {
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
   });
 
+  it("jumps with the bottom page slider and resets the reader scroll position", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 12;
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
+    stage.scrollTop = 180;
+    stage.scrollLeft = 90;
+    const slider = screen.getByRole("slider", { name: "ページスライダー" }) as HTMLInputElement;
+    expect(slider.min).toBe("1");
+    expect(slider.max).toBe("12");
+    expect(slider.value).toBe("1");
+    expect(slider.getAttribute("aria-valuetext")).toBe("12ページ中1ページ");
+
+    fireEvent.change(slider, { target: { value: "8" } });
+
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(8));
+    expect(slider.value).toBe("8");
+    expect(slider.getAttribute("aria-valuetext")).toBe("12ページ中8ページ");
+    expect(stage.scrollTop).toBe(0);
+    expect(stage.scrollLeft).toBe(0);
+  });
+
   it("resets the reader scroll position after button, page input, and TOC navigation", async () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   BookOpen,
   BookOpenText,
@@ -704,6 +704,11 @@ export function PdfReader({
     ? `${pageNumber}–${rightPageNumber}`
     : `${pageNumber}`;
   const pageInputWidth = Math.max(2, String(numPages || 1).length);
+  const sliderMaximum = Math.max(1, numPages);
+  const sliderValue = Math.min(sliderMaximum, Math.max(1, pageNumber));
+  const sliderProgress = numPages > 1
+    ? ((sliderValue - 1) / (numPages - 1)) * 100
+    : 0;
   const isTocOpen = openPanel === "toc";
   const isSearchOpen = openPanel === "search";
 
@@ -952,6 +957,21 @@ export function PdfReader({
             )}
           </div>
         </div>
+      </div>
+      <div className="reader-page-slider">
+        <input
+          id="reader-page-slider"
+          type="range"
+          min={1}
+          max={sliderMaximum}
+          step={1}
+          value={sliderValue}
+          aria-label={t("reader.pageSlider")}
+          aria-valuetext={t("reader.pageOfTotal", { current: sliderValue, total: numPages || 1 })}
+          disabled={!document}
+          style={{ "--page-progress": `${sliderProgress}%` } as CSSProperties}
+          onChange={(event) => setPageNumber(Number(event.target.value))}
+        />
       </div>
     </section>
   );
