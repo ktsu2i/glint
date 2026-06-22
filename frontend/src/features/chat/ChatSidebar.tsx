@@ -129,6 +129,19 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
   }, [t]);
 
   useEffect(() => {
+    function cancelOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape" || !activeRequest.current) {
+        return;
+      }
+      event.preventDefault();
+      void handleCancel();
+    }
+
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => window.removeEventListener("keydown", cancelOnEscape);
+  }, [handleCancel]);
+
+  useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages]);
 

@@ -284,6 +284,28 @@ describe("ChatSidebar", () => {
     expect(screen.queryByText("stale")).toBeNull();
   });
 
+  it("cancels an in-flight request with Escape and ignores Escape while idle", async () => {
+    const { container } = render(
+      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2 }} />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(backend.cancelChat).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "long question" } });
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledOnce());
+
+    expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(false);
+    await waitFor(() => expect(backend.cancelChat).toHaveBeenCalledWith("request-1"));
+    expect(screen.getByRole("status").textContent).toBe("回答を中止しました");
+    expect(screen.getByRole("button", { name: /送信/ })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(backend.cancelChat).toHaveBeenCalledOnce();
+  });
+
   it("surfaces an error when cancel itself fails", async () => {
     let resolveRequest!: () => void;
     backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
