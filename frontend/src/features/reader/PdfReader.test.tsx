@@ -9,6 +9,9 @@ const loader = vi.hoisted(() => ({
   loadPdfOutline: vi.fn(),
 }));
 const backend = vi.hoisted(() => ({
+  addBookmark: vi.fn(),
+  listBookmarks: vi.fn(),
+  removeBookmark: vi.fn(),
   saveBookPages: vi.fn(),
   searchBook: vi.fn(),
 }));
@@ -20,6 +23,9 @@ vi.mock("./loadPdf", () => ({
   loadPdfOutline: loader.loadPdfOutline,
 }));
 vi.mock("../../shared/api/backend", () => ({
+  addBookmark: backend.addBookmark,
+  listBookmarks: backend.listBookmarks,
+  removeBookmark: backend.removeBookmark,
   saveBookPages: backend.saveBookPages,
   searchBook: backend.searchBook,
 }));
@@ -153,6 +159,12 @@ beforeEach(() => {
     pages: Array<{ pageNumber: number }>,
   ) => pages.at(-1)?.pageNumber ?? 0);
   backend.searchBook.mockResolvedValue([]);
+  backend.listBookmarks.mockResolvedValue([]);
+  backend.addBookmark.mockImplementation(async (
+    _bookId: string,
+    pageNumber: number,
+  ) => ({ pageNumber, createdAt: "2026-06-23T00:00:00Z" }));
+  backend.removeBookmark.mockResolvedValue(undefined);
 });
 
 describe("PdfReader", () => {
@@ -980,6 +992,36 @@ describe("PdfReader", () => {
     fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
     await screen.findByText("目次データが見つかりませんでした。");
     expect(screen.getByRole("button", { name: "目次を閉じる" })).toBeTruthy();
+  });
+
+  it("persists page bookmarks, navigates from the bookmark panel, and removes them", async () => {
+    const pdfDocument = makeDocument();
+    resolveDocument(pdfDocument);
+    backend.listBookmarks.mockResolvedValue([{
+      pageNumber: 2,
+      createdAt: "2026-06-23T00:00:00Z",
+    }]);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
+    await waitFor(() => expect(backend.listBookmarks).toHaveBeenCalledWith("book-1"));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
+    expect(await screen.findByText("2ページ")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "しおりの2ページへ移動" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "2ページのしおりを削除" })[0]);
+    await waitFor(() => expect(backend.removeBookmark).toHaveBeenCalledWith("book-1", 2));
+    expect(screen.queryByText("2ページ")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "前のページ" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1));
+    fireEvent.click(screen.getByRole("button", { name: "1ページをしおりに保存" }));
+    await waitFor(() => expect(backend.addBookmark).toHaveBeenCalledWith("book-1", 1, 2));
+    expect(await screen.findByText("1ページ")).toBeTruthy();
   });
 
   it("renders nested outline items, jumps on click, and highlights the active section", async () => {

@@ -10,6 +10,8 @@ import {
 import {
   BookOpen,
   BookOpenText,
+  BookmarkSimple,
+  BookmarksSimple,
   CaretLeft,
   CaretRight,
   CornersIn,
@@ -18,6 +20,7 @@ import {
   MagnifyingGlass,
   Minus,
   Plus,
+  X,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -26,8 +29,12 @@ import {
   type RenderTask,
 } from "pdfjs-dist";
 import {
+  addBookmark,
+  listBookmarks,
+  removeBookmark,
   saveBookPages,
   searchBook,
+  type BookBookmark,
   type BookFile,
   type BookPageInput,
   type BookSearchResult,
@@ -66,7 +73,7 @@ function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
-type ReaderPanel = "toc" | "search" | null;
+type ReaderPanel = "toc" | "search" | "bookmarks" | null;
 
 export type ReaderSelection = {
   text: string;
@@ -134,6 +141,10 @@ export function PdfReader({
   const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [bookmarks, setBookmarks] = useState<BookBookmark[]>([]);
+  const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
+  const [bookmarkBusyPage, setBookmarkBusyPage] = useState<number | null>(null);
+  const [bookmarkError, setBookmarkError] = useState("");
   const [textLayerRevision, setTextLayerRevision] = useState(0);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -291,6 +302,35 @@ export function PdfReader({
       void loadingTask?.destroy();
     };
   }, [book?.id, book?.url, initialPage, onPageContextChange, t]);
+
+  useEffect(() => {
+    let active = true;
+    setBookmarks([]);
+    setBookmarksLoaded(false);
+    setBookmarkBusyPage(null);
+    setBookmarkError("");
+    if (!book) {
+      return () => {
+        active = false;
+      };
+    }
+    listBookmarks(book.id)
+      .then((saved) => {
+        if (active) {
+          setBookmarks(saved);
+          setBookmarksLoaded(true);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setBookmarksLoaded(true);
+          setBookmarkError(reason instanceof Error ? reason.message : t("error.loadBookmarks"));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [book?.id, t]);
 
   useEffect(() => {
     if (!document || !book) {
@@ -804,6 +844,29 @@ export function PdfReader({
     : 0;
   const isTocOpen = openPanel === "toc";
   const isSearchOpen = openPanel === "search";
+  const isBookmarksOpen = openPanel === "bookmarks";
+  const currentPageBookmarked = bookmarks.some((bookmark) => bookmark.pageNumber === pageNumber);
+
+  async function toggleCurrentPageBookmark() {
+    if (!book || !document || bookmarkBusyPage !== null) {
+      return;
+    }
+    setBookmarkBusyPage(pageNumber);
+    setBookmarkError("");
+    try {
+      if (currentPageBookmarked) {
+        await removeBookmark(book.id, pageNumber);
+        setBookmarks((current) => current.filter((bookmark) => bookmark.pageNumber !== pageNumber));
+      } else {
+        const saved = await addBookmark(book.id, pageNumber, document.numPages);
+        setBookmarks((current) => [...current, saved].sort((a, b) => a.pageNumber - b.pageNumber));
+      }
+    } catch (reason) {
+      setBookmarkError(reason instanceof Error ? reason.message : t("error.saveBookmark"));
+    } finally {
+      setBookmarkBusyPage(null);
+    }
+  }
 
   return (
     <section className="reader" aria-label={t("reader.aria")}>
@@ -824,6 +887,14 @@ export function PdfReader({
             disabled={!document}
           >
             <MagnifyingGlass size={15} weight="bold" />
+          </ToolButton>
+          <ToolButton
+            label={isBookmarksOpen ? t("reader.closeBookmarks") : t("reader.openBookmarks")}
+            className={isBookmarksOpen ? "is-active" : ""}
+            onClick={() => setOpenPanel((panel) => panel === "bookmarks" ? null : "bookmarks")}
+            disabled={!document}
+          >
+            <BookmarksSimple size={15} weight="bold" />
           </ToolButton>
         </div>
         <div className="reader-controls" aria-label={t("reader.pageControls")}>
@@ -884,6 +955,16 @@ export function PdfReader({
           >
             <CaretRight size={15} weight="bold" />
           </ToolButton>
+          <ToolButton
+            label={currentPageBookmarked
+              ? t("reader.removePageBookmark", { page: pageNumber })
+              : t("reader.savePageBookmark", { page: pageNumber })}
+            className={currentPageBookmarked ? "is-active reader-bookmark-toggle" : "reader-bookmark-toggle"}
+            disabled={!document || bookmarkBusyPage !== null}
+            onClick={() => void toggleCurrentPageBookmark()}
+          >
+            <BookmarkSimple size={15} weight={currentPageBookmarked ? "fill" : "regular"} />
+          </ToolButton>
         </div>
         <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
           <ToolButton
@@ -913,6 +994,10 @@ export function PdfReader({
           </ToolButton>
         </div>
       </div>
+
+      {bookmarkError && (
+        <div className="reader-bookmark-error" role="alert">{bookmarkError}</div>
+      )}
 
       <div className={`reader-body ${openPanel ? "toc-open" : "toc-closed"}`}>
         {isTocOpen && (
@@ -1012,6 +1097,62 @@ export function PdfReader({
                     ))}
                   </ol>
                 </>
+              )}
+            </div>
+          </aside>
+        )}
+        {isBookmarksOpen && (
+          <aside className="reader-toc reader-bookmarks" aria-label={t("reader.bookmarks")}>
+            <div className="reader-toc-header">
+              <span>{t("reader.bookmarks")}</span>
+              {bookmarks.length > 0 && <strong>{bookmarks.length}</strong>}
+            </div>
+            <div className="reader-toc-scroll">
+              {!bookmarksLoaded ? (
+                <p className="reader-toc-empty">{t("reader.loadingBookmarks")}</p>
+              ) : bookmarkError && bookmarks.length === 0 ? (
+                <p className="reader-toc-empty is-error">{bookmarkError}</p>
+              ) : bookmarks.length === 0 ? (
+                <p className="reader-toc-empty">{t("reader.noBookmarks")}</p>
+              ) : (
+                <ol className="reader-bookmark-list">
+                  {bookmarks.map((bookmark) => (
+                    <li key={bookmark.pageNumber} className={bookmark.pageNumber === pageNumber ? "is-active" : ""}>
+                      <button
+                        type="button"
+                        className="reader-bookmark-link"
+                        aria-label={t("reader.goToBookmark", { page: bookmark.pageNumber })}
+                        onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
+                      >
+                        <BookmarkSimple size={16} weight="fill" aria-hidden="true" />
+                        <span>
+                          <strong>{t("reader.bookmarkPage", { page: bookmark.pageNumber })}</strong>
+                          <small>{t("reader.bookmarkSaved")}</small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="reader-bookmark-remove"
+                        aria-label={t("reader.removePageBookmark", { page: bookmark.pageNumber })}
+                        disabled={bookmarkBusyPage !== null}
+                        onClick={() => {
+                          setBookmarkBusyPage(bookmark.pageNumber);
+                          setBookmarkError("");
+                          void removeBookmark(book.id, bookmark.pageNumber)
+                            .then(() => setBookmarks((current) => current.filter(
+                              (entry) => entry.pageNumber !== bookmark.pageNumber,
+                            )))
+                            .catch((reason: unknown) => setBookmarkError(
+                              reason instanceof Error ? reason.message : t("error.saveBookmark"),
+                            ))
+                            .finally(() => setBookmarkBusyPage(null));
+                        }}
+                      >
+                        <X size={13} weight="bold" aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ol>
               )}
             </div>
           </aside>

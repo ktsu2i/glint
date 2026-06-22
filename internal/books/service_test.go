@@ -254,3 +254,26 @@ func TestServiceIndexesAndSearchesBookPages(t *testing.T) {
 	_, err = h.service.SearchBook(book.ID, "   ")
 	assert.Error(t, err)
 }
+
+func TestServicePersistsPageBookmarks(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Bookmarks.pdf", "%PDF-1.7\nfixture")
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+
+	saved, err := h.service.AddBookmark(book.ID, 5, 12)
+	require.NoError(t, err)
+	assert.Equal(t, 5, saved.PageNumber)
+	assert.NotEmpty(t, saved.CreatedAt)
+	_, err = h.service.AddBookmark(book.ID, 13, 12)
+	assert.Error(t, err)
+
+	bookmarks, err := h.service.ListBookmarks(book.ID)
+	require.NoError(t, err)
+	require.Len(t, bookmarks, 1)
+	assert.Equal(t, 5, bookmarks[0].PageNumber)
+	require.NoError(t, h.service.RemoveBookmark(book.ID, 5))
+	bookmarks, err = h.service.ListBookmarks(book.ID)
+	require.NoError(t, err)
+	assert.Empty(t, bookmarks)
+}

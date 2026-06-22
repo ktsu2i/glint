@@ -39,6 +39,11 @@ type BookSearchResult struct {
 	MatchCount int    `json:"matchCount"`
 }
 
+type BookBookmark struct {
+	PageNumber int    `json:"pageNumber"`
+	CreatedAt  string `json:"createdAt"`
+}
+
 type BookSummary struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
@@ -250,6 +255,42 @@ func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
 
 func (s *Service) SaveReadingPosition(bookID string, pageNumber, pageCount int) error {
 	return s.library.SaveReadingPosition(context.Background(), bookID, pageNumber, pageCount, time.Now())
+}
+
+func (s *Service) ListBookmarks(bookID string) ([]BookBookmark, error) {
+	bookmarks, err := s.library.ListBookmarks(context.Background(), bookID)
+	if err != nil {
+		return nil, err
+	}
+	output := make([]BookBookmark, len(bookmarks))
+	for i, bookmark := range bookmarks {
+		output[i] = BookBookmark{PageNumber: bookmark.PageNumber, CreatedAt: bookmark.CreatedAt}
+	}
+	return output, nil
+}
+
+func (s *Service) AddBookmark(bookID string, pageNumber, pageCount int) (BookBookmark, error) {
+	bookmark, err := s.library.SaveBookmark(
+		context.Background(), bookID, pageNumber, pageCount, time.Now(),
+	)
+	if errors.Is(err, library.ErrInvalidBookmark) {
+		return BookBookmark{}, errors.New(s.localized(
+			"The bookmark page is outside this document.",
+			"しおりのページがこのPDFの範囲外です。",
+		))
+	}
+	if err != nil {
+		return BookBookmark{}, err
+	}
+	return BookBookmark{PageNumber: bookmark.PageNumber, CreatedAt: bookmark.CreatedAt}, nil
+}
+
+func (s *Service) RemoveBookmark(bookID string, pageNumber int) error {
+	err := s.library.DeleteBookmark(context.Background(), bookID, pageNumber)
+	if errors.Is(err, library.ErrInvalidBookmark) {
+		return errors.New(s.localized("The bookmark is invalid.", "しおりの内容が不正です。"))
+	}
+	return err
 }
 
 // SaveBookPages persists a bounded extraction batch produced by PDF.js. It

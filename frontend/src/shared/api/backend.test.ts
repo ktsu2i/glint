@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bindings = vi.hoisted(() => ({
+  addBookmark: vi.fn(),
+  listBookmarks: vi.fn(),
   listBooks: vi.fn(),
   markBookCoverFailed: vi.fn(),
   openBook: vi.fn(),
   openPDF: vi.fn(),
   relinkPDF: vi.fn(),
   removeBook: vi.fn(),
+  removeBookmark: vi.fn(),
   renameBook: vi.fn(),
   saveBookCover: vi.fn(),
   saveBookPages: vi.fn(),
@@ -22,12 +25,15 @@ const bindings = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../wailsjs/go/books/Service", () => ({
+  AddBookmark: bindings.addBookmark,
+  ListBookmarks: bindings.listBookmarks,
   ListBooks: bindings.listBooks,
   MarkBookCoverFailed: bindings.markBookCoverFailed,
   OpenBook: bindings.openBook,
   OpenPDF: bindings.openPDF,
   RelinkPDF: bindings.relinkPDF,
   RemoveBook: bindings.removeBook,
+  RemoveBookmark: bindings.removeBookmark,
   RenameBook: bindings.renameBook,
   SaveBookCover: bindings.saveBookCover,
   SaveBookPages: bindings.saveBookPages,
@@ -52,8 +58,10 @@ vi.mock("../../../wailsjs/runtime/runtime", () => ({
 }));
 
 import {
+  addBookmark,
   getAppearanceSettings,
   listBooks,
+  listBookmarks,
   getLLMSettings,
   markBookCoverFailed,
   onAnswerDelta,
@@ -61,6 +69,7 @@ import {
   openPDF,
   relinkPDF,
   removeBook,
+  removeBookmark,
   renameBook,
   saveBookCover,
   saveBookPages,
@@ -131,6 +140,9 @@ describe("backend facade", () => {
     bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
     bindings.saveBookPages.mockResolvedValue(2);
     bindings.searchBook.mockResolvedValue([{ pageNumber: 2, excerpt: "match", matchCount: 1 }]);
+    const bookmark = { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" };
+    bindings.listBookmarks.mockResolvedValue([bookmark]);
+    bindings.addBookmark.mockResolvedValue(bookmark);
 
     await expect(listBooks()).resolves.toEqual(summaries);
     await expect(openBook("book-1")).resolves.toEqual(book);
@@ -147,6 +159,9 @@ describe("backend facade", () => {
     await expect(searchBook("book-1", "page")).resolves.toEqual([
       { pageNumber: 2, excerpt: "match", matchCount: 1 },
     ]);
+    await expect(listBookmarks("book-1")).resolves.toEqual([bookmark]);
+    await expect(addBookmark("book-1", 4, 10)).resolves.toEqual(bookmark);
+    await removeBookmark("book-1", 4);
     await saveBookCover("book-1", "data:image/png;base64,cover");
     await markBookCoverFailed("book-1");
 
@@ -155,6 +170,9 @@ describe("backend facade", () => {
       pageNumber: 1, text: "page text", width: 612, height: 792,
     }], 10);
     expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
+    expect(bindings.listBookmarks).toHaveBeenCalledWith("book-1");
+    expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", 4, 10);
+    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-1", 4);
     expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
     expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
     expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");

@@ -358,6 +358,9 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 			if err := tx.Where("book_id = ?", id).Delete(&bookPageRecord{}).Error; err != nil {
 				return fmt.Errorf("clear stale book pages: %w", err)
 			}
+			if err := tx.Where("book_id = ?", id).Delete(&bookBookmarkRecord{}).Error; err != nil {
+				return fmt.Errorf("clear stale book bookmarks: %w", err)
+			}
 		}
 		return tx.Model(&bookRecord{}).
 			Where("id = ?", id).

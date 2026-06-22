@@ -770,6 +770,7 @@ input:focus-visible,
 }
 
 .reader {
+  position: relative;
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr) 42px;
 }
@@ -893,6 +894,10 @@ input:focus-visible,
 }
 
 .reader-toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 12px 14px 8px;
   color: var(--muted);
   font-family: var(--utility-font);
@@ -901,6 +906,12 @@ input:focus-visible,
   letter-spacing: 0.14em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--line);
+}
+
+.reader-toc-header strong {
+  color: var(--signal-deep);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 
 .reader-toc-scroll {
@@ -914,6 +925,127 @@ input:focus-visible,
   color: var(--faint);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.reader-toc-empty.is-error {
+  color: var(--danger);
+}
+
+.reader-bookmark-error {
+  position: absolute;
+  z-index: 8;
+  top: 56px;
+  left: 50%;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 7px 10px;
+  border: 1px solid var(--error-border);
+  border-radius: 3px;
+  background: var(--error-surface);
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgb(var(--shadow-rgb) / 12%);
+  transform: translateX(-50%);
+}
+
+.reader-bookmark-toggle.is-active {
+  border-color: color-mix(in srgb, var(--signal-deep) 44%, var(--line));
+  color: var(--signal-deep);
+}
+
+.reader-bookmark-list {
+  margin: 0;
+  padding: 5px 0 12px;
+  list-style: none;
+}
+
+.reader-bookmark-list li {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 27px;
+  align-items: center;
+  border-left: 2px solid transparent;
+}
+
+.reader-bookmark-list li:hover,
+.reader-bookmark-list li.is-active {
+  background: var(--white);
+}
+
+.reader-bookmark-list li.is-active {
+  border-left-color: var(--signal-deep);
+}
+
+.reader-bookmark-link,
+.reader-bookmark-remove {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reader-bookmark-link {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 7px 8px 11px;
+  color: var(--signal-deep);
+  text-align: left;
+}
+
+.reader-bookmark-link > svg {
+  flex: 0 0 auto;
+}
+
+.reader-bookmark-link > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.reader-bookmark-link strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 610;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-bookmark-link small {
+  color: var(--faint);
+  font-family: var(--utility-font);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.reader-bookmark-remove {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 3px;
+  color: var(--faint);
+  opacity: 0;
+}
+
+.reader-bookmark-list li:hover .reader-bookmark-remove,
+.reader-bookmark-list li:focus-within .reader-bookmark-remove {
+  opacity: 1;
+}
+
+.reader-bookmark-remove:hover:not(:disabled) {
+  background: var(--error-surface);
+  color: var(--danger);
+}
+
+.reader-bookmark-remove:disabled {
+  cursor: default;
+  opacity: 0.3;
 }
 
 .reader-toc-list {

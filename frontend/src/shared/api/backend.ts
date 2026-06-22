@@ -1,10 +1,13 @@
 import {
+  AddBookmark,
+  ListBookmarks,
   ListBooks,
   MarkBookCoverFailed,
   OpenBook,
   OpenPDF,
   RelinkPDF,
   RemoveBook,
+  RemoveBookmark,
   RenameBook,
   SaveBookPages,
   SaveBookCover,
@@ -44,6 +47,11 @@ export type BookSearchResult = {
   pageNumber: number;
   excerpt: string;
   matchCount: number;
+};
+
+export type BookBookmark = {
+  pageNumber: number;
+  createdAt: string;
 };
 
 export type BookSummary = {
@@ -132,6 +140,22 @@ export async function saveReadingPosition(
   pageCount: number,
 ): Promise<void> {
   await SaveReadingPosition(bookId, pageNumber, pageCount);
+}
+
+export async function listBookmarks(bookId: string): Promise<BookBookmark[]> {
+  return (await ListBookmarks(bookId)) as BookBookmark[];
+}
+
+export async function addBookmark(
+  bookId: string,
+  pageNumber: number,
+  pageCount: number,
+): Promise<BookBookmark> {
+  return (await AddBookmark(bookId, pageNumber, pageCount)) as BookBookmark;
+}
+
+export async function removeBookmark(bookId: string, pageNumber: number): Promise<void> {
+  await RemoveBookmark(bookId, pageNumber);
 }
 
 export async function saveBookPages(

@@ -20,7 +20,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 4, version)
+	assert.Equal(t, 5, version)
 
 	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", 120, now)
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 4, version)
+	assert.Equal(t, 5, version)
 	var settingsTable string
 	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
 	assert.Equal(t, "app_settings", settingsTable)
