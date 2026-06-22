@@ -54,7 +54,7 @@ vi.mock("./features/reader/PdfReader", () => ({
   ),
 }));
 vi.mock("./features/chat/ChatSidebar", () => ({
-  ChatSidebar: ({ context }: { context: { bookName: string; pageNumber: number; text: string } }) => (
+  ChatSidebar: ({ context }: { context: { bookName: string; pageNumber: number } }) => (
     <div data-testid="chat-context">{JSON.stringify(context)}</div>
   ),
 }));

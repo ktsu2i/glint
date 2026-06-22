@@ -421,9 +421,9 @@ function AppContent() {
                   context={{
                     bookName: book?.title ?? "",
                     pageNumber: pageContext.pageNumber,
-                    text: pageContext.text,
                   }}
                   selection={selection}
+                  onClearSelection={() => setSelection(null)}
                 />
               </div>
             )}

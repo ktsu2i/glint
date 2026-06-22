@@ -52,16 +52,14 @@ beforeEach(() => {
 });
 
 describe("ChatSidebar", () => {
-  it("renders the empty-context state, ignores empty submissions, and unsubscribes", async () => {
+  it("hides the context chip when there is no selection, ignores empty submissions, and unsubscribes", async () => {
     const { container, unmount } = render(
-      <ChatSidebar context={{ bookName: "", pageNumber: 0, text: "" }} />,
+      <ChatSidebar context={{ bookName: "", pageNumber: 0 }} />,
     );
 
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
-    expect(screen.queryByRole("button", { name: "LLM接続設定を開く" })).toBeNull();
-    expect(screen.getByText("PDF未選択")).toBeTruthy();
+    expect(container.querySelector(".context-chip")).toBeNull();
     expect(screen.getByText("文脈なし")).toBeTruthy();
-    expect(screen.getByRole("switch")).toBeTruthy();
     fireEvent.submit(container.querySelector("form")!);
     expect(backend.startChat).not.toHaveBeenCalled();
 
@@ -70,10 +68,11 @@ describe("ChatSidebar", () => {
     expect(backend.unsubscribe).toHaveBeenCalledOnce();
   });
 
-  it("sends context with Command+Enter and keeps Enter available for newlines and IME", async () => {
+  it("sends the selection with Command+Enter and keeps Enter available for newlines and IME", async () => {
     const { container } = render(
       <ChatSidebar
-        context={{ bookName: "Guide.pdf", pageNumber: 7, text: "  page context  " }}
+        context={{ bookName: "Guide.pdf", pageNumber: 7 }}
+        selection={{ pageNumber: 7, text: "  highlighted phrase  " }}
       />,
     );
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
@@ -94,7 +93,7 @@ describe("ChatSidebar", () => {
       expect(backend.startChat).toHaveBeenCalledWith({
         requestId: "request-1",
         question: "Explain this",
-        contextText: "page context",
+        contextText: "highlighted phrase",
         bookName: "Guide.pdf",
         pageNumber: 7,
       });
@@ -117,24 +116,97 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("送信")).toBeTruthy();
   });
 
-  it("omits disabled context and blocks a second request while sending", async () => {
+  it("renders a Cursor-style chip above the input with selection metadata and preview", async () => {
+    const { container } = render(
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 4 }}
+        selection={{ pageNumber: 6, text: "  highlighted   phrase   from\n\nbook   " }}
+      />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    const chip = container.querySelector(".context-chip");
+    expect(chip).not.toBeNull();
+    expect(chip!.textContent).toContain("Page 6 の選択範囲");
+    expect(container.querySelector(".context-chip-preview")?.textContent)
+      .toBe("highlighted phrase from book");
+    expect(screen.getByText("Page 6 の選択範囲を添付")).toBeTruthy();
+  });
+
+  it("clears the selection when the user clicks the chip remove button", async () => {
+    const onClearSelection = vi.fn();
+    render(
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 3 }}
+        selection={{ pageNumber: 3, text: "highlighted phrase" }}
+        onClearSelection={onClearSelection}
+      />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: "この文脈を取り外す" }));
+    expect(onClearSelection).toHaveBeenCalledOnce();
+  });
+
+  it("clears the attached selection after dispatching the question", async () => {
+    const onClearSelection = vi.fn();
+    const { container } = render(
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 4 }}
+        selection={{ pageNumber: 4, text: "highlighted phrase" }}
+        onClearSelection={onClearSelection}
+      />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
+      requestId: "request-1",
+      question: "explain",
+      contextText: "highlighted phrase",
+      bookName: "Guide.pdf",
+      pageNumber: 4,
+    }));
+    expect(onClearSelection).toHaveBeenCalledOnce();
+  });
+
+  it("does not call onClearSelection when there was no selection to clear", async () => {
+    const onClearSelection = vi.fn();
+    const { container } = render(
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 5 }}
+        onClearSelection={onClearSelection}
+      />,
+    );
+    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() => expect(backend.startChat).toHaveBeenCalledOnce());
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("blocks a second request while sending", async () => {
     let resolveRequest!: () => void;
     backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
       resolveRequest = resolve;
     }));
     const { container } = render(
-      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 2 }}
+        selection={{ pageNumber: 2, text: "highlighted phrase" }}
+      />,
     );
 
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
-    fireEvent.click(screen.getByRole("switch"));
-    expect(screen.getByText("添付しない")).toBeTruthy();
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
     fireEvent.change(textarea, { target: { value: "first" } });
     fireEvent.submit(container.querySelector("form")!);
     await waitFor(() => expect(backend.startChat).toHaveBeenCalledOnce());
-    expect(backend.startChat.mock.calls[0][0].contextText).toBe("");
 
     fireEvent.change(textarea, { target: { value: "second" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -148,7 +220,10 @@ describe("ChatSidebar", () => {
   ])("shows submission failures", async (reason, message) => {
     backend.startChat.mockRejectedValue(reason);
     const { container } = render(
-      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 1, text: "context" }} />,
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 1 }}
+        selection={{ pageNumber: 1, text: "context" }}
+      />,
     );
 
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
@@ -160,41 +235,22 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("送信")).toBeTruthy();
   });
 
-  it("treats a page with no extracted text as unavailable", () => {
-    render(
-      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 3, text: "" }} />,
-    );
-
-    expect(screen.getByText("PDF未選択")).toBeTruthy();
-  });
-
-  it("prefers the active selection over the current page when available", async () => {
-    const { container, rerender } = render(
-      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 5, text: "page text" }} />,
+  it("sends the current page number with no contextText when nothing is selected", async () => {
+    const { container } = render(
+      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 5 }} />,
     );
 
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    expect(container.querySelector(".context-chip")).toBeNull();
 
-    expect(screen.getByText("Page 5")).toBeTruthy();
-
-    rerender(
-      <ChatSidebar
-        context={{ bookName: "Guide.pdf", pageNumber: 5, text: "page text" }}
-        selection={{ pageNumber: 6, text: "highlighted phrase" }}
-      />,
-    );
-
-    expect(screen.getByText("選択範囲（Page 6）")).toBeTruthy();
-    expect(screen.getByText("Page 6 の選択範囲を添付")).toBeTruthy();
-
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "what is this" } });
     fireEvent.submit(container.querySelector("form")!);
     await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
       requestId: "request-1",
-      question: "explain",
-      contextText: "highlighted phrase",
+      question: "what is this",
+      contextText: "",
       bookName: "Guide.pdf",
-      pageNumber: 6,
+      pageNumber: 5,
     }));
   });
 
@@ -204,7 +260,10 @@ describe("ChatSidebar", () => {
       resolveRequest = resolve;
     }));
     const { container } = render(
-      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 2 }}
+        selection={{ pageNumber: 2, text: "context" }}
+      />,
     );
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
@@ -230,7 +289,10 @@ describe("ChatSidebar", () => {
     }));
     backend.cancelChat.mockRejectedValue(new Error("backend down"));
     const { container } = render(
-      <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2, text: "context" }} />,
+      <ChatSidebar
+        context={{ bookName: "Guide.pdf", pageNumber: 2 }}
+        selection={{ pageNumber: 2, text: "context" }}
+      />,
     );
     await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
 
@@ -240,30 +302,5 @@ describe("ChatSidebar", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /中止/ }));
     expect((await screen.findByRole("alert")).textContent).toBe("backend down");
-  });
-
-  it("lets the user switch between selection and full page context", async () => {
-    const { container } = render(
-      <ChatSidebar
-        context={{ bookName: "Guide.pdf", pageNumber: 5, text: "full page body" }}
-        selection={{ pageNumber: 6, text: "highlighted phrase" }}
-      />,
-    );
-
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
-
-    fireEvent.click(screen.getByRole("tab", { name: "ページ全体" }));
-    expect(screen.getByText("Page 5")).toBeTruthy();
-    expect(screen.getByText("Page 5 を添付")).toBeTruthy();
-
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "what is this" } });
-    fireEvent.submit(container.querySelector("form")!);
-    await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
-      requestId: "request-1",
-      question: "what is this",
-      contextText: "full page body",
-      bookName: "Guide.pdf",
-      pageNumber: 5,
-    }));
   });
 });

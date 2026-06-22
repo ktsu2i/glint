@@ -724,7 +724,7 @@ describe("PdfReader", () => {
     expect(textLayerTwo.cancel).toHaveBeenCalled();
   });
 
-  it("emits selection details when the user selects text inside a page layer", async () => {
+  it("emits selection details and keeps them sticky after the browser selection collapses", async () => {
     resolveDocument();
     const onSelectionChange = vi.fn();
     render(
@@ -754,6 +754,7 @@ describe("PdfReader", () => {
     });
     expect(onSelectionChange).toHaveBeenLastCalledWith({ text: "selected text", pageNumber: 1 });
 
+    onSelectionChange.mockClear();
     vi.spyOn(window, "getSelection").mockReturnValue({
       anchorNode: textNode,
       focusNode: textNode,
@@ -763,7 +764,27 @@ describe("PdfReader", () => {
     act(() => {
       globalThis.document.dispatchEvent(new Event("selectionchange"));
     });
-    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it("clears the selection when the page changes", async () => {
+    const pdfDocument = makeDocument();
+    resolveDocument(pdfDocument);
+    const onSelectionChange = vi.fn();
+    render(
+      <PdfReader
+        book={makeBook()}
+        onPageContextChange={vi.fn()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    onSelectionChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
   });
 
   it("ignores selections that fall outside a text layer", async () => {
@@ -794,7 +815,7 @@ describe("PdfReader", () => {
     act(() => {
       globalThis.document.dispatchEvent(new Event("selectionchange"));
     });
-    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+    expect(onSelectionChange).not.toHaveBeenCalled();
     outside.remove();
   });
 

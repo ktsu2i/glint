@@ -1,12 +1,10 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Switch } from "@base-ui/react/switch";
 import {
   ArrowUp,
-  BookOpenText,
   ChatCircleDots,
-  Paperclip,
   Stop,
   TextAa,
+  X,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import Markdown from "react-markdown";
@@ -25,7 +23,6 @@ import { localizeBackendError } from "../../shared/i18n/error";
 type ReadingContext = {
   bookName: string;
   pageNumber: number;
-  text: string;
 };
 
 type SelectionContext = {
@@ -42,11 +39,10 @@ type Message = {
 type ChatSidebarProps = {
   context: ReadingContext;
   selection?: SelectionContext | null;
+  onClearSelection?: () => void;
 };
 
-type ContextSource = "selection" | "page";
-
-export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
+export function ChatSidebar({ context, selection = null, onClearSelection }: ChatSidebarProps) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -56,8 +52,6 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     },
   ]);
   const [question, setQuestion] = useState("");
-  const [includeContext, setIncludeContext] = useState(true);
-  const [source, setSource] = useState<ContextSource>("page");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [llmSettings, setLLMSettings] = useState<LLMSettings | null>(null);
@@ -79,14 +73,6 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
   useEffect(() => {
     void refreshSettings();
   }, [refreshSettings]);
-
-  useEffect(() => {
-    if (hasSelection) {
-      setSource("selection");
-    } else {
-      setSource("page");
-    }
-  }, [hasSelection]);
 
   useEffect(() => {
     return onAnswerDelta((delta: AnswerDelta) => {
@@ -153,15 +139,18 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
       { id: `assistant-${requestId}`, role: "assistant", content: "" },
     ]);
 
-    const activeSource = hasSelection && source === "selection" ? "selection" : "page";
-    const rawContextText = activeSource === "selection" ? selection!.text : context.text;
-    const contextPageNumber = activeSource === "selection" ? selection!.pageNumber : context.pageNumber;
+    const contextPageNumber = hasSelection ? selection!.pageNumber : context.pageNumber;
+    const contextText = hasSelection ? trimChatContext(selection!.text) : "";
+
+    if (hasSelection) {
+      onClearSelection?.();
+    }
 
     try {
       await startChat({
         requestId,
         question: normalizedQuestion,
-        contextText: includeContext ? trimChatContext(rawContextText) : "",
+        contextText,
         bookName: context.bookName,
         pageNumber: contextPageNumber,
       });
@@ -172,21 +161,9 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     }
   }
 
-  const hasPageContext = context.pageNumber > 0 && context.text.length > 0;
-  const activeSource: ContextSource = hasSelection && source === "selection" ? "selection" : "page";
-  const hasContext = activeSource === "selection" ? hasSelection : hasPageContext;
-  const previewText = activeSource === "selection" ? selection!.text : context.text;
-  const headlinePage = activeSource === "selection" ? selection!.pageNumber : context.pageNumber;
-  const headline = hasContext
-    ? activeSource === "selection"
-      ? t("chat.selectionHeadline", { page: headlinePage })
-      : `Page ${headlinePage}`
-    : t("chat.noPdf");
-  const composerLabel = !includeContext || !hasContext
-    ? t("chat.noContext")
-    : activeSource === "selection"
-      ? t("chat.attachSelection", { page: headlinePage })
-      : t("chat.attachPage", { page: headlinePage });
+  const composerLabel = hasSelection
+    ? t("chat.attachSelection", { page: selection!.pageNumber })
+    : t("chat.noContext");
 
   return (
     <aside className="chat-sidebar" aria-label={t("chat.aria")}>
@@ -205,64 +182,6 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
       <div className="chat-settings-feedback" aria-live="polite">
         {settingsError && <p className="chat-settings-error" role="alert">{settingsError}</p>}
       </div>
-
-      <section className="context-panel" aria-label={t("chat.contextAria")}>
-        <div className="context-heading">
-          <div className="context-source">
-            {activeSource === "selection" ? (
-              <TextAa size={15} weight="regular" />
-            ) : (
-              <BookOpenText size={15} weight="regular" />
-            )}
-            <div>
-              <span className="context-label">{t("chat.readingContext")}</span>
-              <strong>{headline}</strong>
-            </div>
-          </div>
-          <label className="context-toggle">
-            <Switch.Root
-              className="context-switch"
-              checked={includeContext && hasContext}
-              disabled={!hasContext || sending}
-              onCheckedChange={setIncludeContext}
-              aria-label={t("chat.includeContext")}
-            >
-              <Switch.Thumb className="context-switch-thumb" />
-            </Switch.Root>
-            <span>{includeContext && hasContext ? t("chat.attach") : t("chat.doNotAttach")}</span>
-          </label>
-        </div>
-        {hasSelection && hasPageContext && (
-          <div className="context-source-tabs" role="tablist" aria-label={t("chat.contextChoice")}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeSource === "selection"}
-              className={activeSource === "selection" ? "is-active" : ""}
-              onClick={() => setSource("selection")}
-            >
-              {t("chat.selection")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeSource === "page"}
-              className={activeSource === "page" ? "is-active" : ""}
-              onClick={() => setSource("page")}
-            >
-              {t("chat.wholePage")}
-            </button>
-          </div>
-        )}
-        <p className={hasContext ? "context-preview" : "context-preview context-placeholder"}>
-          {hasContext
-            ? contextPreview(previewText)
-            : t("chat.contextPlaceholder")}
-        </p>
-        {hasContext && (
-          <p className="context-meta"><Paperclip size={11} /> {t("chat.maxCharacters")}</p>
-        )}
-      </section>
 
       <div className="message-list" aria-live="polite">
         {messages.map((message) => (
@@ -290,6 +209,26 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
       </div>
 
       <form className="chat-composer" onSubmit={handleSubmit}>
+        {hasSelection && (
+          <div className="context-chip" aria-label={t("chat.contextChipAria", { page: selection!.pageNumber })}>
+            <div className="context-chip-meta">
+              <TextAa size={11} weight="regular" />
+              <span>{t("chat.selectionHeadline", { page: selection!.pageNumber })}</span>
+            </div>
+            {onClearSelection && (
+              <button
+                type="button"
+                className="context-chip-remove"
+                aria-label={t("chat.removeContext")}
+                onClick={onClearSelection}
+                disabled={sending}
+              >
+                <X size={10} weight="bold" />
+              </button>
+            )}
+            <p className="context-chip-preview">{contextPreview(selection!.text, 160)}</p>
+          </div>
+        )}
         {error && <p className="chat-error" role="alert">{error}</p>}
         <textarea
           value={question}

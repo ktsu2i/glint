@@ -560,7 +560,6 @@ export function PdfReader({
       }
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
-        emit(null);
         return;
       }
       const anchorParent = selection.anchorNode instanceof Element
@@ -572,13 +571,11 @@ export function PdfReader({
       const anchorLayer = anchorParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
       const focusLayer = focusParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
       if (!anchorLayer || anchorLayer !== focusLayer) {
-        emit(null);
         return;
       }
       const sourcePage = Number(anchorLayer.dataset.page);
       const text = selection.toString().trim();
       if (!text || !Number.isFinite(sourcePage) || sourcePage < 1) {
-        emit(null);
         return;
       }
       emit({ text, pageNumber: sourcePage });
@@ -586,6 +583,10 @@ export function PdfReader({
     window.document.addEventListener("selectionchange", handleSelectionChange);
     return () => window.document.removeEventListener("selectionchange", handleSelectionChange);
   }, []);
+
+  useEffect(() => {
+    selectionCallbackRef.current?.(null);
+  }, [pageNumber]);
 
   useEffect(() => {
     if (!isEditingPage) {
