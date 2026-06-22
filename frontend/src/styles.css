@@ -2444,6 +2444,19 @@ button.page-count:disabled {
   animation-delay: 320ms;
 }
 
+.message-cancelled {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-top: 8px;
+  color: var(--faint);
+  font-family: var(--utility-font);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 @keyframes typing-pulse {
   to {
     opacity: 0.28;

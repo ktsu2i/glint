@@ -34,6 +34,7 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  responseState?: "streaming" | "complete" | "cancelled";
 };
 
 type ChatSidebarProps = {
@@ -93,6 +94,13 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
         );
       }
       if (delta.done) {
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === `assistant-${delta.requestId}`
+              ? { ...message, responseState: "complete" }
+              : message,
+          ),
+        );
         setSending(false);
         activeRequest.current = "";
       }
@@ -106,6 +114,13 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
     }
     activeRequest.current = "";
     setSending(false);
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === `assistant-${requestId}`
+          ? { ...message, responseState: "cancelled" }
+          : message,
+      ),
+    );
     try {
       await cancelChat(requestId);
     } catch (reason) {
@@ -136,7 +151,12 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
     setMessages((current) => [
       ...current,
       { id: `user-${requestId}`, role: "user", content: normalizedQuestion },
-      { id: `assistant-${requestId}`, role: "assistant", content: "" },
+      {
+        id: `assistant-${requestId}`,
+        role: "assistant",
+        content: "",
+        responseState: "streaming",
+      },
     ]);
 
     const contextPageNumber = hasSelection ? selection!.pageNumber : context.pageNumber;
@@ -192,16 +212,25 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
             </div>
             {message.id === "welcome" ? (
               <p className="message-body">{t("chat.welcome")}</p>
-            ) : message.content ? (
-              message.role === "assistant" ? (
-                <div className="message-body message-markdown">
-                  <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
-                </div>
-              ) : (
-                <p className="message-body">{message.content}</p>
-              )
             ) : (
-              <p className="message-body"><span className="typing-indicator"><i /><i /><i /></span></p>
+              <>
+                {message.content && (message.role === "assistant" ? (
+                  <div className="message-body message-markdown">
+                    <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                  </div>
+                ) : (
+                  <p className="message-body">{message.content}</p>
+                ))}
+                {!message.content && message.responseState === "streaming" && (
+                  <p className="message-body"><span className="typing-indicator"><i /><i /><i /></span></p>
+                )}
+                {message.responseState === "cancelled" && (
+                  <div className="message-cancelled" role="status">
+                    <Stop size={11} weight="fill" aria-hidden="true" />
+                    <span>{t("chat.responseCancelled")}</span>
+                  </div>
+                )}
+              </>
             )}
           </article>
         ))}

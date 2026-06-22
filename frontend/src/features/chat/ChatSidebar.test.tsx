@@ -276,6 +276,8 @@ describe("ChatSidebar", () => {
     fireEvent.click(cancelButton);
     await waitFor(() => expect(backend.cancelChat).toHaveBeenCalledWith("request-1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /送信/ })).toBeTruthy());
+    expect(screen.getByRole("status").textContent).toBe("回答を中止しました");
+    expect(container.querySelector(".typing-indicator")).toBeNull();
 
     act(() => backend.listener?.({ requestId: "request-1", content: "stale", done: false }));
     act(() => backend.listener?.({ requestId: "request-1", done: true }));
