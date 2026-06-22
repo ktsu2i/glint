@@ -1201,19 +1201,43 @@ export function PdfReader({
         </div>
       </div>
       <div className="reader-page-slider">
-        <input
-          id="reader-page-slider"
-          type="range"
-          min={1}
-          max={sliderMaximum}
-          step={1}
-          value={sliderValue}
-          aria-label={t("reader.pageSlider")}
-          aria-valuetext={t("reader.pageOfTotal", { current: sliderValue, total: numPages || 1 })}
-          disabled={!document}
-          style={{ "--page-progress": `${sliderProgress}%` } as CSSProperties}
-          onChange={(event) => setPageNumber(Number(event.target.value))}
-        />
+        <div className="reader-page-rail">
+          <input
+            id="reader-page-slider"
+            type="range"
+            min={1}
+            max={sliderMaximum}
+            step={1}
+            value={sliderValue}
+            aria-label={t("reader.pageSlider")}
+            aria-valuetext={t("reader.pageOfTotal", { current: sliderValue, total: numPages || 1 })}
+            disabled={!document}
+            style={{ "--page-progress": `${sliderProgress}%` } as CSSProperties}
+            onChange={(event) => setPageNumber(Number(event.target.value))}
+          />
+          <div className="reader-slider-bookmarks">
+            {document && bookmarks.map((bookmark) => {
+              const markerPosition = numPages > 1
+                ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100
+                : 0;
+              const isCurrent = bookmark.pageNumber === pageNumber;
+              return (
+                <button
+                  key={bookmark.pageNumber}
+                  type="button"
+                  className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
+                  style={{ "--bookmark-position": `${markerPosition}%` } as CSSProperties}
+                  aria-label={t("reader.sliderBookmark", { page: bookmark.pageNumber })}
+                  aria-current={isCurrent ? "page" : undefined}
+                  data-tooltip={t("reader.bookmarkPage", { page: bookmark.pageNumber })}
+                  onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
+                >
+                  <span className="reader-slider-bookmark-dot" aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </section>
   );

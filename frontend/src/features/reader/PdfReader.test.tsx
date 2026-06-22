@@ -295,6 +295,32 @@ describe("PdfReader", () => {
     expect(stage.scrollLeft).toBe(0);
   });
 
+  it("shows bookmarks on the page slider and jumps from their markers", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 12;
+    backend.listBookmarks.mockResolvedValue([
+      { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" },
+      { pageNumber: 10, createdAt: "2026-06-23T00:01:00Z" },
+    ]);
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+
+    const pageFourMarker = await screen.findByRole("button", { name: "しおり付きの4ページへ移動" });
+    expect(pageFourMarker.parentElement?.className).toBe("reader-slider-bookmarks");
+    expect(pageFourMarker.getAttribute("style")).toContain("27.2727");
+    expect(pageFourMarker.querySelector("svg")).toBeNull();
+    expect(pageFourMarker.querySelector(".reader-slider-bookmark-dot")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "しおり付きの10ページへ移動" })).toBeTruthy();
+
+    fireEvent.click(pageFourMarker);
+
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(4));
+    expect(pageFourMarker.getAttribute("aria-current")).toBe("page");
+  });
+
   it("resets the reader scroll position after button, page input, and TOC navigation", async () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;
