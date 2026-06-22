@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { BookOpenText, Books, GearSix } from "@phosphor-icons/react";
+import { BookOpenText, Books, GearSix, SidebarSimple } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
@@ -47,6 +47,7 @@ function AppContent() {
   const [themeLoading, setThemeLoading] = useState(true);
   const [themeError, setThemeError] = useState("");
   const [assistantWidth, setAssistantWidth] = useState(390);
+  const [assistantVisible, setAssistantVisible] = useState(true);
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null);
   const generatingCovers = useRef(new Set<string>());
   const lastSavedPosition = useRef("");
@@ -267,6 +268,10 @@ function AppContent() {
 
   const workspaceStyle = { "--assistant-width": `${assistantWidth}px` } as CSSProperties;
 
+  const toggleAssistant = useCallback(() => {
+    setAssistantVisible((visible) => !visible);
+  }, []);
+
   const openSettings = useCallback(() => {
     if (view === "settings") {
       return;
@@ -318,6 +323,20 @@ function AppContent() {
               <span>{contextLabel}</span>
             </span>
           </div>
+          {view === "reader" && book && (
+            <div className="app-toolbar-trailing">
+              <button
+                type="button"
+                className={assistantVisible ? "app-toolbar-toggle is-active" : "app-toolbar-toggle"}
+                aria-pressed={assistantVisible}
+                aria-label={assistantVisible ? t("app.hideAssistant") : t("app.showAssistant")}
+                title={assistantVisible ? t("app.hideAssistant") : t("app.showAssistant")}
+                onClick={toggleAssistant}
+              >
+                <SidebarSimple size={16} weight={assistantVisible ? "fill" : "regular"} />
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="app-body">
@@ -387,7 +406,10 @@ function AppContent() {
                 onRename={handleRenameBook}
               />
             ) : (
-              <div className="workspace" style={workspaceStyle}>
+              <div
+                className={assistantVisible ? "workspace" : "workspace is-assistant-hidden"}
+                style={workspaceStyle}
+              >
                 <PdfReader
                   book={book}
                   initialPage={book?.initialPage ?? 1}
@@ -396,35 +418,39 @@ function AppContent() {
                   onIndexedPageCountChange={handleIndexedPageCountChange}
                 />
 
-                <div
-                  className="panel-resizer"
-                  role="separator"
-                  aria-label={t("app.resizeAssistant")}
-                  aria-orientation="vertical"
-                  aria-valuemin={328}
-                  aria-valuemax={520}
-                  aria-valuenow={Math.round(assistantWidth)}
-                  tabIndex={0}
-                  onPointerDown={(event) => {
-                    resizeState.current = { startX: event.clientX, startWidth: assistantWidth };
-                    document.body.classList.add("is-resizing");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowLeft") setAssistantWidth((width) => Math.min(520, width + 12));
-                    if (event.key === "ArrowRight") setAssistantWidth((width) => Math.max(328, width - 12));
-                  }}
-                >
-                  <span />
-                </div>
+                {assistantVisible && (
+                  <>
+                    <div
+                      className="panel-resizer"
+                      role="separator"
+                      aria-label={t("app.resizeAssistant")}
+                      aria-orientation="vertical"
+                      aria-valuemin={328}
+                      aria-valuemax={520}
+                      aria-valuenow={Math.round(assistantWidth)}
+                      tabIndex={0}
+                      onPointerDown={(event) => {
+                        resizeState.current = { startX: event.clientX, startWidth: assistantWidth };
+                        document.body.classList.add("is-resizing");
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "ArrowLeft") setAssistantWidth((width) => Math.min(520, width + 12));
+                        if (event.key === "ArrowRight") setAssistantWidth((width) => Math.max(328, width - 12));
+                      }}
+                    >
+                      <span />
+                    </div>
 
-                <ChatSidebar
-                  context={{
-                    bookName: book?.title ?? "",
-                    pageNumber: pageContext.pageNumber,
-                  }}
-                  selection={selection}
-                  onClearSelection={() => setSelection(null)}
-                />
+                    <ChatSidebar
+                      context={{
+                        bookName: book?.title ?? "",
+                        pageNumber: pageContext.pageNumber,
+                      }}
+                      selection={selection}
+                      onClearSelection={() => setSelection(null)}
+                    />
+                  </>
+                )}
               </div>
             )}
           </div>

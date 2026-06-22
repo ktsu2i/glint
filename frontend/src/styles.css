@@ -142,6 +142,7 @@ input:focus-visible,
 }
 
 .app-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -153,6 +154,46 @@ input:focus-visible,
     0 1px 0 rgb(32 37 42 / 4%);
   --wails-draggable: drag;
   user-select: none;
+}
+
+.app-toolbar-trailing {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  --wails-draggable: no-drag;
+}
+
+.app-toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.app-toolbar-toggle:hover {
+  background: rgb(32 37 42 / 5%);
+  color: var(--ink);
+}
+
+.app-toolbar-toggle:focus-visible {
+  outline: 2px solid var(--signal-deep);
+  outline-offset: 1px;
+}
+
+.app-toolbar-toggle.is-active {
+  color: var(--ink);
 }
 
 .app-chrome {
@@ -714,6 +755,10 @@ input:focus-visible,
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(480px, 1fr) 8px var(--assistant-width);
+}
+
+.workspace.is-assistant-hidden {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .reader,
@@ -2424,6 +2469,10 @@ button.page-count:disabled {
     0 1px 0 rgb(0 0 0 / 20%);
 }
 
+:root[data-theme="dark"] .app-toolbar-toggle:hover {
+  background: rgb(255 255 255 / 6%);
+}
+
 :root[data-theme="dark"] .library-error,
 :root[data-theme="dark"] .reader-error {
   border-color: var(--error-border);
@@ -2555,6 +2604,10 @@ button.page-count:disabled {
 @media (max-width: 1080px) {
   .workspace {
     grid-template-columns: minmax(440px, 1fr) 7px min(360px, var(--assistant-width));
+  }
+
+  .workspace.is-assistant-hidden {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .settings-page-shell {
