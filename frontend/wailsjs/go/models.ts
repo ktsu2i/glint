@@ -1,5 +1,5 @@
 export namespace books {
-
+	
 	export class BookFile {
 	    id: string;
 	    title: string;
@@ -9,11 +9,11 @@ export namespace books {
 	    initialPage: number;
 	    indexedPageCount: number;
 	    coverStatus: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookFile(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -31,11 +31,11 @@ export namespace books {
 	    text: string;
 	    width: number;
 	    height: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookPageInput(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pageNumber = source["pageNumber"];
@@ -48,11 +48,11 @@ export namespace books {
 	    pageNumber: number;
 	    excerpt: string;
 	    matchCount: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookSearchResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pageNumber = source["pageNumber"];
@@ -72,11 +72,11 @@ export namespace books {
 	    coverUrl: string;
 	    coverStatus: string;
 	    available: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookSummary(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -96,18 +96,18 @@ export namespace books {
 }
 
 export namespace llm {
-
+	
 	export class ChatRequest {
 	    requestId: string;
 	    question: string;
 	    contextText: string;
 	    bookName: string;
 	    pageNumber: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ChatRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.requestId = source["requestId"];
@@ -121,14 +121,14 @@ export namespace llm {
 }
 
 export namespace settings {
-
+	
 	export class AppearanceSettings {
 	    theme: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AppearanceSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
@@ -140,11 +140,11 @@ export namespace settings {
 	    zdr: boolean;
 	    hasApiKey: boolean;
 	    configured: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LLMSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.provider = source["provider"];
@@ -156,11 +156,11 @@ export namespace settings {
 	}
 	export class LanguageSettings {
 	    language: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LanguageSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.language = source["language"];
@@ -168,11 +168,11 @@ export namespace settings {
 	}
 	export class SaveAppearanceSettingsRequest {
 	    theme: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SaveAppearanceSettingsRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
@@ -183,11 +183,11 @@ export namespace settings {
 	    apiKey: string;
 	    zdr: boolean;
 	    clearApiKey: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SaveLLMSettingsRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.model = source["model"];
@@ -198,11 +198,11 @@ export namespace settings {
 	}
 	export class SaveLanguageSettingsRequest {
 	    language: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SaveLanguageSettingsRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.language = source["language"];
@@ -210,3 +210,4 @@ export namespace settings {
 	}
 
 }
+
