@@ -6,8 +6,10 @@ import {
   RelinkPDF,
   RemoveBook,
   RenameBook,
+  SaveBookPages,
   SaveBookCover,
   SaveReadingPosition,
+  SearchBook,
 } from "../../../wailsjs/go/books/Service";
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
@@ -25,7 +27,21 @@ export type BookFile = {
   url: string;
   size: number;
   initialPage: number;
+  indexedPageCount: number;
   coverStatus: "pending" | "ready" | "failed";
+};
+
+export type BookPageInput = {
+  pageNumber: number;
+  text: string;
+  width: number;
+  height: number;
+};
+
+export type BookSearchResult = {
+  pageNumber: number;
+  excerpt: string;
+  matchCount: number;
 };
 
 export type BookSummary = {
@@ -108,6 +124,18 @@ export async function saveReadingPosition(
   pageCount: number,
 ): Promise<void> {
   await SaveReadingPosition(bookId, pageNumber, pageCount);
+}
+
+export async function saveBookPages(
+  bookId: string,
+  pages: BookPageInput[],
+  pageCount: number,
+): Promise<number> {
+  return await SaveBookPages(bookId, pages, pageCount);
+}
+
+export async function searchBook(bookId: string, query: string): Promise<BookSearchResult[]> {
+  return (await SearchBook(bookId, query)) as BookSearchResult[];
 }
 
 export async function saveBookCover(bookId: string, dataUrl: string): Promise<void> {

@@ -6,6 +6,7 @@ import type {
   PageViewport,
   PDFPageProxy,
 } from "pdfjs-dist";
+import { normalizePageText } from "../../shared/lib/text";
 
 type TextContent = Awaited<ReturnType<PDFPageProxy["getTextContent"]>>;
 
@@ -14,6 +15,35 @@ export type OutlineNode = {
   pageNumber: number | null;
   children: OutlineNode[];
 };
+
+export type ExtractedPdfPage = {
+  pageNumber: number;
+  text: string;
+  width: number;
+  height: number;
+};
+
+export async function extractPdfPage(
+  document: PDFDocumentProxy,
+  pageNumber: number,
+): Promise<ExtractedPdfPage> {
+  if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > document.numPages) {
+    throw new Error("PDF page is outside the document");
+  }
+  const page = await document.getPage(pageNumber);
+  const textContent = await page.getTextContent();
+  const viewport = page.getViewport({ scale: 1 });
+  return {
+    pageNumber,
+    text: normalizePageText(
+      textContent.items
+        .filter((item) => "str" in item)
+        .map((item) => ({ str: item.str, hasEOL: item.hasEOL })),
+    ),
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
 
 type RawOutlineItem = {
   title: string;

@@ -4,13 +4,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const loader = vi.hoisted(() => ({
   createPdfLoadingTask: vi.fn(),
   createPdfTextLayer: vi.fn(),
+  extractPdfPage: vi.fn(),
   loadPdfOutline: vi.fn(),
+}));
+const backend = vi.hoisted(() => ({
+  saveBookPages: vi.fn(),
+  searchBook: vi.fn(),
 }));
 
 vi.mock("./loadPdf", () => ({
   createPdfLoadingTask: loader.createPdfLoadingTask,
   createPdfTextLayer: loader.createPdfTextLayer,
+  extractPdfPage: loader.extractPdfPage,
   loadPdfOutline: loader.loadPdfOutline,
+}));
+vi.mock("../../shared/api/backend", () => ({
+  saveBookPages: backend.saveBookPages,
+  searchBook: backend.searchBook,
 }));
 vi.mock("../../shared/components/ToolButton", () => ({
   ToolButton: ({
@@ -78,11 +88,11 @@ function makePage(overrides: Record<string, unknown> = {}) {
 function makeDocument(page = makePage()) {
   return {
     numPages: 2,
-    getPage: vi.fn(async () => page),
+    getPage: vi.fn(async (_pageNumber: number) => page),
   };
 }
 
-function makeBook(url = "/book/1"): BookFile {
+function makeBook(url = "/book/1", indexedPageCount = 2): BookFile {
   return {
     id: "book-1",
     title: "Guide",
@@ -90,6 +100,7 @@ function makeBook(url = "/book/1"): BookFile {
     url,
     size: 10,
     initialPage: 1,
+    indexedPageCount,
     coverStatus: "pending",
   };
 }
@@ -110,7 +121,30 @@ beforeEach(() => {
     render: vi.fn(async () => undefined),
     cancel: vi.fn(),
   }));
+  loader.extractPdfPage.mockImplementation(async (
+    document: ReturnType<typeof makeDocument>,
+    pageNumber: number,
+  ) => {
+    const page = await document.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
+    return {
+      pageNumber,
+      text: textContent.items
+        .filter((item: { str?: string }) => "str" in item)
+        .map((item: { str?: string; hasEOL?: boolean }) => `${item.str ?? ""}${item.hasEOL ? "\n" : " "}`)
+        .join("")
+        .trim(),
+      width: viewport.width,
+      height: viewport.height,
+    };
+  });
   loader.loadPdfOutline.mockResolvedValue([]);
+  backend.saveBookPages.mockImplementation(async (
+    _bookId: string,
+    pages: Array<{ pageNumber: number }>,
+  ) => pages.at(-1)?.pageNumber ?? 0);
+  backend.searchBook.mockResolvedValue([]);
 });
 
 describe("PdfReader", () => {
@@ -830,6 +864,107 @@ describe("PdfReader", () => {
     fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
     fireEvent.click(await screen.findByRole("button", { name: /巨大なセクション/ }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(4));
+  });
+
+  it("extracts every PDF page in bounded background batches and reports progress", async () => {
+    const page = makePage({
+      getTextContent: vi.fn(async () => ({
+        items: [
+          { str: "Indexed", hasEOL: true },
+          { str: "page", hasEOL: false },
+        ],
+      })),
+    });
+    const pdfDocument = makeDocument(page);
+    pdfDocument.numPages = 18;
+    resolveDocument(pdfDocument);
+    render(
+      <PdfReader book={makeBook("/book/1", 0)} onPageContextChange={vi.fn()} />,
+    );
+
+    await waitFor(() => expect(backend.saveBookPages).toHaveBeenCalledTimes(2));
+    const firstBatch = backend.saveBookPages.mock.calls[0][1];
+    const secondBatch = backend.saveBookPages.mock.calls[1][1];
+    expect(firstBatch).toHaveLength(16);
+    expect(firstBatch[0]).toEqual({
+      pageNumber: 1,
+      text: "Indexed\npage",
+      width: 200,
+      height: 100,
+    });
+    expect(firstBatch.at(-1)?.pageNumber).toBe(16);
+    expect(secondBatch.map((entry: { pageNumber: number }) => entry.pageNumber)).toEqual([17, 18]);
+    expect(backend.saveBookPages).toHaveBeenLastCalledWith("book-1", secondBatch, 18);
+
+    fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
+    expect(await screen.findByText("18ページを検索できます")).toBeTruthy();
+  });
+
+  it("searches the indexed book, highlights excerpts, and jumps to a result page", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 6;
+    resolveDocument(pdfDocument);
+    backend.searchBook.mockResolvedValue([
+      {
+        pageNumber: 4,
+        excerpt: "A bounded context builder keeps evidence visible.",
+        matchCount: 2,
+      },
+      {
+        pageNumber: 6,
+        excerpt: "Another context builder appears here.",
+        matchCount: 1,
+      },
+    ]);
+    render(
+      <PdfReader book={makeBook("/book/1", 6)} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    let input = await screen.findByRole("searchbox", { name: "本の中を検索" });
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(input));
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    expect(screen.queryByRole("searchbox", { name: "本の中を検索" })).toBeNull();
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    input = await screen.findByRole("searchbox", { name: "本の中を検索" });
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(input));
+    fireEvent.change(input, { target: { value: "context builder" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(backend.searchBook).toHaveBeenCalledWith("book-1", "context builder"));
+    expect(await screen.findByText("2ページで見つかりました")).toBeTruthy();
+    expect(globalThis.document.querySelectorAll(".reader-search-excerpt mark")).toHaveLength(4);
+    expect(screen.getByText("一致 2")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "4ページへ移動" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(4));
+    expect(screen.getByRole("button", { name: "4ページへ移動" }).className).toContain("is-active");
+  });
+
+  it("keeps reading available when background indexing or search fails", async () => {
+    const pdfDocument = makeDocument();
+    resolveDocument(pdfDocument);
+    backend.saveBookPages.mockRejectedValue(new Error("index unavailable"));
+    backend.searchBook.mockRejectedValue(new Error("search unavailable"));
+    render(
+      <PdfReader book={makeBook("/book/1", 0)} onPageContextChange={vi.fn()} />,
+    );
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
+    expect(await screen.findByText("本文の準備が中断しました")).toBeTruthy();
+    const input = screen.getByRole("searchbox", { name: "本の中を検索" });
+    fireEvent.change(input, { target: { value: "evidence" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "search unavailable");
+
+    fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
   });
 
   it("does not publish scale or text after an in-flight render is unmounted", async () => {

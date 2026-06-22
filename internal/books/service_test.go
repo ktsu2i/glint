@@ -16,12 +16,12 @@ import (
 )
 
 type harness struct {
-	t        *testing.T
-	root     string
-	dataDir  string
-	store    *library.Store
-	assets   *assetserver.Server
-	service  *Service
+	t       *testing.T
+	root    string
+	dataDir string
+	store   *library.Store
+	assets  *assetserver.Server
+	service *Service
 }
 
 func newHarness(t *testing.T) *harness {
@@ -212,4 +212,30 @@ func TestLibraryRegeneratesCoverWhenCacheOrPDFChanges(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "pending", opened.CoverStatus)
 	assert.Greater(t, opened.Size, book.Size)
+}
+
+func TestServiceIndexesAndSearchesBookPages(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Searchable.pdf", "%PDF-1.7\nfixture")
+	book, err := h.service.selectPDF(path)
+	require.NoError(t, err)
+	assert.Zero(t, book.IndexedPageCount)
+
+	count, err := h.service.SaveBookPages(book.ID, []BookPageInput{
+		{PageNumber: 1, Text: "Evidence from the first page.", Width: 612, Height: 792},
+		{PageNumber: 2, Text: "A retrieval pipeline returns evidence.", Width: 612, Height: 792},
+	}, 2)
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+
+	results, err := h.service.SearchBook(book.ID, "retrieval evidence")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 2, results[0].PageNumber)
+
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, opened.IndexedPageCount)
+	_, err = h.service.SearchBook(book.ID, "   ")
+	assert.Error(t, err)
 }

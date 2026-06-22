@@ -15,13 +15,27 @@ import (
 )
 
 type BookFile struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	Size        int64  `json:"size"`
-	InitialPage int    `json:"initialPage"`
-	CoverStatus string `json:"coverStatus"`
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	Name             string `json:"name"`
+	URL              string `json:"url"`
+	Size             int64  `json:"size"`
+	InitialPage      int    `json:"initialPage"`
+	IndexedPageCount int    `json:"indexedPageCount"`
+	CoverStatus      string `json:"coverStatus"`
+}
+
+type BookPageInput struct {
+	PageNumber int     `json:"pageNumber"`
+	Text       string  `json:"text"`
+	Width      float64 `json:"width"`
+	Height     float64 `json:"height"`
+}
+
+type BookSearchResult struct {
+	PageNumber int    `json:"pageNumber"`
+	Excerpt    string `json:"excerpt"`
+	MatchCount int    `json:"matchCount"`
 }
 
 type BookSummary struct {
@@ -224,6 +238,46 @@ func (s *Service) SaveReadingPosition(bookID string, pageNumber, pageCount int) 
 	return s.library.SaveReadingPosition(context.Background(), bookID, pageNumber, pageCount, time.Now())
 }
 
+// SaveBookPages persists a bounded extraction batch produced by PDF.js. It
+// returns the total indexed page count so the reader can report progress.
+func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount int) (int, error) {
+	inputs := make([]library.BookPage, len(pages))
+	for i, page := range pages {
+		inputs[i] = library.BookPage{
+			PageNumber: page.PageNumber,
+			Text:       page.Text,
+			Width:      page.Width,
+			Height:     page.Height,
+		}
+	}
+	count, err := s.library.SaveBookPages(
+		context.Background(), bookID, inputs, pageCount, time.Now(),
+	)
+	if errors.Is(err, library.ErrInvalidBookPageBatch) {
+		return 0, errors.New("PDF page indexの内容が不正です。")
+	}
+	return count, err
+}
+
+func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
+	results, err := s.library.SearchBookPages(context.Background(), bookID, query, 50)
+	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
+		return nil, errors.New("検索語は1〜200文字で入力してください。")
+	}
+	if err != nil {
+		return nil, err
+	}
+	output := make([]BookSearchResult, len(results))
+	for i, result := range results {
+		output[i] = BookSearchResult{
+			PageNumber: result.PageNumber,
+			Excerpt:    result.Excerpt,
+			MatchCount: result.MatchCount,
+		}
+	}
+	return output, nil
+}
+
 func (s *Service) selectPDF(path string) (BookFile, error) {
 	fileHash, size, err := inspectPDF(path)
 	if err != nil {
@@ -248,18 +302,23 @@ func (s *Service) bookFile(book library.Book) (BookFile, error) {
 	if err != nil {
 		return BookFile{}, err
 	}
+	indexedPageCount, err := s.library.BookPageCount(context.Background(), book.ID)
+	if err != nil {
+		return BookFile{}, err
+	}
 	coverStatus := book.CoverThumbnailStatus
 	if coverStatus == "failed" {
 		coverStatus = "pending"
 	}
 	return BookFile{
-		ID:          book.ID,
-		Title:       book.Display(),
-		Name:        book.FileName,
-		URL:         url,
-		Size:        book.SizeBytes,
-		InitialPage: max(1, book.LastPage),
-		CoverStatus: coverStatus,
+		ID:               book.ID,
+		Title:            book.Display(),
+		Name:             book.FileName,
+		URL:              url,
+		Size:             book.SizeBytes,
+		InitialPage:      max(1, book.LastPage),
+		IndexedPageCount: indexedPageCount,
+		CoverStatus:      coverStatus,
 	}, nil
 }
 

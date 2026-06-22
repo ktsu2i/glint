@@ -1,5 +1,5 @@
 export namespace books {
-	
+
 	export class BookFile {
 	    id: string;
 	    title: string;
@@ -7,12 +7,13 @@ export namespace books {
 	    url: string;
 	    size: number;
 	    initialPage: number;
+	    indexedPageCount: number;
 	    coverStatus: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BookFile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -21,7 +22,42 @@ export namespace books {
 	        this.url = source["url"];
 	        this.size = source["size"];
 	        this.initialPage = source["initialPage"];
+	        this.indexedPageCount = source["indexedPageCount"];
 	        this.coverStatus = source["coverStatus"];
+	    }
+	}
+	export class BookPageInput {
+	    pageNumber: number;
+	    text: string;
+	    width: number;
+	    height: number;
+
+	    static createFrom(source: any = {}) {
+	        return new BookPageInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pageNumber = source["pageNumber"];
+	        this.text = source["text"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	    }
+	}
+	export class BookSearchResult {
+	    pageNumber: number;
+	    excerpt: string;
+	    matchCount: number;
+
+	    static createFrom(source: any = {}) {
+	        return new BookSearchResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pageNumber = source["pageNumber"];
+	        this.excerpt = source["excerpt"];
+	        this.matchCount = source["matchCount"];
 	    }
 	}
 	export class BookSummary {
@@ -36,11 +72,11 @@ export namespace books {
 	    coverUrl: string;
 	    coverStatus: string;
 	    available: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BookSummary(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -60,18 +96,18 @@ export namespace books {
 }
 
 export namespace llm {
-	
+
 	export class ChatRequest {
 	    requestId: string;
 	    question: string;
 	    contextText: string;
 	    bookName: string;
 	    pageNumber: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ChatRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.requestId = source["requestId"];
@@ -104,11 +140,11 @@ export namespace settings {
 	    zdr: boolean;
 	    hasApiKey: boolean;
 	    configured: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LLMSettings(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.provider = source["provider"];
@@ -135,11 +171,11 @@ export namespace settings {
 	    apiKey: string;
 	    zdr: boolean;
 	    clearApiKey: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SaveLLMSettingsRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.model = source["model"];

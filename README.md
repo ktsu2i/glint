@@ -13,13 +13,15 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 - 前後ページ移動とzoom
 - current page textの抽出と送信前preview
 - current page textを明示的に含める／含めないchat操作
+- PDFを開いたままpage textをbackgroundでlocal indexへ保存する
+- `⌘F` / `Ctrl+F`またはReader toolbarから1冊内を全文検索し、結果pageへ移動する
 - Goのprovider-neutral gatewayを通したOpenRouter streaming answer
 - OpenRouter model、API key、Zero Data Retentionの設定UI
 - light / dark / system theme切替と、選択内容のlocal保存
 - API keyのOS credential store保存。SQLiteにはmodelとprivacy設定だけを保存
 - token付きlocal endpointによるPDF配信。frontendへlocal pathは渡さない
 
-repo indexing、book-to-repo mappingはまだ含みません。
+section / chunk抽出、Library横断検索、repo indexing、book-to-repo mappingはまだ含みません。
 
 ## OpenRouter設定
 

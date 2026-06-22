@@ -138,6 +138,10 @@ export default function App() {
     setSelection(next);
   }, []);
 
+  const handleIndexedPageCountChange = useCallback((count: number) => {
+    setBook((current) => current ? { ...current, indexedPageCount: count } : current);
+  }, []);
+
   async function handleImportPDF() {
     setOpening(true);
     setOpenError("");
@@ -392,6 +396,7 @@ export default function App() {
                   initialPage={book?.initialPage ?? 1}
                   onPageContextChange={handlePageContextChange}
                   onSelectionChange={handleSelectionChange}
+                  onIndexedPageCountChange={handleIndexedPageCountChange}
                 />
 
                 <div

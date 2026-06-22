@@ -9,7 +9,9 @@ const bindings = vi.hoisted(() => ({
   removeBook: vi.fn(),
   renameBook: vi.fn(),
   saveBookCover: vi.fn(),
+  saveBookPages: vi.fn(),
   saveReadingPosition: vi.fn(),
+  searchBook: vi.fn(),
   getAppearanceSettings: vi.fn(),
   getLLMSettings: vi.fn(),
   saveAppearanceSettings: vi.fn(),
@@ -28,7 +30,9 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   RemoveBook: bindings.removeBook,
   RenameBook: bindings.renameBook,
   SaveBookCover: bindings.saveBookCover,
+  SaveBookPages: bindings.saveBookPages,
   SaveReadingPosition: bindings.saveReadingPosition,
+  SearchBook: bindings.searchBook,
 }));
 
 vi.mock("../../../wailsjs/go/chat/Service", () => ({
@@ -59,8 +63,10 @@ import {
   removeBook,
   renameBook,
   saveBookCover,
+  saveBookPages,
   saveAppearanceSettings,
   saveReadingPosition,
+  searchBook,
   saveLLMSettings,
   startChat,
 } from "./backend";
@@ -123,6 +129,8 @@ describe("backend facade", () => {
     bindings.relinkPDF.mockResolvedValue(book);
     bindings.removeBook.mockResolvedValue(true);
     bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
+    bindings.saveBookPages.mockResolvedValue(2);
+    bindings.searchBook.mockResolvedValue([{ pageNumber: 2, excerpt: "match", matchCount: 1 }]);
 
     await expect(listBooks()).resolves.toEqual(summaries);
     await expect(openBook("book-1")).resolves.toEqual(book);
@@ -133,10 +141,20 @@ describe("backend facade", () => {
       title: "Renamed",
     });
     await saveReadingPosition("book-1", 3, 10);
+    await expect(saveBookPages("book-1", [{
+      pageNumber: 1, text: "page text", width: 612, height: 792,
+    }], 10)).resolves.toBe(2);
+    await expect(searchBook("book-1", "page")).resolves.toEqual([
+      { pageNumber: 2, excerpt: "match", matchCount: 1 },
+    ]);
     await saveBookCover("book-1", "data:image/png;base64,cover");
     await markBookCoverFailed("book-1");
 
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10);
+    expect(bindings.saveBookPages).toHaveBeenCalledWith("book-1", [{
+      pageNumber: 1, text: "page text", width: 612, height: 792,
+    }], 10);
+    expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
     expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
     expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
     expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");

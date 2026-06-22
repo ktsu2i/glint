@@ -18,4 +18,8 @@ export function RenameBook(arg1:string,arg2:string):Promise<books.BookSummary>;
 
 export function SaveBookCover(arg1:string,arg2:string):Promise<void>;
 
+export function SaveBookPages(arg1:string,arg2:Array<books.BookPageInput>,arg3:number):Promise<number>;
+
 export function SaveReadingPosition(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function SearchBook(arg1:string,arg2:string):Promise<Array<books.BookSearchResult>>;

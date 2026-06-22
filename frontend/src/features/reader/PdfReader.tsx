@@ -7,6 +7,7 @@ import {
   CornersIn,
   File,
   ListBullets,
+  MagnifyingGlass,
   Minus,
   Plus,
 } from "@phosphor-icons/react";
@@ -15,12 +16,19 @@ import {
   type PDFDocumentLoadingTask,
   type RenderTask,
 } from "pdfjs-dist";
-import type { BookFile } from "../../shared/api/backend";
+import {
+  saveBookPages,
+  searchBook,
+  type BookFile,
+  type BookPageInput,
+  type BookSearchResult,
+} from "../../shared/api/backend";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
 import {
   createPdfLoadingTask,
   createPdfTextLayer,
+  extractPdfPage,
   loadPdfOutline,
   type OutlineNode,
   type PdfTextLayer,
@@ -30,6 +38,7 @@ const loadTimeoutMilliseconds = 60_000;
 const minScale = 0.4;
 const maxScale = 3;
 const manualZoomStep = 0.1;
+const pageIndexBatchSize = 16;
 
 type FlatOutlineEntry = { path: string; pageNumber: number | null };
 
@@ -47,6 +56,7 @@ function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
+type ReaderPanel = "toc" | "search" | null;
 
 export type ReaderSelection = {
   text: string;
@@ -58,6 +68,7 @@ type PdfReaderProps = {
   initialPage?: number;
   onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
   onSelectionChange?: (selection: ReaderSelection | null) => void;
+  onIndexedPageCountChange?: (count: number) => void;
 };
 
 export function PdfReader({
@@ -65,6 +76,7 @@ export function PdfReader({
   initialPage = 1,
   onPageContextChange,
   onSelectionChange,
+  onIndexedPageCountChange,
 }: PdfReaderProps) {
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
@@ -89,7 +101,17 @@ export function PdfReader({
   const [error, setError] = useState("");
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   const [outlineLoaded, setOutlineLoaded] = useState(false);
-  const [isTocOpen, setIsTocOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
+  const [indexedPageCount, setIndexedPageCount] = useState(0);
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [indexError, setIndexError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [submittedSearchQuery, setSubmittedSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchRequestRef = useRef(0);
 
   const stageNodeRef = useRef<HTMLDivElement | null>(null);
   const wheelCleanupRef = useRef<(() => void) | null>(null);
@@ -152,6 +174,16 @@ export function PdfReader({
       setError("");
       setOutline([]);
       setOutlineLoaded(false);
+      setOpenPanel(null);
+      setIndexedPageCount(0);
+      setIsIndexing(false);
+      setIndexError("");
+      setSearchQuery("");
+      setSubmittedSearchQuery("");
+      setSearchResults([]);
+      searchRequestRef.current += 1;
+      setIsSearching(false);
+      setSearchError("");
       onPageContextChange(0, "", 0);
       return;
     }
@@ -166,6 +198,16 @@ export function PdfReader({
     setDocument(null);
     setOutline([]);
     setOutlineLoaded(false);
+    setOpenPanel(null);
+    setIndexedPageCount(Math.max(0, book.indexedPageCount ?? 0));
+    setIsIndexing(false);
+    setIndexError("");
+    setSearchQuery("");
+    setSubmittedSearchQuery("");
+    setSearchResults([]);
+    searchRequestRef.current += 1;
+    setIsSearching(false);
+    setSearchError("");
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
@@ -220,7 +262,78 @@ export function PdfReader({
       abortController.abort();
       void loadingTask?.destroy();
     };
-  }, [book, initialPage, onPageContextChange]);
+  }, [book?.id, book?.url, initialPage, onPageContextChange]);
+
+  useEffect(() => {
+    if (!document || !book) {
+      return;
+    }
+    let active = true;
+    const pageCount = document.numPages;
+    const firstMissingPage = Math.min(pageCount, Math.max(0, book.indexedPageCount ?? 0)) + 1;
+    setIndexedPageCount(firstMissingPage - 1);
+    setIndexError("");
+    if (firstMissingPage > pageCount) {
+      setIsIndexing(false);
+      return;
+    }
+    setIsIndexing(true);
+
+    async function indexPages() {
+      let batch: BookPageInput[] = [];
+      for (let number = firstMissingPage; number <= pageCount; number += 1) {
+        const page = await extractPdfPage(document!, number);
+        if (!active) {
+          return;
+        }
+        batch.push(page);
+        if (batch.length === pageIndexBatchSize || number === pageCount) {
+          const persistedCount = await saveBookPages(book!.id, batch, pageCount);
+          if (!active) {
+            return;
+          }
+          setIndexedPageCount(persistedCount);
+          batch = [];
+        }
+      }
+      if (active) {
+        setIsIndexing(false);
+        onIndexedPageCountChange?.(pageCount);
+      }
+    }
+
+    void indexPages().catch((reason: unknown) => {
+      if (!active) {
+        return;
+      }
+      setIsIndexing(false);
+      setIndexError(reason instanceof Error ? reason.message : "本文を検索用に準備できませんでした。");
+    });
+    return () => {
+      active = false;
+    };
+  }, [book, document, onIndexedPageCountChange]);
+
+  useEffect(() => {
+    if (openPanel !== "search") {
+      return;
+    }
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [openPanel]);
+
+  useEffect(() => {
+    if (!document) {
+      return;
+    }
+    function openSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setOpenPanel((panel) => panel === "search" ? null : "search");
+      }
+    }
+    window.addEventListener("keydown", openSearch);
+    return () => window.removeEventListener("keydown", openSearch);
+  }, [document]);
 
   useEffect(() => {
     if (!document) {
@@ -530,6 +643,39 @@ export function PdfReader({
     setPageNumber(clamped);
   }, [document]);
 
+  const submitBookSearch = useCallback(async () => {
+    if (!book) {
+      return;
+    }
+    const query = searchQuery.trim();
+    if (!query) {
+      setSubmittedSearchQuery("");
+      setSearchResults([]);
+      setSearchError("");
+      return;
+    }
+    const request = searchRequestRef.current + 1;
+    searchRequestRef.current = request;
+    setIsSearching(true);
+    setSearchError("");
+    setSubmittedSearchQuery(query);
+    try {
+      const results = await searchBook(book.id, query);
+      if (searchRequestRef.current === request) {
+        setSearchResults(results);
+      }
+    } catch (reason) {
+      if (searchRequestRef.current === request) {
+        setSearchResults([]);
+        setSearchError(reason instanceof Error ? reason.message : "本の中を検索できませんでした。");
+      }
+    } finally {
+      if (searchRequestRef.current === request) {
+        setIsSearching(false);
+      }
+    }
+  }, [book, searchQuery]);
+
   if (!book) {
     return (
       <section className="reader-empty" aria-label="PDF reader">
@@ -552,6 +698,8 @@ export function PdfReader({
     ? `${pageNumber}–${rightPageNumber}`
     : `${pageNumber}`;
   const pageInputWidth = Math.max(2, String(numPages || 1).length);
+  const isTocOpen = openPanel === "toc";
+  const isSearchOpen = openPanel === "search";
 
   return (
     <section className="reader" aria-label="PDF reader">
@@ -560,10 +708,18 @@ export function PdfReader({
           <ToolButton
             label={isTocOpen ? "目次を閉じる" : "目次を開く"}
             className={isTocOpen ? "is-active" : ""}
-            onClick={() => setIsTocOpen((open) => !open)}
+            onClick={() => setOpenPanel((panel) => panel === "toc" ? null : "toc")}
             disabled={!document}
           >
             <ListBullets size={15} weight="regular" />
+          </ToolButton>
+          <ToolButton
+            label={isSearchOpen ? "検索を閉じる" : "本の中を検索"}
+            className={isSearchOpen ? "is-active" : ""}
+            onClick={() => setOpenPanel((panel) => panel === "search" ? null : "search")}
+            disabled={!document}
+          >
+            <MagnifyingGlass size={15} weight="bold" />
           </ToolButton>
         </div>
         <div className="reader-controls" aria-label="Page controls">
@@ -654,7 +810,7 @@ export function PdfReader({
         </div>
       </div>
 
-      <div className={`reader-body ${isTocOpen ? "toc-open" : "toc-closed"}`}>
+      <div className={`reader-body ${openPanel ? "toc-open" : "toc-closed"}`}>
         {isTocOpen && (
           <aside className="reader-toc" aria-label="目次">
             <div className="reader-toc-header">
@@ -675,6 +831,83 @@ export function PdfReader({
                   activeKey={activeOutlineKey}
                   onSelect={jumpToOutlinePage}
                 />
+              )}
+            </div>
+          </aside>
+        )}
+        {isSearchOpen && (
+          <aside className="reader-toc reader-search" aria-label="本文検索">
+            <div className="reader-search-header">
+              <form
+                role="search"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitBookSearch();
+                }}
+              >
+                <MagnifyingGlass size={14} aria-hidden="true" />
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  aria-label="本の中を検索"
+                  placeholder="キーワードを入力"
+                  maxLength={200}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+                <button type="submit" disabled={!searchQuery.trim() || isSearching}>
+                  {isSearching ? "検索中" : "検索"}
+                </button>
+              </form>
+              <p className={indexError ? "reader-index-status is-error" : "reader-index-status"} aria-live="polite">
+                {indexError
+                  ? "本文の準備が中断しました"
+                  : isIndexing
+                    ? `本文を準備中 ${indexedPageCount} / ${numPages}`
+                    : indexedPageCount > 0
+                      ? `${indexedPageCount}ページを検索できます`
+                      : "本文を準備しています"}
+              </p>
+            </div>
+            <div className="reader-search-scroll">
+              {searchError ? (
+                <p className="reader-search-message is-error" role="alert">{searchError}</p>
+              ) : !submittedSearchQuery ? (
+                <p className="reader-search-message">本に書かれている用語やコード名を検索します。</p>
+              ) : isSearching ? (
+                <p className="reader-search-message">「{submittedSearchQuery}」を検索しています…</p>
+              ) : searchResults.length === 0 ? (
+                <p className="reader-search-message">
+                  {isIndexing
+                    ? `準備済みの${indexedPageCount}ページでは「${submittedSearchQuery}」は見つかりませんでした。`
+                    : `「${submittedSearchQuery}」は見つかりませんでした。`}
+                </p>
+              ) : (
+                <>
+                  <p className="reader-search-count">
+                    {searchResults.length}ページで見つかりました
+                  </p>
+                  <ol className="reader-search-results">
+                    {searchResults.map((result) => (
+                      <li key={result.pageNumber}>
+                        <button
+                          type="button"
+                          className={result.pageNumber === pageNumber ? "is-active" : ""}
+                          aria-label={`${result.pageNumber}ページへ移動`}
+                          onClick={() => jumpToOutlinePage(result.pageNumber)}
+                        >
+                          <span className="reader-search-result-meta">
+                            <strong>PAGE {String(result.pageNumber).padStart(3, "0")}</strong>
+                            <span>一致 {result.matchCount}</span>
+                          </span>
+                          <span className="reader-search-excerpt">
+                            <HighlightedExcerpt text={result.excerpt} query={submittedSearchQuery} />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </>
               )}
             </div>
           </aside>
@@ -760,5 +993,23 @@ function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineL
         );
       })}
     </ul>
+  );
+}
+
+function HighlightedExcerpt({ text, query }: { text: string; query: string }) {
+  const terms = [...new Set(query.trim().split(/\s+/).filter(Boolean))]
+    .sort((left, right) => right.length - left.length);
+  if (terms.length === 0) {
+    return text;
+  }
+  const expression = new RegExp(
+    `(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
+    "giu",
+  );
+  const foldedTerms = new Set(terms.map((term) => term.toLocaleLowerCase()));
+  return text.split(expression).map((part, index) =>
+    foldedTerms.has(part.toLocaleLowerCase())
+      ? <mark key={`${index}-${part}`}>{part}</mark>
+      : part,
   );
 }

@@ -64,6 +64,7 @@ const openedBook = {
   url: "/book/1",
   size: 10,
   initialPage: 3,
+  indexedPageCount: 0,
   coverStatus: "ready" as const,
 };
 

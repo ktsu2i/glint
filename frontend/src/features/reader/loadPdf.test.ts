@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import generatedReaderPdf from "../../../testdata/generated-reader.pdf?raw";
-import { createPdfLoadingTask } from "./loadPdf";
+import { createPdfLoadingTask, extractPdfPage } from "./loadPdf";
 
 function createOnePagePdf(): Uint8Array {
   const encoder = new TextEncoder();
@@ -40,6 +40,7 @@ describe("createPdfLoadingTask", () => {
     const outline = await document.getOutline();
     const firstPage = await document.getPage(1);
     const text = await firstPage.getTextContent();
+    const extracted = await extractPdfPage(document, 1);
 
     expect(document.numPages).toBe(3);
     expect(outline?.map((item) => item.title)).toEqual([
@@ -49,6 +50,12 @@ describe("createPdfLoadingTask", () => {
     expect(
       text.items.some((item) => "str" in item && item.str.includes("Context Budgets")),
     ).toBe(true);
+    expect(extracted).toEqual(expect.objectContaining({
+      pageNumber: 1,
+      text: expect.stringContaining("Context Budgets"),
+      width: 612,
+      height: 792,
+    }));
     await task.destroy();
   });
 

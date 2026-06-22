@@ -349,18 +349,30 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 	}
 	fileName := filepath.Base(sourcePath)
 	title := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-	err = store.db.WithContext(ctx).Model(&bookRecord{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"title":                  title,
-			"file_name":              fileName,
-			"source_path":            sourcePath,
-			"file_hash":              fileHash,
-			"size_bytes":             size,
-			"cover_thumbnail_path":   coverPath,
-			"cover_thumbnail_status": coverStatus,
-			"updated_at":             timestamp,
-		}).Error
+	pageCount := book.PageCount
+	if fileHash != book.FileHash {
+		pageCount = 0
+	}
+	err = store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if fileHash != book.FileHash {
+			if err := tx.Where("book_id = ?", id).Delete(&bookPageRecord{}).Error; err != nil {
+				return fmt.Errorf("clear stale book pages: %w", err)
+			}
+		}
+		return tx.Model(&bookRecord{}).
+			Where("id = ?", id).
+			Updates(map[string]any{
+				"title":                  title,
+				"file_name":              fileName,
+				"source_path":            sourcePath,
+				"file_hash":              fileHash,
+				"size_bytes":             size,
+				"page_count":             pageCount,
+				"cover_thumbnail_path":   coverPath,
+				"cover_thumbnail_status": coverStatus,
+				"updated_at":             timestamp,
+			}).Error
+	})
 	if err != nil {
 		return Book{}, fmt.Errorf("relink book: %w", err)
 	}

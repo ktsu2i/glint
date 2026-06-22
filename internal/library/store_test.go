@@ -20,7 +20,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 3, version)
+	assert.Equal(t, 4, version)
 
 	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", 120, now)
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 3, version)
+	assert.Equal(t, 4, version)
 	var settingsTable string
 	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
 	assert.Equal(t, "app_settings", settingsTable)
@@ -137,6 +137,10 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
 	require.NoError(t, err)
 	require.NoError(t, store.SaveReadingPosition(context.Background(), book.ID, 4, 10, now))
+	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{{
+		PageNumber: 1, Text: "persisted text", Width: 612, Height: 792,
+	}}, 10, now)
+	require.NoError(t, err)
 
 	require.NoError(t, store.Remove(context.Background(), book.ID))
 	_, err = store.Get(context.Background(), book.ID)
@@ -146,6 +150,114 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 	var remaining int
 	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_reading_states WHERE book_id = ?", book.ID).Row().Scan(&remaining))
 	assert.Equal(t, 0, remaining)
+	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_pages WHERE book_id = ?", book.ID).Row().Scan(&remaining))
+	assert.Equal(t, 0, remaining)
+}
+
+func TestStoreSavesAndSearchesBookPages(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Search.pdf", "hash-1", 10, now)
+	require.NoError(t, err)
+
+	count, err := store.SaveBookPages(context.Background(), book.ID, []BookPage{
+		{PageNumber: 1, Text: "A context builder keeps requests focused.", Width: 612, Height: 792},
+		{PageNumber: 2, Text: "Context builder. Context builder. Evidence remains visible.", Width: 612, Height: 792},
+		{PageNumber: 3, Text: "日本語の全文検索でも文中の検索語を見つける。", Width: 612, Height: 792},
+		{PageNumber: 4, Text: "A literal %_ token must not become a wildcard.", Width: 612, Height: 792},
+	}, 4, now)
+	require.NoError(t, err)
+	assert.Equal(t, 4, count)
+
+	results, err := store.SearchBookPages(context.Background(), book.ID, "CONTEXT builder", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Equal(t, 2, results[0].PageNumber, "more phrase occurrences should rank first")
+	assert.Contains(t, results[0].Excerpt, "Evidence remains visible")
+	assert.GreaterOrEqual(t, results[0].MatchCount, 4)
+
+	results, err = store.SearchBookPages(context.Background(), book.ID, "検索語", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 3, results[0].PageNumber)
+	results, err = store.SearchBookPages(context.Background(), book.ID, "%_", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 4, results[0].PageNumber)
+
+	count, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{
+		{PageNumber: 2, Text: "This page was replaced.", Width: 600, Height: 800},
+	}, 4, now.Add(time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, 4, count)
+	results, err = store.SearchBookPages(context.Background(), book.ID, "context builder", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 1, results[0].PageNumber)
+}
+
+func TestStorePersistsBookPagesAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	now := time.Now()
+	store, err := Open(path)
+	require.NoError(t, err)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Persistent Search.pdf", "hash-1", 10, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{
+		{PageNumber: 1, Text: "Persistent lexical evidence.", Width: 612, Height: 792},
+	}, 1, now)
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	store, err = Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	count, err := store.BookPageCount(context.Background(), book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	results, err := store.SearchBookPages(context.Background(), book.ID, "lexical evidence", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 1, results[0].PageNumber)
+}
+
+func TestStoreClearsIndexedPagesWhenPDFContentChanges(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{
+		{PageNumber: 1, Text: "stale index", Width: 612, Height: 792},
+	}, 1, now)
+	require.NoError(t, err)
+
+	relinked, err := store.Relink(context.Background(), book.ID, "/tmp/Guide.pdf", "hash-2", 11, now.Add(time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, 0, relinked.PageCount)
+	count, err := store.BookPageCount(context.Background(), book.ID)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+}
+
+func TestStoreValidatesBookPageAndSearchInputs(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, time.Now())
+	require.NoError(t, err)
+
+	_, err = store.SaveBookPages(context.Background(), book.ID, nil, 1, time.Now())
+	assert.ErrorIs(t, err, ErrInvalidBookPageBatch)
+	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{{PageNumber: 2}}, 1, time.Now())
+	assert.ErrorIs(t, err, ErrInvalidBookPageBatch)
+	_, err = store.SearchBookPages(context.Background(), book.ID, "   ", 20)
+	assert.ErrorIs(t, err, ErrInvalidBookSearchQuery)
+	_, err = store.SearchBookPages(context.Background(), "missing", "query", 20)
+	assert.ErrorIs(t, err, ErrBookNotFound)
 }
 
 func TestStoreRenamesBookDisplayNameIndependentlyOfFileName(t *testing.T) {
