@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderBase, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
@@ -12,6 +13,11 @@ vi.mock("../../shared/api/backend", () => ({
 }));
 
 import { LLMSettingsPage } from "./LLMSettingsPage";
+import { I18nProvider } from "../../shared/i18n/I18n";
+
+function render(ui: ReactNode) {
+  return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
+}
 
 const configuredSettings = {
   provider: "openrouter" as const,

@@ -35,8 +35,8 @@ func main() {
 	defer func() { _ = store.Close() }()
 
 	assetSrv := assetserver.New()
-	booksSvc := books.New(store, assetSrv, dataDirectory)
 	settingsManager := settings.NewManager(store, settings.KeyringStore{})
+	booksSvc := books.New(store, assetSrv, dataDirectory, settingsManager)
 	settingsSvc := settings.NewService(settingsManager)
 	chatSvc := chat.NewConfigured(settingsManager)
 

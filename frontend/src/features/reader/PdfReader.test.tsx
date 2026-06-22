@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as renderBase, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loader = vi.hoisted(() => ({
@@ -43,6 +44,11 @@ vi.mock("../../shared/components/ToolButton", () => ({
 }));
 
 import { PdfReader } from "./PdfReader";
+import { I18nProvider } from "../../shared/i18n/I18n";
+
+function render(ui: ReactNode) {
+  return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
+}
 import type { BookFile } from "../../shared/api/backend";
 
 type ResizeCallback = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;

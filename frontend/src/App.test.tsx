@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => ({
   saveReadingPosition: vi.fn(),
   generateCoverThumbnail: vi.fn(),
   getAppearanceSettings: vi.fn(),
+  getLanguageSettings: vi.fn(),
   getLLMSettings: vi.fn(),
   saveAppearanceSettings: vi.fn(),
+  saveLanguageSettings: vi.fn(),
   saveLLMSettings: vi.fn(),
 }));
 
@@ -29,8 +31,10 @@ vi.mock("./shared/api/backend", () => ({
   saveBookCover: mocks.saveBookCover,
   saveReadingPosition: mocks.saveReadingPosition,
   getAppearanceSettings: mocks.getAppearanceSettings,
+  getLanguageSettings: mocks.getLanguageSettings,
   getLLMSettings: mocks.getLLMSettings,
   saveAppearanceSettings: mocks.saveAppearanceSettings,
+  saveLanguageSettings: mocks.saveLanguageSettings,
   saveLLMSettings: mocks.saveLLMSettings,
 }));
 vi.mock("./features/library/generateCover", () => ({
@@ -94,7 +98,9 @@ beforeEach(() => {
   mocks.markBookCoverFailed.mockResolvedValue(undefined);
   mocks.generateCoverThumbnail.mockResolvedValue("data:image/png;base64,cover");
   mocks.getAppearanceSettings.mockResolvedValue({ theme: "system" });
+  mocks.getLanguageSettings.mockResolvedValue({ language: "ja" });
   mocks.saveAppearanceSettings.mockImplementation(async (theme: string) => ({ theme }));
+  mocks.saveLanguageSettings.mockImplementation(async (language: string) => ({ language }));
   mocks.getLLMSettings.mockResolvedValue({
     provider: "openrouter",
     model: "provider/model",
@@ -105,6 +111,34 @@ beforeEach(() => {
 });
 
 describe("App", () => {
+  it("defaults to English and switches the interface to Japanese from Settings", async () => {
+    mocks.getLanguageSettings.mockResolvedValue({ language: "en" });
+    render(<App />);
+
+    expect(await screen.findByText("Add your first book.")).toBeTruthy();
+    expect(document.documentElement.lang).toBe("en");
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Japanese/ }));
+
+    await waitFor(() => expect(mocks.saveLanguageSettings).toHaveBeenCalledWith("ja"));
+    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
+    expect(document.documentElement.lang).toBe("ja");
+  });
+
+  it("rolls back the language when persistence fails", async () => {
+    mocks.getLanguageSettings.mockResolvedValue({ language: "en" });
+    mocks.saveLanguageSettings.mockRejectedValue(new Error("language storage unavailable"));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Japanese/ }));
+
+    expect(await screen.findByText("language storage unavailable")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
   it("starts in the library, imports a PDF, saves page context, and returns", async () => {
     let resolveEmpty!: (value: typeof openedBook) => void;
     mocks.openPDF.mockReturnValueOnce(new Promise((resolve) => {

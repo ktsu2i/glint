@@ -25,6 +25,8 @@ import {
 } from "../../shared/api/backend";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
+import { useI18n } from "../../shared/i18n/I18n";
+import { LocalizedError } from "../../shared/i18n/error";
 import {
   createPdfLoadingTask,
   createPdfTextLayer,
@@ -78,6 +80,7 @@ export function PdfReader({
   onSelectionChange,
   onIndexedPageCountChange,
 }: PdfReaderProps) {
+  const { t } = useI18n();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
   const textLayerLeftRef = useRef<HTMLDivElement>(null);
@@ -240,10 +243,12 @@ export function PdfReader({
         if (active) {
           setError(
             timedOut
-              ? "PDFの読み込みがタイムアウトしました。アプリを再起動して、もう一度開いてください。"
-              : reason instanceof Error
+              ? t("error.pdfTimeout")
+              : reason instanceof LocalizedError
+                ? t(reason.translationKey, reason.values)
+                : reason instanceof Error
                 ? reason.message
-                : "PDFを開けませんでした。",
+                : t("error.openPdf"),
           );
         }
       } finally {
@@ -262,7 +267,7 @@ export function PdfReader({
       abortController.abort();
       void loadingTask?.destroy();
     };
-  }, [book?.id, book?.url, initialPage, onPageContextChange]);
+  }, [book?.id, book?.url, initialPage, onPageContextChange, t]);
 
   useEffect(() => {
     if (!document || !book) {
@@ -307,12 +312,12 @@ export function PdfReader({
         return;
       }
       setIsIndexing(false);
-      setIndexError(reason instanceof Error ? reason.message : "本文を検索用に準備できませんでした。");
+      setIndexError(reason instanceof Error ? reason.message : t("error.indexBook"));
     });
     return () => {
       active = false;
     };
-  }, [book, document, onIndexedPageCountChange]);
+  }, [book, document, onIndexedPageCountChange, t]);
 
   useEffect(() => {
     if (openPanel !== "search") {
@@ -457,7 +462,7 @@ export function PdfReader({
         const viewport = viewports[i];
         const context = canvas.getContext("2d");
         if (!context) {
-          throw new Error("Canvasを初期化できませんでした。");
+          throw new Error(t("error.canvas"));
         }
         canvas.width = Math.floor(viewport.width * outputScale);
         canvas.height = Math.floor(viewport.height * outputScale);
@@ -536,7 +541,7 @@ export function PdfReader({
 
     renderPages().catch((reason: unknown) => {
       if (active && !(reason instanceof Error && reason.name === "RenderingCancelledException")) {
-        setError(reason instanceof Error ? reason.message : "ページを描画できませんでした。");
+        setError(reason instanceof Error ? reason.message : t("error.renderPage"));
       }
     });
 
@@ -545,7 +550,7 @@ export function PdfReader({
       renderTasks.forEach((task) => task.cancel());
       textLayers.forEach((layer) => layer.cancel());
     };
-  }, [document, onPageContextChange, pageNumber, stageSize, viewMode, zoomMode]);
+  }, [document, onPageContextChange, pageNumber, stageSize, t, viewMode, zoomMode]);
 
   useEffect(() => {
     function handleSelectionChange() {
@@ -667,25 +672,25 @@ export function PdfReader({
     } catch (reason) {
       if (searchRequestRef.current === request) {
         setSearchResults([]);
-        setSearchError(reason instanceof Error ? reason.message : "本の中を検索できませんでした。");
+        setSearchError(reason instanceof Error ? reason.message : t("error.searchBook"));
       }
     } finally {
       if (searchRequestRef.current === request) {
         setIsSearching(false);
       }
     }
-  }, [book, searchQuery]);
+  }, [book, searchQuery, t]);
 
   if (!book) {
     return (
-      <section className="reader-empty" aria-label="PDF reader">
+      <section className="reader-empty" aria-label={t("reader.aria")}>
         <div className="empty-reading-symbol" aria-hidden="true">
           <BookOpenText size={34} weight="thin" />
           <span />
         </div>
-        <p className="section-label">Reading desk</p>
-        <h2>本とコードのあいだを読む。</h2>
-        <p>検索可能な技術書PDFを開いてください。ページ本文は、必要なときだけ質問に添付できます。</p>
+        <p className="section-label">{t("reader.emptyKicker")}</p>
+        <h2>{t("reader.emptyTitle")}</h2>
+        <p>{t("reader.emptyDescription")}</p>
       </section>
     );
   }
@@ -702,11 +707,11 @@ export function PdfReader({
   const isSearchOpen = openPanel === "search";
 
   return (
-    <section className="reader" aria-label="PDF reader">
+    <section className="reader" aria-label={t("reader.aria")}>
       <div className="reader-toolbar">
         <div className="reader-section-label">
           <ToolButton
-            label={isTocOpen ? "目次を閉じる" : "目次を開く"}
+            label={isTocOpen ? t("reader.closeToc") : t("reader.openToc")}
             className={isTocOpen ? "is-active" : ""}
             onClick={() => setOpenPanel((panel) => panel === "toc" ? null : "toc")}
             disabled={!document}
@@ -714,7 +719,7 @@ export function PdfReader({
             <ListBullets size={15} weight="regular" />
           </ToolButton>
           <ToolButton
-            label={isSearchOpen ? "検索を閉じる" : "本の中を検索"}
+            label={isSearchOpen ? t("reader.closeSearch") : t("reader.openSearch")}
             className={isSearchOpen ? "is-active" : ""}
             onClick={() => setOpenPanel((panel) => panel === "search" ? null : "search")}
             disabled={!document}
@@ -722,9 +727,9 @@ export function PdfReader({
             <MagnifyingGlass size={15} weight="bold" />
           </ToolButton>
         </div>
-        <div className="reader-controls" aria-label="Page controls">
+        <div className="reader-controls" aria-label={t("reader.pageControls")}>
           <ToolButton
-            label="前のページ"
+            label={t("reader.previousPage")}
             disabled={pageNumber <= 1}
             onClick={() => setPageNumber((current) => Math.max(1, current - step))}
           >
@@ -744,7 +749,7 @@ export function PdfReader({
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                aria-label="ページ番号"
+                aria-label={t("reader.pageNumber")}
                 value={pageInput}
                 size={pageInputWidth}
                 onChange={(event) => setPageInput(event.target.value.replace(/[^0-9]/g, ""))}
@@ -766,7 +771,7 @@ export function PdfReader({
             <button
               type="button"
               className="page-count"
-              aria-label="ページ番号を指定"
+              aria-label={t("reader.goToPage")}
               onClick={startEditingPage}
               disabled={!document}
             >
@@ -774,16 +779,16 @@ export function PdfReader({
             </button>
           )}
           <ToolButton
-            label="次のページ"
+            label={t("reader.nextPage")}
             disabled={!document || pageNumber + step > document.numPages}
             onClick={() => setPageNumber((current) => Math.min(document!.numPages, current + step))}
           >
             <CaretRight size={15} weight="bold" />
           </ToolButton>
         </div>
-        <div className="zoom-controls" aria-label="Zoom controls">
+        <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
           <ToolButton
-            label={viewMode === "spread" ? "1ページ表示に切り替え" : "見開き表示に切り替え"}
+            label={viewMode === "spread" ? t("reader.singlePage") : t("reader.spread")}
             className={viewMode === "spread" ? "is-active" : ""}
             onClick={() => setViewMode((current) => (current === "spread" ? "single" : "spread"))}
           >
@@ -794,17 +799,17 @@ export function PdfReader({
             )}
           </ToolButton>
           <ToolButton
-            label="全体を表示"
+            label={t("reader.fitPage")}
             className={zoomMode.kind === "fit-page" ? "is-active" : ""}
             onClick={() => setZoomMode({ kind: "fit-page" })}
           >
             <CornersIn size={14} weight="bold" />
           </ToolButton>
-          <ToolButton label="縮小" onClick={() => adjustZoom(-manualZoomStep)}>
+          <ToolButton label={t("reader.zoomOut")} onClick={() => adjustZoom(-manualZoomStep)}>
             <Minus size={14} weight="bold" />
           </ToolButton>
           <span>{Math.round(effectiveScale * 100)}%</span>
-          <ToolButton label="拡大" onClick={() => adjustZoom(manualZoomStep)}>
+          <ToolButton label={t("reader.zoomIn")} onClick={() => adjustZoom(manualZoomStep)}>
             <Plus size={14} weight="bold" />
           </ToolButton>
         </div>
@@ -812,16 +817,16 @@ export function PdfReader({
 
       <div className={`reader-body ${openPanel ? "toc-open" : "toc-closed"}`}>
         {isTocOpen && (
-          <aside className="reader-toc" aria-label="目次">
+          <aside className="reader-toc" aria-label={t("reader.toc")}>
             <div className="reader-toc-header">
-              <span>目次</span>
+              <span>{t("reader.toc")}</span>
             </div>
             <div className="reader-toc-scroll">
               {outline.length === 0 ? (
                 <p className="reader-toc-empty">
                   {outlineLoaded
-                    ? "目次データが見つかりませんでした。"
-                    : "目次を読み込んでいます…"}
+                    ? t("reader.noToc")
+                    : t("reader.loadingToc")}
                 </p>
               ) : (
                 <OutlineList
@@ -836,7 +841,7 @@ export function PdfReader({
           </aside>
         )}
         {isSearchOpen && (
-          <aside className="reader-toc reader-search" aria-label="本文検索">
+          <aside className="reader-toc reader-search" aria-label={t("reader.textSearch")}>
             <div className="reader-search-header">
               <form
                 role="search"
@@ -849,43 +854,43 @@ export function PdfReader({
                 <input
                   ref={searchInputRef}
                   type="search"
-                  aria-label="本の中を検索"
-                  placeholder="キーワードを入力"
+                  aria-label={t("reader.openSearch")}
+                  placeholder={t("reader.searchPlaceholder")}
                   maxLength={200}
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
                 <button type="submit" disabled={!searchQuery.trim() || isSearching}>
-                  {isSearching ? "検索中" : "検索"}
+                  {isSearching ? t("reader.searchingAction") : t("reader.searchAction")}
                 </button>
               </form>
               <p className={indexError ? "reader-index-status is-error" : "reader-index-status"} aria-live="polite">
                 {indexError
-                  ? "本文の準備が中断しました"
+                  ? t("reader.indexInterrupted")
                   : isIndexing
-                    ? `本文を準備中 ${indexedPageCount} / ${numPages}`
+                    ? t("reader.indexProgress", { current: indexedPageCount, total: numPages })
                     : indexedPageCount > 0
-                      ? `${indexedPageCount}ページを検索できます`
-                      : "本文を準備しています"}
+                      ? t("reader.indexReady", { count: indexedPageCount })
+                      : t("reader.indexPreparing")}
               </p>
             </div>
             <div className="reader-search-scroll">
               {searchError ? (
                 <p className="reader-search-message is-error" role="alert">{searchError}</p>
               ) : !submittedSearchQuery ? (
-                <p className="reader-search-message">本に書かれている用語やコード名を検索します。</p>
+                <p className="reader-search-message">{t("reader.searchPrompt")}</p>
               ) : isSearching ? (
-                <p className="reader-search-message">「{submittedSearchQuery}」を検索しています…</p>
+                <p className="reader-search-message">{t("reader.searchingFor", { query: submittedSearchQuery })}</p>
               ) : searchResults.length === 0 ? (
                 <p className="reader-search-message">
                   {isIndexing
-                    ? `準備済みの${indexedPageCount}ページでは「${submittedSearchQuery}」は見つかりませんでした。`
-                    : `「${submittedSearchQuery}」は見つかりませんでした。`}
+                    ? t("reader.noResultsPartial", { count: indexedPageCount, query: submittedSearchQuery })
+                    : t("reader.noResults", { query: submittedSearchQuery })}
                 </p>
               ) : (
                 <>
                   <p className="reader-search-count">
-                    {searchResults.length}ページで見つかりました
+                    {t("reader.resultsFound", { count: searchResults.length })}
                   </p>
                   <ol className="reader-search-results">
                     {searchResults.map((result) => (
@@ -893,12 +898,12 @@ export function PdfReader({
                         <button
                           type="button"
                           className={result.pageNumber === pageNumber ? "is-active" : ""}
-                          aria-label={`${result.pageNumber}ページへ移動`}
+                          aria-label={t("reader.goToResult", { page: result.pageNumber })}
                           onClick={() => jumpToOutlinePage(result.pageNumber)}
                         >
                           <span className="reader-search-result-meta">
                             <strong>PAGE {String(result.pageNumber).padStart(3, "0")}</strong>
-                            <span>一致 {result.matchCount}</span>
+                            <span>{t("reader.matches", { count: result.matchCount })}</span>
                           </span>
                           <span className="reader-search-excerpt">
                             <HighlightedExcerpt text={result.excerpt} query={submittedSearchQuery} />
@@ -913,14 +918,14 @@ export function PdfReader({
           </aside>
         )}
         <div className="pdf-stage" ref={stageRef}>
-          {loading && <div className="reader-status">PDFを読み込んでいます…</div>}
+          {loading && <div className="reader-status">{t("reader.loadingPdf")}</div>}
           {error && <div className="reader-error" role="alert">{error}</div>}
           <div className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}>
             <div className="pdf-page">
               <canvas
                 ref={canvasLeftRef}
                 className="pdf-canvas"
-                aria-label={`${pageNumber}ページ`}
+                aria-label={t("app.pageLabel", { page: pageNumber })}
               />
               <div
                 ref={textLayerLeftRef}
@@ -934,7 +939,7 @@ export function PdfReader({
                 <canvas
                   ref={canvasRightRef}
                   className="pdf-canvas"
-                  aria-label={`${rightPageNumber}ページ`}
+                  aria-label={t("app.pageLabel", { page: rightPageNumber })}
                 />
                 <div
                   ref={textLayerRightRef}
@@ -960,6 +965,7 @@ type OutlineListProps = {
 };
 
 function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineListProps) {
+  const { t } = useI18n();
   return (
     <ul className="reader-toc-list" role={depth === 0 ? "tree" : "group"}>
       {nodes.map((node, index) => {
@@ -975,7 +981,7 @@ function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineL
               disabled={!hasPage}
               onClick={() => hasPage && onSelect(node.pageNumber as number)}
             >
-              <span className="reader-toc-title">{node.title || "(無題)"}</span>
+              <span className="reader-toc-title">{node.title || t("reader.untitled")}</span>
               {hasPage && (
                 <span className="reader-toc-page">{node.pageNumber}</span>
               )}

@@ -45,3 +45,17 @@ func (service *Service) SaveAppearanceSettings(request SaveAppearanceSettingsReq
 	}
 	return service.manager.SaveAppearance(service.ctx, request)
 }
+
+func (service *Service) GetLanguageSettings() (LanguageSettings, error) {
+	if service.ctx == nil {
+		return LanguageSettings{}, errors.New("application is not ready")
+	}
+	return service.manager.GetLanguage(service.ctx)
+}
+
+func (service *Service) SaveLanguageSettings(request SaveLanguageSettingsRequest) (LanguageSettings, error) {
+	if service.ctx == nil {
+		return LanguageSettings{}, errors.New("application is not ready")
+	}
+	return service.manager.SaveLanguage(service.ctx, request)
+}

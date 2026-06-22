@@ -10,10 +10,18 @@ export function GetLLMSettings() {
   return window['go']['settings']['Service']['GetLLMSettings']();
 }
 
+export function GetLanguageSettings() {
+  return window['go']['settings']['Service']['GetLanguageSettings']();
+}
+
 export function SaveAppearanceSettings(arg1) {
   return window['go']['settings']['Service']['SaveAppearanceSettings'](arg1);
 }
 
 export function SaveLLMSettings(arg1) {
   return window['go']['settings']['Service']['SaveLLMSettings'](arg1);
+}
+
+export function SaveLanguageSettings(arg1) {
+  return window['go']['settings']['Service']['SaveLanguageSettings'](arg1);
 }

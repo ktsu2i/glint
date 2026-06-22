@@ -78,7 +78,7 @@ describe("createPdfLoadingTask", () => {
 
     await expect(
       createPdfLoadingTask("/book/token", new AbortController().signal),
-    ).rejects.toThrow("取得したデータがPDFではありません");
+    ).rejects.toMatchObject({ translationKey: "error.invalidPdf" });
   });
 
   it("reports an unsuccessful HTTP response", async () => {
@@ -86,7 +86,10 @@ describe("createPdfLoadingTask", () => {
 
     await expect(
       createPdfLoadingTask("/book/missing", new AbortController().signal),
-    ).rejects.toThrow("HTTP 503");
+    ).rejects.toMatchObject({
+      translationKey: "error.fetchPdf",
+      values: { status: 503 },
+    });
   });
 
   it("resolves asset URLs without a document global", async () => {

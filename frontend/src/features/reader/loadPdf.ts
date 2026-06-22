@@ -6,6 +6,7 @@ import type {
   PageViewport,
   PDFPageProxy,
 } from "pdfjs-dist";
+import { LocalizedError } from "../../shared/i18n/error";
 import { normalizePageText } from "../../shared/lib/text";
 
 type TextContent = Awaited<ReturnType<PDFPageProxy["getTextContent"]>>;
@@ -77,12 +78,12 @@ export async function createPdfLoadingTask(
   ]);
 
   if (!response.ok) {
-    throw new Error(`PDFファイルを取得できませんでした（HTTP ${response.status}）。`);
+    throw new LocalizedError("error.fetchPdf", { status: response.status });
   }
 
   const data = new Uint8Array(await response.arrayBuffer());
   if (!hasPdfHeader(data)) {
-    throw new Error("取得したデータがPDFではありません。アプリを再起動して、もう一度開いてください。");
+    throw new LocalizedError("error.invalidPdf");
   }
 
   return pdfjs.getDocument({

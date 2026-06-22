@@ -14,8 +14,10 @@ import {
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
   GetAppearanceSettings,
+  GetLanguageSettings,
   GetLLMSettings,
   SaveAppearanceSettings,
+  SaveLanguageSettings,
   SaveLLMSettings,
 } from "../../../wailsjs/go/settings/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
@@ -94,6 +96,12 @@ export type AppearanceSettings = {
   theme: ThemePreference;
 };
 
+export type LanguagePreference = "en" | "ja";
+
+export type LanguageSettings = {
+  language: LanguagePreference;
+};
+
 export async function openPDF(): Promise<BookFile> {
   return (await OpenPDF()) as BookFile;
 }
@@ -164,6 +172,14 @@ export async function getAppearanceSettings(): Promise<AppearanceSettings> {
 
 export async function saveAppearanceSettings(theme: ThemePreference): Promise<AppearanceSettings> {
   return (await SaveAppearanceSettings({ theme })) as AppearanceSettings;
+}
+
+export async function getLanguageSettings(): Promise<LanguageSettings> {
+  return (await GetLanguageSettings()) as LanguageSettings;
+}
+
+export async function saveLanguageSettings(language: LanguagePreference): Promise<LanguageSettings> {
+  return (await SaveLanguageSettings({ language })) as LanguageSettings;
 }
 
 export async function saveLLMSettings(request: SaveLLMSettingsRequest): Promise<LLMSettings> {

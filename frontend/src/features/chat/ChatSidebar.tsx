@@ -17,6 +17,8 @@ import {
   type LLMSettings,
 } from "../../shared/api/backend";
 import { contextPreview, trimChatContext } from "../../shared/lib/text";
+import { useI18n } from "../../shared/i18n/I18n";
+import { localizeBackendError } from "../../shared/i18n/error";
 
 type ReadingContext = {
   bookName: string;
@@ -43,11 +45,12 @@ type ChatSidebarProps = {
 type ContextSource = "selection" | "page";
 
 export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: "OpenRouterを設定すると、選択範囲や指定したページについて質問できます。",
+      content: "",
     },
   ]);
   const [question, setQuestion] = useState("");
@@ -67,9 +70,9 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
       setLLMSettings(await getLLMSettings());
       setSettingsError("");
     } catch (reason) {
-      setSettingsError(reason instanceof Error ? reason.message : "LLM設定を読み込めませんでした。");
+      setSettingsError(reason instanceof Error ? reason.message : t("chat.loadSettingsError"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refreshSettings();
@@ -89,7 +92,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         return;
       }
       if (delta.error) {
-        setError(delta.error);
+        setError(localizeBackendError(delta.error, t));
         setSending(false);
       }
       if (delta.content) {
@@ -106,7 +109,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         activeRequest.current = "";
       }
     });
-  }, []);
+  }, [t]);
 
   const handleCancel = useCallback(async () => {
     const requestId = activeRequest.current;
@@ -118,9 +121,9 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     try {
       await cancelChat(requestId);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "質問の中止に失敗しました。");
+      setError(reason instanceof Error ? localizeBackendError(reason.message, t) : t("chat.cancelError"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -133,7 +136,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
       return;
     }
     if (!llmSettings?.configured) {
-      setError("OpenRouterのmodelとAPI keyを設定してください。");
+      setError(t("chat.configureError"));
       return;
     }
 
@@ -163,7 +166,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
     } catch (reason) {
       activeRequest.current = "";
       setSending(false);
-      setError(reason instanceof Error ? reason.message : "質問を送信できませんでした。");
+      setError(reason instanceof Error ? localizeBackendError(reason.message, t) : t("chat.sendError"));
     }
   }
 
@@ -174,17 +177,17 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
   const headlinePage = activeSource === "selection" ? selection!.pageNumber : context.pageNumber;
   const headline = hasContext
     ? activeSource === "selection"
-      ? `選択範囲（Page ${headlinePage}）`
+      ? t("chat.selectionHeadline", { page: headlinePage })
       : `Page ${headlinePage}`
-    : "PDF未選択";
+    : t("chat.noPdf");
   const composerLabel = !includeContext || !hasContext
-    ? "文脈なし"
+    ? t("chat.noContext")
     : activeSource === "selection"
-      ? `Page ${headlinePage} の選択範囲を添付`
-      : `Page ${headlinePage} を添付`;
+      ? t("chat.attachSelection", { page: headlinePage })
+      : t("chat.attachPage", { page: headlinePage });
 
   return (
-    <aside className="chat-sidebar" aria-label="AI chat">
+    <aside className="chat-sidebar" aria-label={t("chat.aria")}>
       <header className="chat-header">
         <div className="assistant-heading">
           <span className="assistant-icon" aria-hidden="true">
@@ -192,7 +195,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
           </span>
           <div>
             <h2>Assistant</h2>
-            <p>読書中の疑問を整理する</p>
+            <p>{t("chat.subtitle")}</p>
           </div>
         </div>
       </header>
@@ -201,7 +204,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         {settingsError && <p className="chat-settings-error" role="alert">{settingsError}</p>}
       </div>
 
-      <section className="context-panel" aria-label="送信する読書文脈">
+      <section className="context-panel" aria-label={t("chat.contextAria")}>
         <div className="context-heading">
           <div className="context-source">
             {activeSource === "selection" ? (
@@ -210,7 +213,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
               <BookOpenText size={15} weight="regular" />
             )}
             <div>
-              <span className="context-label">Reading context</span>
+              <span className="context-label">{t("chat.readingContext")}</span>
               <strong>{headline}</strong>
             </div>
           </div>
@@ -220,15 +223,15 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
               checked={includeContext && hasContext}
               disabled={!hasContext || sending}
               onCheckedChange={setIncludeContext}
-              aria-label="この文脈を質問に含める"
+              aria-label={t("chat.includeContext")}
             >
               <Switch.Thumb className="context-switch-thumb" />
             </Switch.Root>
-            <span>{includeContext && hasContext ? "添付する" : "添付しない"}</span>
+            <span>{includeContext && hasContext ? t("chat.attach") : t("chat.doNotAttach")}</span>
           </label>
         </div>
         {hasSelection && hasPageContext && (
-          <div className="context-source-tabs" role="tablist" aria-label="添付する文脈の選び方">
+          <div className="context-source-tabs" role="tablist" aria-label={t("chat.contextChoice")}>
             <button
               type="button"
               role="tab"
@@ -236,7 +239,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
               className={activeSource === "selection" ? "is-active" : ""}
               onClick={() => setSource("selection")}
             >
-              選択範囲
+              {t("chat.selection")}
             </button>
             <button
               type="button"
@@ -245,17 +248,17 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
               className={activeSource === "page" ? "is-active" : ""}
               onClick={() => setSource("page")}
             >
-              ページ全体
+              {t("chat.wholePage")}
             </button>
           </div>
         )}
         <p className={hasContext ? "context-preview" : "context-preview context-placeholder"}>
           {hasContext
             ? contextPreview(previewText)
-            : "PDFを開くと、current page textのpreviewがここに表示されます。"}
+            : t("chat.contextPlaceholder")}
         </p>
         {hasContext && (
-          <p className="context-meta"><Paperclip size={11} /> 最大6,000文字</p>
+          <p className="context-meta"><Paperclip size={11} /> {t("chat.maxCharacters")}</p>
         )}
       </section>
 
@@ -263,10 +266,10 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         {messages.map((message) => (
           <article key={message.id} className={`message message-${message.role}`}>
             <div className="message-meta">
-              <span className="message-author">{message.role === "assistant" ? "Glint" : "You"}</span>
+              <span className="message-author">{message.role === "assistant" ? "Glint" : t("chat.you")}</span>
               {message.role === "assistant" && <span className="message-rule" />}
             </div>
-            <p>{message.content || <span className="typing-indicator"><i /><i /><i /></span>}</p>
+            <p>{message.id === "welcome" ? t("chat.welcome") : message.content || <span className="typing-indicator"><i /><i /><i /></span>}</p>
           </article>
         ))}
         <div ref={messageEndRef} />
@@ -277,7 +280,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
-          placeholder="このページについて質問する…"
+          placeholder={t("chat.placeholder")}
           rows={3}
           disabled={sending}
           onKeyDown={(event) => {
@@ -292,15 +295,15 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
           }}
         />
         <div className="composer-footer">
-          <span>{llmSettings?.configured ? composerLabel : "OpenRouter設定が必要です"}</span>
+          <span>{llmSettings?.configured ? composerLabel : t("chat.openRouterRequired")}</span>
           {sending ? (
             <button type="button" className="chat-cancel" onClick={() => void handleCancel()}>
-              <span>中止</span>
+              <span>{t("chat.cancel")}</span>
               <Stop size={12} weight="fill" />
             </button>
           ) : (
             <button type="submit" disabled={!question.trim() || !llmSettings?.configured}>
-              <span>送信</span>
+              <span>{t("chat.send")}</span>
               <ArrowUp size={14} weight="bold" />
             </button>
           )}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/library"
+	"github.com/kaito/glint/internal/settings"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -57,14 +58,19 @@ type Service struct {
 	library       *library.Store
 	assets        *assetserver.Server
 	dataDirectory string
+	settings      *settings.Manager
 }
 
-func New(lib *library.Store, assets *assetserver.Server, dataDirectory string) *Service {
-	return &Service{
+func New(lib *library.Store, assets *assetserver.Server, dataDirectory string, managers ...*settings.Manager) *Service {
+	service := &Service{
 		library:       lib,
 		assets:        assets,
 		dataDirectory: dataDirectory,
 	}
+	if len(managers) > 0 {
+		service.settings = managers[0]
+	}
+	return service
 }
 
 // Startup wires the Wails runtime context into the service. It is a package
@@ -78,7 +84,7 @@ func (s *Service) OpenPDF() (BookFile, error) {
 	if s.ctx == nil {
 		return BookFile{}, errors.New("application is not ready")
 	}
-	path, err := s.choosePDF("技術書 PDF を本棚へ追加")
+	path, err := s.choosePDF(s.localized("Add a technical PDF to the library", "技術書 PDF を本棚へ追加"))
 	if err != nil || path == "" {
 		return BookFile{}, err
 	}
@@ -91,7 +97,10 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 		return BookFile{}, err
 	}
 	if !fileExists(book.SourcePath) {
-		return BookFile{}, errors.New("PDFが見つかりません。本棚からファイルを再選択してください。")
+		return BookFile{}, errors.New(s.localized(
+			"The PDF could not be found. Choose the file again from the library.",
+			"PDFが見つかりません。本棚からファイルを再選択してください。",
+		))
 	}
 	fileHash, size, err := inspectPDF(book.SourcePath)
 	if err != nil {
@@ -124,7 +133,7 @@ func (s *Service) RelinkPDF(id string) (BookFile, error) {
 	if s.ctx == nil {
 		return BookFile{}, errors.New("application is not ready")
 	}
-	path, err := s.choosePDF("PDF ファイルを再選択")
+	path, err := s.choosePDF(s.localized("Choose the PDF file again", "PDF ファイルを再選択"))
 	if err != nil || path == "" {
 		return BookFile{}, err
 	}
@@ -153,7 +162,10 @@ func (s *Service) RenameBook(id, name string) (BookSummary, error) {
 	book, err := s.library.Rename(context.Background(), id, name, time.Now())
 	if err != nil {
 		if errors.Is(err, library.ErrInvalidDisplayName) {
-			return BookSummary{}, errors.New("本の名前は1〜200文字で入力してください。")
+			return BookSummary{}, errors.New(s.localized(
+				"Book names must be between 1 and 200 characters.",
+				"本の名前は1〜200文字で入力してください。",
+			))
 		}
 		return BookSummary{}, err
 	}
@@ -166,18 +178,20 @@ func (s *Service) RemoveBook(id string) (bool, error) {
 		return false, err
 	}
 	if s.ctx != nil {
+		removeLabel := s.localized("Remove", "削除")
+		cancelLabel := s.localized("Cancel", "キャンセル")
 		response, err := runtime.MessageDialog(s.ctx, runtime.MessageDialogOptions{
 			Type:          runtime.QuestionDialog,
-			Title:         "本棚から削除",
-			Message:       fmt.Sprintf("「%s」を本棚から削除しますか？\nPDFファイル自体は残ります。", book.Display()),
-			Buttons:       []string{"削除", "キャンセル"},
-			DefaultButton: "キャンセル",
-			CancelButton:  "キャンセル",
+			Title:         s.localized("Remove from library", "本棚から削除"),
+			Message:       s.localized(fmt.Sprintf("Remove “%s” from the library?\nThe PDF file itself will remain.", book.Display()), fmt.Sprintf("「%s」を本棚から削除しますか？\nPDFファイル自体は残ります。", book.Display())),
+			Buttons:       []string{removeLabel, cancelLabel},
+			DefaultButton: cancelLabel,
+			CancelButton:  cancelLabel,
 		})
 		if err != nil {
 			return false, fmt.Errorf("confirm book removal: %w", err)
 		}
-		if response != "削除" {
+		if response != removeLabel {
 			return false, nil
 		}
 	}
@@ -254,7 +268,7 @@ func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount 
 		context.Background(), bookID, inputs, pageCount, time.Now(),
 	)
 	if errors.Is(err, library.ErrInvalidBookPageBatch) {
-		return 0, errors.New("PDF page indexの内容が不正です。")
+		return 0, errors.New(s.localized("The PDF page index is invalid.", "PDF page indexの内容が不正です。"))
 	}
 	return count, err
 }
@@ -262,7 +276,10 @@ func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount 
 func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
 	results, err := s.library.SearchBookPages(context.Background(), bookID, query, 50)
 	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
-		return nil, errors.New("検索語は1〜200文字で入力してください。")
+		return nil, errors.New(s.localized(
+			"Search terms must be between 1 and 200 characters.",
+			"検索語は1〜200文字で入力してください。",
+		))
 	}
 	if err != nil {
 		return nil, err
@@ -276,6 +293,17 @@ func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
 		}
 	}
 	return output, nil
+}
+
+func (s *Service) localized(english, japanese string) string {
+	if s.settings == nil {
+		return english
+	}
+	preference, err := s.settings.GetLanguage(context.Background())
+	if err == nil && preference.Language == settings.LanguageJapanese {
+		return japanese
+	}
+	return english
 }
 
 func (s *Service) selectPDF(path string) (BookFile, error) {

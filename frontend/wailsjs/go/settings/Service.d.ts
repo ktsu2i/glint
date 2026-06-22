@@ -6,6 +6,10 @@ export function GetAppearanceSettings():Promise<settings.AppearanceSettings>;
 
 export function GetLLMSettings():Promise<settings.LLMSettings>;
 
+export function GetLanguageSettings():Promise<settings.LanguageSettings>;
+
 export function SaveAppearanceSettings(arg1:settings.SaveAppearanceSettingsRequest):Promise<settings.AppearanceSettings>;
 
 export function SaveLLMSettings(arg1:settings.SaveLLMSettingsRequest):Promise<settings.LLMSettings>;
+
+export function SaveLanguageSettings(arg1:settings.SaveLanguageSettingsRequest):Promise<settings.LanguageSettings>;

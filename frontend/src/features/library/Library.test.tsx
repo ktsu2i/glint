@@ -1,7 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as renderBase, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BookSummary } from "../../shared/api/backend";
 import { Library } from "./Library";
+import { I18nProvider } from "../../shared/i18n/I18n";
+
+function render(ui: ReactNode) {
+  return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
+}
 
 const availableBook: BookSummary = {
   id: "book-1",

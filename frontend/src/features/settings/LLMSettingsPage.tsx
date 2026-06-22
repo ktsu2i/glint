@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Switch } from "@base-ui/react/switch";
 import {
   ArrowRight,
@@ -11,6 +11,7 @@ import {
   Moon,
   ShieldCheck,
   Sun,
+  Translate,
 } from "@phosphor-icons/react";
 import {
   getLLMSettings,
@@ -18,6 +19,7 @@ import {
   type LLMSettings,
   type ThemePreference,
 } from "../../shared/api/backend";
+import { useI18n } from "../../shared/i18n/I18n";
 
 type LLMSettingsPageProps = {
   onBack: () => void;
@@ -29,13 +31,11 @@ type LLMSettingsPageProps = {
 
 const themeOptions: Array<{
   value: ThemePreference;
-  label: string;
-  description: string;
   icon: typeof Sun;
 }> = [
-  { value: "light", label: "ライト", description: "明るい読書机", icon: Sun },
-  { value: "dark", label: "ダーク", description: "光を抑えた書斎", icon: Moon },
-  { value: "system", label: "システム", description: "OSの設定に合わせる", icon: Monitor },
+  { value: "light", icon: Sun },
+  { value: "dark", icon: Moon },
+  { value: "system", icon: Monitor },
 ];
 
 export function LLMSettingsPage({
@@ -45,6 +45,15 @@ export function LLMSettingsPage({
   themeError = "",
   onThemeChange = async () => {},
 }: LLMSettingsPageProps) {
+  const {
+    language,
+    loading: languageLoading,
+    error: languageError,
+    t,
+    changeLanguage,
+  } = useI18n();
+  const translationRef = useRef(t);
+  translationRef.current = t;
   const [settings, setSettings] = useState<LLMSettings | null>(null);
   const [model, setModel] = useState("");
   const [apiKey, setAPIKey] = useState("");
@@ -54,6 +63,7 @@ export function LLMSettingsPage({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
+  const [savingLanguage, setSavingLanguage] = useState(false);
   const [localThemeError, setLocalThemeError] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -69,7 +79,7 @@ export function LLMSettingsPage({
       setAPIKey("");
       setClearAPIKey(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "LLM設定を読み込めませんでした。");
+      setError(reason instanceof Error ? reason.message : translationRef.current("settings.loadError"));
     } finally {
       setLoading(false);
     }
@@ -82,6 +92,10 @@ export function LLMSettingsPage({
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
+    if (!model.trim().includes("/")) {
+      setError(t("settings.invalidModel"));
+      return;
+    }
     setSaving(true);
     setError("");
     setSaved(false);
@@ -100,7 +114,7 @@ export function LLMSettingsPage({
       setClearAPIKey(false);
       setSaved(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "OpenRouter設定を保存できませんでした。");
+      setError(reason instanceof Error ? reason.message : t("settings.saveError"));
     } finally {
       setSaving(false);
     }
@@ -113,11 +127,29 @@ export function LLMSettingsPage({
     try {
       await onThemeChange(next);
     } catch (reason) {
-      setLocalThemeError(reason instanceof Error ? reason.message : "表示設定を保存できませんでした。");
+      setLocalThemeError(reason instanceof Error ? reason.message : t("error.saveAppearance"));
     } finally {
       setSavingTheme(false);
     }
   }
+
+  async function handleLanguageChange(next: "en" | "ja") {
+    if (savingLanguage || languageLoading || next === language) return;
+    setSavingLanguage(true);
+    try {
+      await changeLanguage(next);
+    } catch {
+      // The provider exposes the persistence error next to these controls.
+    } finally {
+      setSavingLanguage(false);
+    }
+  }
+
+  const themeCopy = {
+    light: [t("settings.themeLight"), t("settings.themeLightDescription")],
+    dark: [t("settings.themeDark"), t("settings.themeDarkDescription")],
+    system: [t("settings.themeSystem"), t("settings.themeSystemDescription")],
+  } as const;
 
   const hasCredential = settings?.hasApiKey ?? false;
   const willHaveCredential = apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
@@ -128,50 +160,51 @@ export function LLMSettingsPage({
       <div className="settings-page-shell">
         <header className="settings-page-heading">
           <div>
-            <span className="section-label">Application settings</span>
-            <h1 id="settings-title">設定</h1>
-            <p>画面の表示と、AIへ読書contextを送るときの接続・privacy制約を管理します。</p>
+            <span className="section-label">{t("settings.section")}</span>
+            <h1 id="settings-title">{t("settings.title")}</h1>
+            <p>{t("settings.description")}</p>
           </div>
           <div className={settings?.configured ? "settings-connection is-ready" : "settings-connection"}>
             <span className="settings-connection-dot" />
             <div>
-              <small>Connection</small>
-              <strong>{loading ? "確認中" : settings?.configured ? "利用可能" : "未設定"}</strong>
+              <small>{t("settings.connection")}</small>
+              <strong>{loading ? t("settings.checking") : settings?.configured ? t("settings.available") : t("settings.notConfigured")}</strong>
             </div>
           </div>
         </header>
 
         <div className="settings-layout">
-          <nav className="settings-index" aria-label="設定項目">
-            <span>Application</span>
+          <nav className="settings-index" aria-label={t("settings.items")}>
+            <span>{t("settings.application")}</span>
             <button type="button" className="is-active" aria-current="page">
               <span aria-hidden="true" />
-              Appearance
+              {t("settings.appearance")}
             </button>
-            <button type="button">Model connection</button>
-            <p>API keyはOSのcredential storeに分離して保存します。</p>
+            <button type="button">{t("settings.modelConnection")}</button>
+            <p>{t("settings.credentialNote")}</p>
           </nav>
 
           <form className="settings-page-form" onSubmit={handleSave}>
             <section className="appearance-settings" aria-labelledby="appearance-heading">
               <div className="settings-section-heading">
                 <div>
-                  <span className="settings-kicker">Reading environment</span>
-                  <h2 id="appearance-heading">表示</h2>
+                  <span className="settings-kicker">{t("settings.readingEnvironment")}</span>
+                  <h2 id="appearance-heading">{t("settings.appearance")}</h2>
                 </div>
-                <span className="provider-badge">Theme</span>
+                <span className="provider-badge">{t("settings.theme")}</span>
               </div>
               <p className="appearance-description">
-                PDFの紙面は保ったまま、Library・Reader・Chatの明るさを切り替えます。
+                {t("settings.appearanceDescription")}
               </p>
               {(themeError || localThemeError) && (
                 <div className="settings-error appearance-error" role="alert">
                   <span>{localThemeError || themeError}</span>
                 </div>
               )}
-              <div className="theme-options" aria-label="表示テーマ">
+              <div className="theme-options" aria-label={t("settings.themeOptions")}>
                 {themeOptions.map((option) => {
                   const Icon = option.icon;
+                  const [label, description] = themeCopy[option.value];
                   const selected = theme === option.value;
                   return (
                     <button
@@ -184,8 +217,8 @@ export function LLMSettingsPage({
                     >
                       <Icon size={18} weight={selected ? "fill" : "regular"} />
                       <span>
-                        <strong>{option.label}</strong>
-                        <small>{option.description}</small>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
                       </span>
                       <i aria-hidden="true">{selected ? <Check size={12} /> : null}</i>
                     </button>
@@ -196,21 +229,61 @@ export function LLMSettingsPage({
 
             <div className="settings-form-divider" />
 
+            <section className="appearance-settings" aria-labelledby="language-heading">
+              <div className="settings-section-heading">
+                <div>
+                  <span className="settings-kicker">{t("settings.languageKicker")}</span>
+                  <h2 id="language-heading">{t("settings.language")}</h2>
+                </div>
+                <span className="provider-badge"><Translate size={13} /> {language.toUpperCase()}</span>
+              </div>
+              <p className="appearance-description">{t("settings.languageDescription")}</p>
+              {(languageError || savingLanguage) && (
+                <p className={languageError ? "appearance-error" : "language-saving"} role={languageError ? "alert" : "status"}>
+                  {languageError || t("settings.languageSaving")}
+                </p>
+              )}
+              <div className="theme-options language-options" aria-label={t("settings.languageOptions")}>
+                {([
+                  ["en", t("settings.english"), t("settings.englishDescription")],
+                  ["ja", t("settings.japanese"), t("settings.japaneseDescription")],
+                ] as const).map(([value, label, description]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={language === value ? "theme-option is-selected" : "theme-option"}
+                    aria-pressed={language === value}
+                    disabled={languageLoading || savingLanguage}
+                    onClick={() => void handleLanguageChange(value)}
+                  >
+                    <span className="language-code" aria-hidden="true">{value.toUpperCase()}</span>
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                    <i aria-hidden="true">{language === value ? <Check size={12} /> : null}</i>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <div className="settings-form-divider" />
+
             <div className="settings-section-heading">
               <div>
-                <span className="settings-kicker">Remote model route</span>
-                <h2>OpenRouter 接続</h2>
+                <span className="settings-kicker">{t("settings.remoteRoute")}</span>
+                <h2>{t("settings.openRouterConnection")}</h2>
               </div>
               <span className="provider-badge">OpenRouter</span>
             </div>
 
-            <div className="route-ledger" aria-label="送信経路">
+            <div className="route-ledger" aria-label={t("settings.sendingRoute")}>
               <span><LockKey size={13} /> Glint</span>
               <ArrowRight size={12} />
               <span>OpenRouter</span>
               <ArrowRight size={12} />
               <span className={zdr ? "route-guard is-active" : "route-guard"}>
-                {zdr ? "ZDR endpoint" : "Provider route"}
+                {zdr ? t("settings.zdrEndpoint") : t("settings.providerRoute")}
               </span>
             </div>
 
@@ -218,12 +291,12 @@ export function LLMSettingsPage({
               <div className="settings-error" role="alert">
                 <span>{error}</span>
                 {!settings && !loading && (
-                  <button type="button" onClick={() => void loadSettings()}>再読み込み</button>
+                  <button type="button" onClick={() => void loadSettings()}>{t("settings.reload")}</button>
                 )}
               </div>
             )}
             {saved && (
-              <p className="settings-saved" role="status"><Check size={14} /> 設定を保存しました。</p>
+              <p className="settings-saved" role="status"><Check size={14} /> {t("settings.saved")}</p>
             )}
 
             <fieldset className="settings-fieldset" disabled={loading || saving}>
@@ -237,22 +310,22 @@ export function LLMSettingsPage({
                     setModel(event.target.value);
                     setSaved(false);
                   }}
-                  placeholder="例: anthropic/claude-sonnet-4"
+                  placeholder={t("settings.modelPlaceholder")}
                   autoComplete="off"
                   spellCheck={false}
                   required
                 />
-                <small>OpenRouterの <code>provider/model</code> 形式のIDを入力します。</small>
+                <small>{t("settings.modelIdHelp")}</small>
               </div>
             </fieldset>
 
             <fieldset className="settings-fieldset" disabled={loading || saving}>
-              <legend>Credential</legend>
+              <legend>{t("settings.credential")}</legend>
               <div className="settings-field">
                 <span className="settings-field-label">
                   <label htmlFor="openrouter-api-key">API key</label>
                   {hasCredential && !clearAPIKey && (
-                    <em><Key size={11} /> OS credential storeに保存済み</em>
+                    <em><Key size={11} /> {t("settings.keyStored")}</em>
                   )}
                 </span>
                 <div className="credential-input">
@@ -266,7 +339,7 @@ export function LLMSettingsPage({
                       if (event.target.value) setClearAPIKey(false);
                       setSaved(false);
                     }}
-                    placeholder={clearAPIKey ? "削除予定" : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
+                    placeholder={clearAPIKey ? t("settings.keyScheduledForRemoval") : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
                     autoComplete="new-password"
                     disabled={clearAPIKey}
                     required={!hasCredential}
@@ -276,15 +349,15 @@ export function LLMSettingsPage({
                     className="credential-visibility"
                     onClick={() => setShowAPIKey((current) => !current)}
                     disabled={clearAPIKey || apiKey === ""}
-                    aria-label={showAPIKey ? "API keyを隠す" : "API keyを表示"}
+                    aria-label={showAPIKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
                   >
                     {showAPIKey ? <EyeSlash size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
                 <small>
                   {hasCredential && !apiKey && !clearAPIKey
-                    ? "保存済みです。実際の値は読み戻さず、マスク表示しています。"
-                    : "保存後、API keyの値をGlintの画面へ読み戻すことはありません。"}
+                    ? t("settings.savedKeyHelp")
+                    : t("settings.newKeyHelp")}
                 </small>
                 {hasCredential && (
                   <button
@@ -297,18 +370,18 @@ export function LLMSettingsPage({
                       setSaved(false);
                     }}
                   >
-                    {clearAPIKey ? "API keyを保持する" : "保存済みAPI keyを削除"}
+                    {clearAPIKey ? t("settings.keepApiKey") : t("settings.removeApiKey")}
                   </button>
                 )}
               </div>
             </fieldset>
 
             <fieldset className="settings-fieldset" disabled={loading || saving}>
-              <legend>Privacy</legend>
+              <legend>{t("settings.privacy")}</legend>
               <div className="privacy-setting">
                 <div>
                   <span><ShieldCheck size={16} /> Zero Data Retention</span>
-                  <p>データを保持しないendpointだけにroutingを制限します。</p>
+                  <p>{t("settings.zdrDescription")}</p>
                 </div>
                 <Switch.Root
                   className="context-switch"
@@ -317,22 +390,22 @@ export function LLMSettingsPage({
                     setZDR(checked);
                     setSaved(false);
                   }}
-                  aria-label="Zero Data Retentionを必須にする"
+                  aria-label={t("settings.requireZdr")}
                 >
                   <Switch.Thumb className="context-switch-thumb" />
                 </Switch.Root>
               </div>
               <p className="remote-data-note">
-                質問と明示的に添付したPDF contextは、OpenRouterと選択されたmodel providerへ送信されます。
+                {t("settings.remoteDataNote")}
               </p>
             </fieldset>
 
             <footer className="settings-page-actions">
               <button className="settings-secondary" type="button" onClick={onBack} disabled={saving}>
-                戻る
+                {t("settings.back")}
               </button>
               <button className="settings-primary" type="submit" disabled={!canSave}>
-                {saving ? "保存しています…" : "設定を保存"}
+                {saving ? t("settings.saving") : t("settings.save")}
               </button>
             </footer>
           </form>

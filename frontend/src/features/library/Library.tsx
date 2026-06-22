@@ -9,6 +9,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import type { BookSummary } from "../../shared/api/backend";
+import { useI18n } from "../../shared/i18n/I18n";
 
 const MAX_DISPLAY_NAME_LENGTH = 200;
 
@@ -24,27 +25,6 @@ type LibraryProps = {
   onRename: (book: BookSummary, name: string) => void;
 };
 
-function formatDate(value: string): string {
-  if (!value) {
-    return "まだ開いていません";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "最近開いた本";
-  }
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "short",
-    day: "numeric",
-  }).format(date);
-}
-
-function progressLabel(book: BookSummary): string {
-  if (book.pageCount < 1) {
-    return book.lastPage > 1 ? `${book.lastPage}ページまで` : "読み始める";
-  }
-  return `${book.lastPage} / ${book.pageCount}ページ`;
-}
-
 export function Library({
   books,
   loading,
@@ -56,6 +36,7 @@ export function Library({
   onRemove,
   onRename,
 }: LibraryProps) {
+  const { locale, t } = useI18n();
   const [editingId, setEditingId] = useState("");
   const [draftName, setDraftName] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -88,13 +69,29 @@ export function Library({
     cancelEdit();
   }
 
+  function formatDate(value: string): string {
+    if (!value) return t("library.neverOpened");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return t("library.recentlyOpened");
+    return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(date);
+  }
+
+  function progressLabel(book: BookSummary): string {
+    if (book.pageCount < 1) {
+      return book.lastPage > 1
+        ? t("library.pagesUntil", { page: book.lastPage })
+        : t("library.startReading");
+    }
+    return t("library.pageProgress", { current: book.lastPage, total: book.pageCount });
+  }
+
   return (
     <section className="library" aria-labelledby="library-title">
       <header className="library-heading">
         <div>
-          <p className="section-label">Local library</p>
-          <h1 id="library-title">本棚</h1>
-          <p>読みかけの技術書へ戻る。PDFと読書位置は、このMacにだけ保存されます。</p>
+          <p className="section-label">{t("library.section")}</p>
+          <h1 id="library-title">{t("library.title")}</h1>
+          <p>{t("library.description")}</p>
         </div>
       </header>
 
@@ -106,23 +103,23 @@ export function Library({
       )}
 
       {loading ? (
-        <div className="library-loading" role="status">本棚を読み込んでいます…</div>
+        <div className="library-loading" role="status">{t("library.loading")}</div>
       ) : books.length === 0 ? (
         <div className="library-empty">
           <div className="empty-shelf-mark" aria-hidden="true">
             <Books size={37} weight="thin" />
             <span />
           </div>
-          <p className="section-label">First volume</p>
-          <h2>最初の一冊を、本棚へ。</h2>
-          <p>検索可能な技術書PDFを追加すると、表紙と読書位置をローカルに保存します。</p>
+          <p className="section-label">{t("library.emptyKicker")}</p>
+          <h2>{t("library.emptyTitle")}</h2>
+          <p>{t("library.emptyDescription")}</p>
           <button type="button" className="library-primary-action" onClick={onImport}>
             <Plus size={16} weight="bold" />
-            PDFを選ぶ
+            {t("library.choosePdf")}
           </button>
         </div>
       ) : (
-        <div className="book-grid" aria-label="import済みの本">
+        <div className="book-grid" aria-label={t("library.importedBooks")}>
           {books.map((book) => {
             const progress = book.pageCount > 0
               ? Math.min(100, Math.max(2, (book.lastPage / book.pageCount) * 100))
@@ -135,7 +132,7 @@ export function Library({
                   className="book-cover-button"
                   onClick={() => onOpen(book)}
                   disabled={!book.available || busy}
-                  aria-label={`${book.title}を開く`}
+                  aria-label={t("library.openBook", { title: book.title })}
                 >
                   <span className="book-cover">
                     {book.coverUrl ? (
@@ -153,7 +150,7 @@ export function Library({
                     {!book.available && (
                       <span className="missing-cover-state">
                         <WarningCircle size={21} />
-                        ファイルが見つかりません
+                        {t("library.missingFile")}
                       </span>
                     )}
                   </span>
@@ -181,7 +178,7 @@ export function Library({
                             cancelEdit();
                           }
                         }}
-                        aria-label={`${book.title}の表示名`}
+                        aria-label={t("library.displayName", { title: book.title })}
                       />
                     </form>
                   ) : (
@@ -191,7 +188,7 @@ export function Library({
                         className="book-title-edit"
                         onClick={() => startEdit(book)}
                         disabled={busy}
-                        aria-label={`${book.title}の名前を変更`}
+                        aria-label={t("library.renameBook", { title: book.title })}
                       >
                         {book.title}
                       </button>
@@ -206,20 +203,20 @@ export function Library({
                         className="book-card-remove"
                         onClick={() => onRemove(book)}
                         disabled={busy}
-                        aria-label={`${book.title}を本棚から削除`}
+                        aria-label={t("library.removeBook", { title: book.title })}
                       >
                         <Trash size={13} weight="bold" />
-                        削除
+                        {t("library.remove")}
                       </button>
                       {book.available ? (
                         <button type="button" onClick={() => onOpen(book)} disabled={busy}>
-                          {busy ? "開いています…" : book.lastPage > 1 ? "続きを読む" : "開く"}
+                          {busy ? t("library.opening") : book.lastPage > 1 ? t("library.continue") : t("library.open")}
                           <ArrowRight size={13} weight="bold" />
                         </button>
                       ) : (
                         <button type="button" onClick={() => onRelink(book)} disabled={busy}>
                           <ArrowCounterClockwise size={13} weight="bold" />
-                          {busy ? "選択中…" : "再選択"}
+                          {busy ? t("library.choosing") : t("library.chooseAgain")}
                         </button>
                       )}
                     </div>

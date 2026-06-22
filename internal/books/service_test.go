@@ -1,6 +1,7 @@
 package books
 
 import (
+	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/library"
+	"github.com/kaito/glint/internal/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,6 +60,19 @@ func TestSelectPDFRegistersAssetAndReturnsBookFile(t *testing.T) {
 	h.assets.ServeHTTP(response, request)
 	assert.Equal(t, http.StatusOK, response.Code)
 	assert.Equal(t, content, response.Body.String())
+}
+
+func TestServiceLocalizesNativeCopyFromSavedLanguage(t *testing.T) {
+	h := newHarness(t)
+	manager := settings.NewManager(h.store, nil)
+	service := New(h.store, h.assets, h.dataDir, manager)
+
+	assert.Equal(t, "Remove", service.localized("Remove", "削除"))
+	_, err := manager.SaveLanguage(context.Background(), settings.SaveLanguageSettingsRequest{
+		Language: settings.LanguageJapanese,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "削除", service.localized("Remove", "削除"))
 }
 
 func TestSelectPDFRejectsInvalidHeader(t *testing.T) {
