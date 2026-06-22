@@ -479,33 +479,47 @@ export function PdfReader({
 
       const outputScale = window.devicePixelRatio || 1;
       const viewports = pages.map((page) => page.getViewport({ scale }));
-      for (let i = 0; i < pages.length; i += 1) {
-        const page = pages[i];
-        const canvas = canvases[i];
-        const viewport = viewports[i];
-        const context = canvas.getContext("2d");
+      const visibleContexts = canvases.map((canvas) => canvas.getContext("2d"));
+      if (visibleContexts.some((context) => !context)) {
+        throw new Error(t("error.canvas"));
+      }
+      const renderCanvases = viewports.map((viewport) => {
+        const canvas = globalThis.document.createElement("canvas");
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        return canvas;
+      });
+      const tasks = pages.map((page, index) => {
+        const context = renderCanvases[index].getContext("2d");
         if (!context) {
           throw new Error(t("error.canvas"));
         }
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = `${Math.floor(viewport.width)}px`;
-        canvas.style.height = `${Math.floor(viewport.height)}px`;
         const task = page.render({
-          canvas,
+          canvas: renderCanvases[index],
           canvasContext: context,
-          viewport,
+          viewport: viewports[index],
           transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
         });
         renderTasks.push(task);
-        await task.promise;
-        if (!active) {
-          return;
-        }
+        return task;
+      });
+      await Promise.all(tasks.map((task) => task.promise));
+      if (!active) {
+        return;
       }
-      if (active) {
-        setEffectiveScale(scale);
+
+      // Keep the current spread visible while both pages render. Committing both
+      // buffers without yielding prevents the right page from flashing behind the left.
+      for (let i = 0; i < canvases.length; i += 1) {
+        const canvas = canvases[i];
+        const viewport = viewports[i];
+        canvas.width = renderCanvases[i].width;
+        canvas.height = renderCanvases[i].height;
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+        visibleContexts[i]!.drawImage(renderCanvases[i], 0, 0);
       }
+      setEffectiveScale(scale);
 
       const textContents = await Promise.all(pages.map((page) => page.getTextContent()));
       if (!active) {

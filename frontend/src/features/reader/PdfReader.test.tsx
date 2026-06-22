@@ -121,7 +121,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   resize.callbacks = [];
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
   Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 1 });
   loader.createPdfTextLayer.mockImplementation(async () => ({
     render: vi.fn(async () => undefined),
@@ -644,6 +646,58 @@ describe("PdfReader", () => {
     expect(canvases[1].getAttribute("aria-label")).toBe("2ページ");
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("1–2");
     await waitFor(() => expect(onPageContextChange).toHaveBeenCalledWith(1, "First\n\nSecond", 4));
+  });
+
+  it("commits both spread pages together after rendering them in parallel during zoom", async () => {
+    const pageOne = makePage();
+    const pageTwo = makePage();
+    const pdfDocument = {
+      numPages: 4,
+      getPage: vi.fn(async (number: number) => (number === 1 ? pageOne : pageTwo)),
+    };
+    resolveDocument(pdfDocument);
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
+    await waitFor(() => expect(pageOne.render).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    await waitFor(() => expect(pageTwo.render).toHaveBeenCalledTimes(1));
+    await screen.findByText("200%");
+
+    let resolveLeft!: () => void;
+    let resolveRight!: () => void;
+    pageOne.render.mockImplementationOnce(() => ({
+      promise: new Promise<void>((resolve) => {
+        resolveLeft = resolve;
+      }),
+      cancel: vi.fn(),
+    }));
+    pageTwo.render.mockImplementationOnce(() => ({
+      promise: new Promise<void>((resolve) => {
+        resolveRight = resolve;
+      }),
+      cancel: vi.fn(),
+    }));
+
+    const [leftCanvas, rightCanvas] = Array.from(
+      globalThis.document.querySelectorAll<HTMLCanvasElement>(".pdf-canvas"),
+    );
+    expect(leftCanvas.style.width).toBe("400px");
+    expect(rightCanvas.style.width).toBe("400px");
+
+    fireEvent.click(screen.getByRole("button", { name: "拡大" }));
+    await waitFor(() => expect(pageOne.render).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(pageTwo.render).toHaveBeenCalledTimes(2));
+    expect(leftCanvas.style.width).toBe("400px");
+    expect(rightCanvas.style.width).toBe("400px");
+
+    await act(async () => resolveLeft());
+    expect(leftCanvas.style.width).toBe("400px");
+    expect(rightCanvas.style.width).toBe("400px");
+
+    await act(async () => resolveRight());
+    await waitFor(() => expect(leftCanvas.style.width).toBe("420px"));
+    expect(rightCanvas.style.width).toBe("420px");
   });
 
   it("advances by two pages with the next button and arrow keys in spread mode", async () => {
