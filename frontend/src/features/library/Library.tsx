@@ -8,8 +8,8 @@ import {
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
 import type { BookSummary } from "../../shared/api/backend";
-import { useI18n } from "../../shared/i18n/I18n";
 
 const MAX_DISPLAY_NAME_LENGTH = 200;
 
@@ -36,7 +36,8 @@ export function Library({
   onRemove,
   onRename,
 }: LibraryProps) {
-  const { locale, t } = useI18n();
+  const { i18n, t } = useTranslation();
+  const locale = i18n.resolvedLanguage === "ja" ? "ja-JP" : "en-US";
   const [editingId, setEditingId] = useState("");
   const [draftName, setDraftName] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);

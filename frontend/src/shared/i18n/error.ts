@@ -1,4 +1,4 @@
-import type { TranslationKey } from "./I18n";
+import type { TranslationKey } from "./i18n";
 
 export class LocalizedError extends Error {
   readonly translationKey: TranslationKey;

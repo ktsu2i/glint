@@ -13,7 +13,7 @@ vi.mock("../../shared/api/backend", () => ({
 }));
 
 import { LLMSettingsPage } from "./LLMSettingsPage";
-import { I18nProvider } from "../../shared/i18n/I18n";
+import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
   return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });

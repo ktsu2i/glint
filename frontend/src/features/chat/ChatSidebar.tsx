@@ -8,6 +8,7 @@ import {
   Stop,
   TextAa,
 } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
 import {
   cancelChat,
   getLLMSettings,
@@ -17,7 +18,6 @@ import {
   type LLMSettings,
 } from "../../shared/api/backend";
 import { contextPreview, trimChatContext } from "../../shared/lib/text";
-import { useI18n } from "../../shared/i18n/I18n";
 import { localizeBackendError } from "../../shared/i18n/error";
 
 type ReadingContext = {
@@ -45,7 +45,7 @@ type ChatSidebarProps = {
 type ContextSource = "selection" | "page";
 
 export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
-  const { t } = useI18n();
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -194,7 +194,7 @@ export function ChatSidebar({ context, selection = null }: ChatSidebarProps) {
             <ChatCircleDots size={17} weight="regular" />
           </span>
           <div>
-            <h2>Assistant</h2>
+            <h2>{t("chat.assistant")}</h2>
             <p>{t("chat.subtitle")}</p>
           </div>
         </div>

@@ -11,6 +11,7 @@ import {
   Minus,
   Plus,
 } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
 import {
   type PDFDocumentProxy,
   type PDFDocumentLoadingTask,
@@ -25,7 +26,6 @@ import {
 } from "../../shared/api/backend";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
-import { useI18n } from "../../shared/i18n/I18n";
 import { LocalizedError } from "../../shared/i18n/error";
 import {
   createPdfLoadingTask,
@@ -80,7 +80,7 @@ export function PdfReader({
   onSelectionChange,
   onIndexedPageCountChange,
 }: PdfReaderProps) {
-  const { t } = useI18n();
+  const { t } = useTranslation();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
   const textLayerLeftRef = useRef<HTMLDivElement>(null);
@@ -965,7 +965,7 @@ type OutlineListProps = {
 };
 
 function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineListProps) {
-  const { t } = useI18n();
+  const { t } = useTranslation();
   return (
     <ul className="reader-toc-list" role={depth === 0 ? "tree" : "group"}>
       {nodes.map((node, index) => {

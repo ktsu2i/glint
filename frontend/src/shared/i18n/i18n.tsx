@@ -7,13 +7,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createInstance, type i18n } from "i18next";
+import { I18nextProvider, initReactI18next } from "react-i18next";
 import {
   getLanguageSettings,
   saveLanguageSettings,
   type LanguagePreference,
 } from "../api/backend";
 
-const en = {
+export const en = {
   "app.technicalReader": "Technical reader",
   "app.library": "Library",
   "app.read": "Read",
@@ -21,6 +23,7 @@ const en = {
   "app.addPdf": "Add PDF",
   "app.choosingPdf": "Choosing…",
   "app.mainNavigation": "Main navigation",
+  "app.page": "Page",
   "app.pageLabel": "Page {page}",
   "app.resizeAssistant": "Resize assistant panel",
   "error.loadLibrary": "Could not load the library.",
@@ -60,6 +63,7 @@ const en = {
   "library.choosing": "Choosing…",
   "library.chooseAgain": "Choose again",
   "chat.welcome": "Configure OpenRouter to ask questions about a selection or a specific page.",
+  "chat.assistant": "Assistant",
   "chat.aria": "AI chat",
   "chat.loadSettingsError": "Could not load LLM settings.",
   "chat.cancelError": "Could not cancel the question.",
@@ -107,6 +111,8 @@ const en = {
   "settings.items": "Settings sections",
   "settings.application": "Application",
   "settings.modelConnection": "Model connection",
+  "settings.model": "Model",
+  "settings.modelId": "Model ID",
   "settings.credentialNote": "The API key is stored separately in the OS credential store.",
   "settings.readingEnvironment": "Reading environment",
   "settings.appearance": "Appearance",
@@ -139,6 +145,7 @@ const en = {
   "settings.modelPlaceholder": "e.g. anthropic/claude-sonnet-4",
   "settings.invalidModel": "Model ID must use provider/model format.",
   "settings.credential": "Credential",
+  "settings.apiKey": "API key",
   "settings.keyStored": "Stored in OS credential store",
   "settings.keyScheduledForRemoval": "Scheduled for removal",
   "settings.hideApiKey": "Hide API key",
@@ -149,6 +156,7 @@ const en = {
   "settings.removeApiKey": "Remove saved API key",
   "settings.privacy": "Privacy",
   "settings.zdrDescription": "Restrict routing to endpoints that do not retain data.",
+  "settings.zeroDataRetention": "Zero Data Retention",
   "settings.requireZdr": "Require Zero Data Retention",
   "settings.remoteDataNote": "Questions and explicitly attached PDF context are sent to OpenRouter and the selected model provider.",
   "settings.back": "Back",
@@ -203,7 +211,7 @@ const en = {
   "error.invalidPdf": "The selected data is not a PDF. Restart the app and open it again.",
 } as const;
 
-const ja: Record<keyof typeof en, string> = {
+export const ja: Record<keyof typeof en, string> = {
   "app.technicalReader": "Technical reader",
   "app.library": "本棚",
   "app.read": "読書",
@@ -211,6 +219,7 @@ const ja: Record<keyof typeof en, string> = {
   "app.addPdf": "PDFを追加",
   "app.choosingPdf": "選択しています…",
   "app.mainNavigation": "メインナビゲーション",
+  "app.page": "PAGE",
   "app.pageLabel": "{page}ページ",
   "app.resizeAssistant": "アシスタントパネルの幅を変更",
   "error.loadLibrary": "本棚を読み込めませんでした。",
@@ -250,6 +259,7 @@ const ja: Record<keyof typeof en, string> = {
   "library.choosing": "選択中…",
   "library.chooseAgain": "再選択",
   "chat.welcome": "OpenRouterを設定すると、選択範囲や指定したページについて質問できます。",
+  "chat.assistant": "Assistant",
   "chat.aria": "AIチャット",
   "chat.loadSettingsError": "LLM設定を読み込めませんでした。",
   "chat.cancelError": "質問の中止に失敗しました。",
@@ -297,6 +307,8 @@ const ja: Record<keyof typeof en, string> = {
   "settings.items": "設定項目",
   "settings.application": "Application",
   "settings.modelConnection": "Model connection",
+  "settings.model": "Model",
+  "settings.modelId": "Model ID",
   "settings.credentialNote": "API keyはOSのcredential storeに分離して保存します。",
   "settings.readingEnvironment": "Reading environment",
   "settings.appearance": "表示",
@@ -329,6 +341,7 @@ const ja: Record<keyof typeof en, string> = {
   "settings.modelPlaceholder": "例: anthropic/claude-sonnet-4",
   "settings.invalidModel": "Model IDは provider/model 形式で入力してください。",
   "settings.credential": "Credential",
+  "settings.apiKey": "API key",
   "settings.keyStored": "OS credential storeに保存済み",
   "settings.keyScheduledForRemoval": "削除予定",
   "settings.hideApiKey": "API keyを隠す",
@@ -339,6 +352,7 @@ const ja: Record<keyof typeof en, string> = {
   "settings.removeApiKey": "保存済みAPI keyを削除",
   "settings.privacy": "Privacy",
   "settings.zdrDescription": "データを保持しないendpointだけにroutingを制限します。",
+  "settings.zeroDataRetention": "Zero Data Retention",
   "settings.requireZdr": "Zero Data Retentionを必須にする",
   "settings.remoteDataNote": "質問と明示的に添付したPDF contextは、OpenRouterと選択されたmodel providerへ送信されます。",
   "settings.back": "戻る",
@@ -394,33 +408,48 @@ const ja: Record<keyof typeof en, string> = {
 };
 
 export type TranslationKey = keyof typeof en;
-type TranslationValues = Record<string, string | number>;
 
-type I18nValue = {
+type LanguageSettingsValue = {
   language: LanguagePreference;
-  locale: string;
   loading: boolean;
   error: string;
-  t: (key: TranslationKey, values?: TranslationValues) => string;
   changeLanguage: (language: LanguagePreference) => Promise<void>;
 };
 
-function translate(language: LanguagePreference, key: TranslationKey, values?: TranslationValues) {
-  const template = (language === "ja" ? ja : en)[key];
-  if (!values) return template;
-  return template.replace(/\{(\w+)\}/g, (_, name: string) => String(values[name] ?? `{${name}}`));
+export const resources = {
+  en: { translation: en },
+  ja: { translation: ja },
+} as const;
+
+function createI18n(language: LanguagePreference) {
+  const instance = createInstance();
+  void instance.use(initReactI18next).init({
+    resources,
+    lng: language,
+    fallbackLng: "en",
+    supportedLngs: ["en", "ja"],
+    defaultNS: "translation",
+    keySeparator: false,
+    initAsync: false,
+    interpolation: {
+      escapeValue: false,
+      prefix: "{",
+      suffix: "}",
+    },
+    react: { useSuspense: false },
+  });
+  return instance;
 }
 
-const I18nContext = createContext<I18nValue>({
+const LanguageSettingsContext = createContext<LanguageSettingsValue>({
   language: "en",
-  locale: "en-US",
   loading: false,
   error: "",
-  t: (key, values) => translate("en", key, values),
   changeLanguage: async () => {},
 });
 
 export function I18nProvider({ children, initialLanguage }: { children: ReactNode; initialLanguage?: LanguagePreference }) {
+  const [i18n] = useState<i18n>(() => createI18n(initialLanguage ?? "en"));
   const [language, setLanguage] = useState<LanguagePreference>(initialLanguage ?? "en");
   const [loading, setLoading] = useState(initialLanguage === undefined);
   const [error, setError] = useState("");
@@ -435,52 +464,57 @@ export function I18nProvider({ children, initialLanguage }: { children: ReactNod
     void getLanguageSettings()
       .then((settings) => {
         if (!active) return;
-        setLanguage(settings.language);
-        setError("");
+        return i18n.changeLanguage(settings.language).then(() => {
+          if (!active) return;
+          setLanguage(settings.language);
+          setError("");
+        });
       })
       .catch((reason) => {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : translate("en", "error.loadLanguage"));
+        setError(reason instanceof Error ? reason.message : i18n.t("error.loadLanguage"));
       })
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [initialLanguage]);
+  }, [i18n, initialLanguage]);
 
   const changeLanguage = useCallback(async (next: LanguagePreference) => {
     if (next === language) return;
     const previous = language;
-    setLanguage(next);
     setError("");
     try {
+      await i18n.changeLanguage(next);
+      setLanguage(next);
       const saved = await saveLanguageSettings(next);
+      await i18n.changeLanguage(saved.language);
       setLanguage(saved.language);
     } catch (reason) {
+      await i18n.changeLanguage(previous);
       setLanguage(previous);
-      const message = reason instanceof Error ? reason.message : translate(previous, "error.saveLanguage");
+      const message = reason instanceof Error ? reason.message : i18n.t("error.saveLanguage", { lng: previous });
       setError(message);
       throw new Error(message);
     }
-  }, [language]);
+  }, [i18n, language]);
 
-  const t = useCallback(
-    (key: TranslationKey, values?: TranslationValues) => translate(language, key, values),
-    [language],
-  );
-
-  const value = useMemo<I18nValue>(() => ({
+  const value = useMemo<LanguageSettingsValue>(() => ({
     language,
-    locale: language === "ja" ? "ja-JP" : "en-US",
     loading,
     error,
-    t,
     changeLanguage,
-  }), [changeLanguage, error, language, loading, t]);
+  }), [changeLanguage, error, language, loading]);
 
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+  return (
+    <I18nextProvider i18n={i18n}>
+      <LanguageSettingsContext.Provider value={value}>
+        {children}
+      </LanguageSettingsContext.Provider>
+    </I18nextProvider>
+  );
 }
 
-export function useI18n() {
-  return useContext(I18nContext);
+export function useLanguageSettings() {
+  return useContext(LanguageSettingsContext);
 }

@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Switch } from "@base-ui/react/switch";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   Check,
@@ -19,7 +20,7 @@ import {
   type LLMSettings,
   type ThemePreference,
 } from "../../shared/api/backend";
-import { useI18n } from "../../shared/i18n/I18n";
+import { useLanguageSettings } from "../../shared/i18n/i18n";
 
 type LLMSettingsPageProps = {
   onBack: () => void;
@@ -45,13 +46,13 @@ export function LLMSettingsPage({
   themeError = "",
   onThemeChange = async () => {},
 }: LLMSettingsPageProps) {
+  const { t } = useTranslation();
   const {
     language,
     loading: languageLoading,
     error: languageError,
-    t,
     changeLanguage,
-  } = useI18n();
+  } = useLanguageSettings();
   const translationRef = useRef(t);
   translationRef.current = t;
   const [settings, setSettings] = useState<LLMSettings | null>(null);
@@ -300,9 +301,9 @@ export function LLMSettingsPage({
             )}
 
             <fieldset className="settings-fieldset" disabled={loading || saving}>
-              <legend>Model</legend>
+              <legend>{t("settings.model")}</legend>
               <div className="settings-field">
-                <label htmlFor="openrouter-model">Model ID</label>
+                <label htmlFor="openrouter-model">{t("settings.modelId")}</label>
                 <input
                   id="openrouter-model"
                   value={model}
@@ -323,7 +324,7 @@ export function LLMSettingsPage({
               <legend>{t("settings.credential")}</legend>
               <div className="settings-field">
                 <span className="settings-field-label">
-                  <label htmlFor="openrouter-api-key">API key</label>
+                  <label htmlFor="openrouter-api-key">{t("settings.apiKey")}</label>
                   {hasCredential && !clearAPIKey && (
                     <em><Key size={11} /> {t("settings.keyStored")}</em>
                   )}
@@ -380,7 +381,7 @@ export function LLMSettingsPage({
               <legend>{t("settings.privacy")}</legend>
               <div className="privacy-setting">
                 <div>
-                  <span><ShieldCheck size={16} /> Zero Data Retention</span>
+                  <span><ShieldCheck size={16} /> {t("settings.zeroDataRetention")}</span>
                   <p>{t("settings.zdrDescription")}</p>
                 </div>
                 <Switch.Root

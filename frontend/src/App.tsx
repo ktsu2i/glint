@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import { BookOpenText, Books, FolderOpen, GearSix } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { Library } from "./features/library/Library";
 import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
 import { LLMSettingsPage } from "./features/settings/LLMSettingsPage";
 import { syncDocumentTheme } from "./features/settings/theme";
-import { I18nProvider, useI18n } from "./shared/i18n/I18n";
+import { I18nProvider } from "./shared/i18n/i18n";
 import {
   getAppearanceSettings,
   listBooks,
@@ -31,7 +32,7 @@ type PageContext = {
 };
 
 function AppContent() {
-  const { t } = useI18n();
+  const { t } = useTranslation();
   const [view, setView] = useState<"library" | "reader" | "settings">("library");
   const [settingsReturnView, setSettingsReturnView] = useState<"library" | "reader">("library");
   const [books, setBooks] = useState<BookSummary[]>([]);
@@ -353,7 +354,7 @@ function AppContent() {
             <div className="app-navigation-secondary">
               {book && pageContext.pageNumber > 0 && (
                 <div className="nav-reading-position" aria-label={t("app.pageLabel", { page: pageContext.pageNumber })}>
-                  <span>PAGE</span>
+                  <span>{t("app.page").toUpperCase()}</span>
                   <i aria-hidden="true" />
                   <strong>{String(pageContext.pageNumber).padStart(3, "0")}</strong>
                 </div>

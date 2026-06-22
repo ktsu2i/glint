@@ -44,7 +44,7 @@ vi.mock("../../shared/components/ToolButton", () => ({
 }));
 
 import { PdfReader } from "./PdfReader";
-import { I18nProvider } from "../../shared/i18n/I18n";
+import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
   return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
