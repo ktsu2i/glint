@@ -1109,40 +1109,6 @@ describe("PdfReader", () => {
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(4));
   });
 
-  it("extracts every PDF page in bounded background batches and reports progress", async () => {
-    const page = makePage({
-      getTextContent: vi.fn(async () => ({
-        items: [
-          { str: "Indexed", hasEOL: true },
-          { str: "page", hasEOL: false },
-        ],
-      })),
-    });
-    const pdfDocument = makeDocument(page);
-    pdfDocument.numPages = 18;
-    resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook("/book/1", 0)} onPageContextChange={vi.fn()} />,
-    );
-
-    await waitFor(() => expect(backend.saveBookPages).toHaveBeenCalledTimes(2));
-    const firstBatch = backend.saveBookPages.mock.calls[0][1];
-    const secondBatch = backend.saveBookPages.mock.calls[1][1];
-    expect(firstBatch).toHaveLength(16);
-    expect(firstBatch[0]).toEqual({
-      pageNumber: 1,
-      text: "Indexed\npage",
-      width: 200,
-      height: 100,
-    });
-    expect(firstBatch.at(-1)?.pageNumber).toBe(16);
-    expect(secondBatch.map((entry: { pageNumber: number }) => entry.pageNumber)).toEqual([17, 18]);
-    expect(backend.saveBookPages).toHaveBeenLastCalledWith("book-1", secondBatch, 18);
-
-    fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
-    expect(await screen.findByText("18ページを検索できます")).toBeTruthy();
-  });
-
   it("searches the indexed book, highlights excerpts, and jumps to a result page", async () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 6;
@@ -1188,10 +1154,9 @@ describe("PdfReader", () => {
     expect(screen.getByRole("button", { name: "4ページへ移動" }).className).toContain("is-active");
   });
 
-  it("keeps reading available when background indexing or search fails", async () => {
+  it("keeps reading available when search fails", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
-    backend.saveBookPages.mockRejectedValue(new Error("index unavailable"));
     backend.searchBook.mockRejectedValue(new Error("search unavailable"));
     render(
       <PdfReader book={makeBook("/book/1", 0)} onPageContextChange={vi.fn()} />,
@@ -1200,8 +1165,7 @@ describe("PdfReader", () => {
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
     fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
-    expect(await screen.findByText("本文の準備が中断しました")).toBeTruthy();
-    const input = screen.getByRole("searchbox", { name: "本の中を検索" });
+    const input = await screen.findByRole("searchbox", { name: "本の中を検索" });
     fireEvent.change(input, { target: { value: "evidence" } });
     fireEvent.submit(input.closest("form")!);
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "search unavailable");

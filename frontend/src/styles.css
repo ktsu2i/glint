@@ -1506,19 +1506,6 @@ input:focus-visible,
   opacity: 0.55;
 }
 
-.reader-index-status {
-  margin: 8px 1px 0;
-  color: var(--faint);
-  font-family: var(--utility-font);
-  font-size: 8px;
-  line-height: 1.4;
-  letter-spacing: 0.015em;
-}
-
-.reader-index-status.is-error {
-  color: var(--danger);
-}
-
 .reader-search-scroll {
   min-height: 0;
   overflow: auto;

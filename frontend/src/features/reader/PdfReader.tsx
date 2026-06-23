@@ -32,11 +32,9 @@ import {
   addBookmark,
   listBookmarks,
   removeBookmark,
-  saveBookPages,
   searchBook,
   type BookBookmark,
   type BookFile,
-  type BookPageInput,
   type BookSearchResult,
 } from "../../shared/api/backend";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
@@ -46,7 +44,6 @@ import { LocalizedError } from "../../shared/i18n/error";
 import {
   createPdfLoadingTask,
   createPdfTextLayer,
-  extractPdfPage,
   loadPdfOutline,
   type OutlineNode,
   type PdfTextLayer,
@@ -56,11 +53,13 @@ const loadTimeoutMilliseconds = 60_000;
 const minScale = 0.4;
 const maxScale = 3;
 const manualZoomStep = 0.1;
-const pageIndexBatchSize = 16;
 
 type FlatOutlineEntry = { path: string; pageNumber: number | null };
 
-function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry[] {
+function flattenOutline(
+  nodes: OutlineNode[],
+  parentPath = "",
+): FlatOutlineEntry[] {
   const result: FlatOutlineEntry[] = [];
   nodes.forEach((node, index) => {
     const path = parentPath ? `${parentPath}.${index}` : String(index);
@@ -95,9 +94,12 @@ type PdfReaderProps = {
   book: BookFile | null;
   initialPage?: number;
   selection?: ReaderSelection | null;
-  onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
+  onPageContextChange: (
+    pageNumber: number,
+    text: string,
+    pageCount: number,
+  ) => void;
   onSelectionChange?: (selection: ReaderSelection | null) => void;
-  onIndexedPageCountChange?: (count: number) => void;
 };
 
 export function PdfReader({
@@ -106,7 +108,6 @@ export function PdfReader({
   selection = null,
   onPageContextChange,
   onSelectionChange,
-  onIndexedPageCountChange,
 }: PdfReaderProps) {
   const { t } = useTranslation();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
@@ -134,9 +135,6 @@ export function PdfReader({
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   const [outlineLoaded, setOutlineLoaded] = useState(false);
   const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
-  const [indexedPageCount, setIndexedPageCount] = useState(0);
-  const [isIndexing, setIsIndexing] = useState(false);
-  const [indexError, setIndexError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [submittedSearchQuery, setSubmittedSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
@@ -188,7 +186,8 @@ export function PdfReader({
       }
       event.preventDefault();
       setZoomMode((current) => {
-        const base = current.kind === "manual" ? current.value : effectiveScaleRef.current;
+        const base =
+          current.kind === "manual" ? current.value : effectiveScaleRef.current;
         const factor = Math.exp(-event.deltaY * 0.01);
         const next = Math.min(maxScale, Math.max(minScale, base * factor));
         return { kind: "manual", value: next };
@@ -200,10 +199,13 @@ export function PdfReader({
     };
   }, []);
 
-  useEffect(() => () => {
-    stageObserverRef.current?.disconnect();
-    wheelCleanupRef.current?.();
-  }, []);
+  useEffect(
+    () => () => {
+      stageObserverRef.current?.disconnect();
+      wheelCleanupRef.current?.();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!book) {
@@ -213,9 +215,6 @@ export function PdfReader({
       setOutline([]);
       setOutlineLoaded(false);
       setOpenPanel(null);
-      setIndexedPageCount(0);
-      setIsIndexing(false);
-      setIndexError("");
       setSearchQuery("");
       setSubmittedSearchQuery("");
       setSearchResults([]);
@@ -237,9 +236,6 @@ export function PdfReader({
     setOutline([]);
     setOutlineLoaded(false);
     setOpenPanel(null);
-    setIndexedPageCount(Math.max(0, book.indexedPageCount ?? 0));
-    setIsIndexing(false);
-    setIndexError("");
     setSearchQuery("");
     setSubmittedSearchQuery("");
     setSearchResults([]);
@@ -265,14 +261,19 @@ export function PdfReader({
       try {
         const loadedDocument = await Promise.race([
           (async () => {
-            loadingTask = await createPdfLoadingTask(bookUrl, abortController.signal);
+            loadingTask = await createPdfLoadingTask(
+              bookUrl,
+              abortController.signal,
+            );
             return loadingTask.promise;
           })(),
           timeoutPromise,
         ]);
         if (active) {
           setDocument(loadedDocument);
-          setPageNumber(Math.min(loadedDocument.numPages, Math.max(1, initialPage)));
+          setPageNumber(
+            Math.min(loadedDocument.numPages, Math.max(1, initialPage)),
+          );
         }
       } catch (reason: unknown) {
         if (active) {
@@ -282,8 +283,8 @@ export function PdfReader({
               : reason instanceof LocalizedError
                 ? t(reason.translationKey, reason.values)
                 : reason instanceof Error
-                ? reason.message
-                : t("error.openPdf"),
+                  ? reason.message
+                  : t("error.openPdf"),
           );
         }
       } finally {
@@ -325,63 +326,15 @@ export function PdfReader({
       .catch((reason: unknown) => {
         if (active) {
           setBookmarksLoaded(true);
-          setBookmarkError(reason instanceof Error ? reason.message : t("error.loadBookmarks"));
+          setBookmarkError(
+            reason instanceof Error ? reason.message : t("error.loadBookmarks"),
+          );
         }
       });
     return () => {
       active = false;
     };
   }, [book?.id, t]);
-
-  useEffect(() => {
-    if (!document || !book) {
-      return;
-    }
-    let active = true;
-    const pageCount = document.numPages;
-    const firstMissingPage = Math.min(pageCount, Math.max(0, book.indexedPageCount ?? 0)) + 1;
-    setIndexedPageCount(firstMissingPage - 1);
-    setIndexError("");
-    if (firstMissingPage > pageCount) {
-      setIsIndexing(false);
-      return;
-    }
-    setIsIndexing(true);
-
-    async function indexPages() {
-      let batch: BookPageInput[] = [];
-      for (let number = firstMissingPage; number <= pageCount; number += 1) {
-        const page = await extractPdfPage(document!, number);
-        if (!active) {
-          return;
-        }
-        batch.push(page);
-        if (batch.length === pageIndexBatchSize || number === pageCount) {
-          const persistedCount = await saveBookPages(book!.id, batch, pageCount);
-          if (!active) {
-            return;
-          }
-          setIndexedPageCount(persistedCount);
-          batch = [];
-        }
-      }
-      if (active) {
-        setIsIndexing(false);
-        onIndexedPageCountChange?.(pageCount);
-      }
-    }
-
-    void indexPages().catch((reason: unknown) => {
-      if (!active) {
-        return;
-      }
-      setIsIndexing(false);
-      setIndexError(reason instanceof Error ? reason.message : t("error.indexBook"));
-    });
-    return () => {
-      active = false;
-    };
-  }, [book, document, onIndexedPageCountChange, t]);
 
   useEffect(() => {
     if (openPanel !== "search") {
@@ -397,7 +350,7 @@ export function PdfReader({
     function openSearch(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        setOpenPanel((panel) => panel === "search" ? null : "search");
+        setOpenPanel((panel) => (panel === "search" ? null : "search"));
       }
     }
     window.addEventListener("keydown", openSearch);
@@ -470,7 +423,10 @@ export function PdfReader({
     if (!document) {
       return;
     }
-    if (zoomMode.kind === "fit-page" && (stageSize.width === 0 || stageSize.height === 0)) {
+    if (
+      zoomMode.kind === "fit-page" &&
+      (stageSize.width === 0 || stageSize.height === 0)
+    ) {
       return;
     }
     const leftCanvas = canvasLeftRef.current;
@@ -501,11 +457,15 @@ export function PdfReader({
     const textLayers: PdfTextLayer[] = [];
 
     async function renderPages() {
-      const pages = await Promise.all(pageNumbers.map((n) => document!.getPage(n)));
+      const pages = await Promise.all(
+        pageNumbers.map((n) => document!.getPage(n)),
+      );
       if (!active) {
         return;
       }
-      const naturalViewports = pages.map((page) => page.getViewport({ scale: 1 }));
+      const naturalViewports = pages.map((page) =>
+        page.getViewport({ scale: 1 }),
+      );
       const totalWidth = naturalViewports.reduce((sum, v) => sum + v.width, 0);
       const maxHeight = Math.max(...naturalViewports.map((v) => v.height));
       const fitRatios = [
@@ -514,9 +474,10 @@ export function PdfReader({
       ].filter((ratio) => Number.isFinite(ratio) && ratio > 0);
       const fitScale = fitRatios.length > 0 ? Math.min(...fitRatios) : 1;
       const rawScale = zoomMode.kind === "fit-page" ? fitScale : zoomMode.value;
-      const scale = zoomMode.kind === "fit-page"
-        ? Math.min(maxScale, rawScale || 1)
-        : Math.min(maxScale, Math.max(minScale, rawScale || 1));
+      const scale =
+        zoomMode.kind === "fit-page"
+          ? Math.min(maxScale, rawScale || 1)
+          : Math.min(maxScale, Math.max(minScale, rawScale || 1));
 
       const outputScale = window.devicePixelRatio || 1;
       const viewports = pages.map((page) => page.getViewport({ scale }));
@@ -539,7 +500,10 @@ export function PdfReader({
           canvas: renderCanvases[index],
           canvasContext: context,
           viewport: viewports[index],
-          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+          transform:
+            outputScale === 1
+              ? undefined
+              : [outputScale, 0, 0, outputScale, 0, 0],
         });
         renderTasks.push(task);
         return task;
@@ -562,7 +526,9 @@ export function PdfReader({
       }
       setEffectiveScale(scale);
 
-      const textContents = await Promise.all(pages.map((page) => page.getTextContent()));
+      const textContents = await Promise.all(
+        pages.map((page) => page.getTextContent()),
+      );
       if (!active) {
         return;
       }
@@ -587,7 +553,10 @@ export function PdfReader({
           container.removeChild(container.firstChild);
         }
         container.dataset.page = String(pageNumbers[i]);
-        container.style.setProperty("--total-scale-factor", String(viewports[i].scale));
+        container.style.setProperty(
+          "--total-scale-factor",
+          String(viewports[i].scale),
+        );
         container.style.setProperty("--scale-round-x", "1px");
         container.style.setProperty("--scale-round-y", "1px");
         const textLayer = await createPdfTextLayer({
@@ -619,8 +588,16 @@ export function PdfReader({
     }
 
     renderPages().catch((reason: unknown) => {
-      if (active && !(reason instanceof Error && reason.name === "RenderingCancelledException")) {
-        setError(reason instanceof Error ? reason.message : t("error.renderPage"));
+      if (
+        active &&
+        !(
+          reason instanceof Error &&
+          reason.name === "RenderingCancelledException"
+        )
+      ) {
+        setError(
+          reason instanceof Error ? reason.message : t("error.renderPage"),
+        );
       }
     });
 
@@ -629,7 +606,15 @@ export function PdfReader({
       renderTasks.forEach((task) => task.cancel());
       textLayers.forEach((layer) => layer.cancel());
     };
-  }, [document, onPageContextChange, pageNumber, stageSize, t, viewMode, zoomMode]);
+  }, [
+    document,
+    onPageContextChange,
+    pageNumber,
+    stageSize,
+    t,
+    viewMode,
+    zoomMode,
+  ]);
 
   useEffect(() => {
     function handleSelectionChange() {
@@ -641,23 +626,27 @@ export function PdfReader({
       if (!selection || selection.isCollapsed) {
         return;
       }
-      const anchorParent = selection.anchorNode instanceof Element
-        ? selection.anchorNode
-        : selection.anchorNode?.parentElement ?? null;
-      const focusParent = selection.focusNode instanceof Element
-        ? selection.focusNode
-        : selection.focusNode?.parentElement ?? null;
-      const anchorLayer = anchorParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
-      const focusLayer = focusParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
+      const anchorParent =
+        selection.anchorNode instanceof Element
+          ? selection.anchorNode
+          : (selection.anchorNode?.parentElement ?? null);
+      const focusParent =
+        selection.focusNode instanceof Element
+          ? selection.focusNode
+          : (selection.focusNode?.parentElement ?? null);
+      const anchorLayer =
+        anchorParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
+      const focusLayer =
+        focusParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
       if (!anchorLayer || anchorLayer !== focusLayer) {
         return;
       }
       const sourcePage = Number(anchorLayer.dataset.page);
       const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
       if (
-        !range
-        || !anchorLayer.contains(range.startContainer)
-        || !anchorLayer.contains(range.endContainer)
+        !range ||
+        !anchorLayer.contains(range.startContainer) ||
+        !anchorLayer.contains(range.endContainer)
       ) {
         return;
       }
@@ -666,8 +655,16 @@ export function PdfReader({
       if (!text || !Number.isFinite(sourcePage) || sourcePage < 1) {
         return;
       }
-      const rawStartOffset = getTextOffset(anchorLayer, range.startContainer, range.startOffset);
-      const rawEndOffset = getTextOffset(anchorLayer, range.endContainer, range.endOffset);
+      const rawStartOffset = getTextOffset(
+        anchorLayer,
+        range.startContainer,
+        range.startOffset,
+      );
+      const rawEndOffset = getTextOffset(
+        anchorLayer,
+        range.endContainer,
+        range.endOffset,
+      );
       const leadingWhitespace = rawText.length - rawText.trimStart().length;
       const trailingWhitespace = rawText.length - rawText.trimEnd().length;
       emit({
@@ -699,7 +696,10 @@ export function PdfReader({
     window.document.addEventListener("pointerdown", handlePointerDown);
     window.document.addEventListener("click", handleDocumentClick);
     return () => {
-      window.document.removeEventListener("selectionchange", handleSelectionChange);
+      window.document.removeEventListener(
+        "selectionchange",
+        handleSelectionChange,
+      );
       window.document.removeEventListener("pointerdown", handlePointerDown);
       window.document.removeEventListener("click", handleDocumentClick);
     };
@@ -712,9 +712,12 @@ export function PdfReader({
     }
 
     const layers = [textLayerLeftRef.current, textLayerRightRef.current].filter(
-      (layer): layer is HTMLDivElement => !!layer && Number(layer.dataset.page) === selection.pageNumber,
+      (layer): layer is HTMLDivElement =>
+        !!layer && Number(layer.dataset.page) === selection.pageNumber,
     );
-    const rects = layers.flatMap((layer) => getSelectionHighlightRects(layer, selection));
+    const rects = layers.flatMap((layer) =>
+      getSelectionHighlightRects(layer, selection),
+    );
     setHighlightRects(rects);
   }, [selection, textLayerRevision]);
 
@@ -775,13 +778,16 @@ export function PdfReader({
     return last;
   }, [flatOutline, pageNumber]);
 
-  const jumpToOutlinePage = useCallback((target: number) => {
-    if (!document) {
-      return;
-    }
-    const clamped = Math.min(document.numPages, Math.max(1, target));
-    setPageNumber(clamped);
-  }, [document]);
+  const jumpToOutlinePage = useCallback(
+    (target: number) => {
+      if (!document) {
+        return;
+      }
+      const clamped = Math.min(document.numPages, Math.max(1, target));
+      setPageNumber(clamped);
+    },
+    [document],
+  );
 
   const submitBookSearch = useCallback(async () => {
     if (!book) {
@@ -807,7 +813,9 @@ export function PdfReader({
     } catch (reason) {
       if (searchRequestRef.current === request) {
         setSearchResults([]);
-        setSearchError(reason instanceof Error ? reason.message : t("error.searchBook"));
+        setSearchError(
+          reason instanceof Error ? reason.message : t("error.searchBook"),
+        );
       }
     } finally {
       if (searchRequestRef.current === request) {
@@ -840,13 +848,14 @@ export function PdfReader({
   const pageInputWidth = Math.max(2, String(numPages || 1).length);
   const sliderMaximum = Math.max(1, numPages);
   const sliderValue = Math.min(sliderMaximum, Math.max(1, pageNumber));
-  const sliderProgress = numPages > 1
-    ? ((sliderValue - 1) / (numPages - 1)) * 100
-    : 0;
+  const sliderProgress =
+    numPages > 1 ? ((sliderValue - 1) / (numPages - 1)) * 100 : 0;
   const isTocOpen = openPanel === "toc";
   const isSearchOpen = openPanel === "search";
   const isBookmarksOpen = openPanel === "bookmarks";
-  const currentPageBookmarked = bookmarks.some((bookmark) => bookmark.pageNumber === pageNumber);
+  const currentPageBookmarked = bookmarks.some(
+    (bookmark) => bookmark.pageNumber === pageNumber,
+  );
 
   async function toggleCurrentPageBookmark() {
     if (!book || !document || bookmarkBusyPage !== null) {
@@ -857,13 +866,19 @@ export function PdfReader({
     try {
       if (currentPageBookmarked) {
         await removeBookmark(book.id, pageNumber);
-        setBookmarks((current) => current.filter((bookmark) => bookmark.pageNumber !== pageNumber));
+        setBookmarks((current) =>
+          current.filter((bookmark) => bookmark.pageNumber !== pageNumber),
+        );
       } else {
         const saved = await addBookmark(book.id, pageNumber, document.numPages);
-        setBookmarks((current) => [...current, saved].sort((a, b) => a.pageNumber - b.pageNumber));
+        setBookmarks((current) =>
+          [...current, saved].sort((a, b) => a.pageNumber - b.pageNumber),
+        );
       }
     } catch (reason) {
-      setBookmarkError(reason instanceof Error ? reason.message : t("error.saveBookmark"));
+      setBookmarkError(
+        reason instanceof Error ? reason.message : t("error.saveBookmark"),
+      );
     } finally {
       setBookmarkBusyPage(null);
     }
@@ -876,23 +891,37 @@ export function PdfReader({
           <ToolButton
             label={isTocOpen ? t("reader.closeToc") : t("reader.openToc")}
             className={isTocOpen ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => panel === "toc" ? null : "toc")}
+            onClick={() =>
+              setOpenPanel((panel) => (panel === "toc" ? null : "toc"))
+            }
             disabled={!document}
           >
             <ListBullets size={15} weight="regular" />
           </ToolButton>
           <ToolButton
-            label={isSearchOpen ? t("reader.closeSearch") : t("reader.openSearch")}
+            label={
+              isSearchOpen ? t("reader.closeSearch") : t("reader.openSearch")
+            }
             className={isSearchOpen ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => panel === "search" ? null : "search")}
+            onClick={() =>
+              setOpenPanel((panel) => (panel === "search" ? null : "search"))
+            }
             disabled={!document}
           >
             <MagnifyingGlass size={15} weight="bold" />
           </ToolButton>
           <ToolButton
-            label={isBookmarksOpen ? t("reader.closeBookmarks") : t("reader.openBookmarks")}
+            label={
+              isBookmarksOpen
+                ? t("reader.closeBookmarks")
+                : t("reader.openBookmarks")
+            }
             className={isBookmarksOpen ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => panel === "bookmarks" ? null : "bookmarks")}
+            onClick={() =>
+              setOpenPanel((panel) =>
+                panel === "bookmarks" ? null : "bookmarks",
+              )
+            }
             disabled={!document}
           >
             <BookmarksSimple size={15} weight="bold" />
@@ -902,7 +931,9 @@ export function PdfReader({
           <ToolButton
             label={t("reader.previousPage")}
             disabled={pageNumber <= 1}
-            onClick={() => setPageNumber((current) => Math.max(1, current - step))}
+            onClick={() =>
+              setPageNumber((current) => Math.max(1, current - step))
+            }
           >
             <CaretLeft size={15} weight="bold" />
           </ToolButton>
@@ -923,7 +954,9 @@ export function PdfReader({
                 aria-label={t("reader.pageNumber")}
                 value={pageInput}
                 size={pageInputWidth}
-                onChange={(event) => setPageInput(event.target.value.replace(/[^0-9]/g, ""))}
+                onChange={(event) =>
+                  setPageInput(event.target.value.replace(/[^0-9]/g, ""))
+                }
                 onBlur={() => {
                   commitPageInput();
                   setIsEditingPage(false);
@@ -952,26 +985,47 @@ export function PdfReader({
           <ToolButton
             label={t("reader.nextPage")}
             disabled={!document || pageNumber + step > document.numPages}
-            onClick={() => setPageNumber((current) => Math.min(document!.numPages, current + step))}
+            onClick={() =>
+              setPageNumber((current) =>
+                Math.min(document!.numPages, current + step),
+              )
+            }
           >
             <CaretRight size={15} weight="bold" />
           </ToolButton>
           <ToolButton
-            label={currentPageBookmarked
-              ? t("reader.removePageBookmark", { page: pageNumber })
-              : t("reader.savePageBookmark", { page: pageNumber })}
-            className={currentPageBookmarked ? "is-active reader-bookmark-toggle" : "reader-bookmark-toggle"}
+            label={
+              currentPageBookmarked
+                ? t("reader.removePageBookmark", { page: pageNumber })
+                : t("reader.savePageBookmark", { page: pageNumber })
+            }
+            className={
+              currentPageBookmarked
+                ? "is-active reader-bookmark-toggle"
+                : "reader-bookmark-toggle"
+            }
             disabled={!document || bookmarkBusyPage !== null}
             onClick={() => void toggleCurrentPageBookmark()}
           >
-            <BookmarkSimple size={15} weight={currentPageBookmarked ? "fill" : "regular"} />
+            <BookmarkSimple
+              size={15}
+              weight={currentPageBookmarked ? "fill" : "regular"}
+            />
           </ToolButton>
         </div>
         <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
           <ToolButton
-            label={viewMode === "spread" ? t("reader.singlePage") : t("reader.spread")}
+            label={
+              viewMode === "spread"
+                ? t("reader.singlePage")
+                : t("reader.spread")
+            }
             className={viewMode === "spread" ? "is-active" : ""}
-            onClick={() => setViewMode((current) => (current === "spread" ? "single" : "spread"))}
+            onClick={() =>
+              setViewMode((current) =>
+                current === "spread" ? "single" : "spread",
+              )
+            }
           >
             {viewMode === "spread" ? (
               <File size={14} weight="bold" />
@@ -986,18 +1040,26 @@ export function PdfReader({
           >
             <CornersIn size={14} weight="bold" />
           </ToolButton>
-          <ToolButton label={t("reader.zoomOut")} onClick={() => adjustZoom(-manualZoomStep)}>
+          <ToolButton
+            label={t("reader.zoomOut")}
+            onClick={() => adjustZoom(-manualZoomStep)}
+          >
             <Minus size={14} weight="bold" />
           </ToolButton>
           <span>{Math.round(effectiveScale * 100)}%</span>
-          <ToolButton label={t("reader.zoomIn")} onClick={() => adjustZoom(manualZoomStep)}>
+          <ToolButton
+            label={t("reader.zoomIn")}
+            onClick={() => adjustZoom(manualZoomStep)}
+          >
             <Plus size={14} weight="bold" />
           </ToolButton>
         </div>
       </div>
 
       {bookmarkError && (
-        <div className="reader-bookmark-error" role="alert">{bookmarkError}</div>
+        <div className="reader-bookmark-error" role="alert">
+          {bookmarkError}
+        </div>
       )}
 
       <div className={`reader-body ${openPanel ? "toc-open" : "toc-closed"}`}>
@@ -1009,9 +1071,7 @@ export function PdfReader({
             <div className="reader-toc-scroll">
               {outline.length === 0 ? (
                 <p className="reader-toc-empty">
-                  {outlineLoaded
-                    ? t("reader.noToc")
-                    : t("reader.loadingToc")}
+                  {outlineLoaded ? t("reader.noToc") : t("reader.loadingToc")}
                 </p>
               ) : (
                 <OutlineList
@@ -1026,7 +1086,10 @@ export function PdfReader({
           </aside>
         )}
         {isSearchOpen && (
-          <aside className="reader-toc reader-search" aria-label={t("reader.textSearch")}>
+          <aside
+            className="reader-toc reader-search"
+            aria-label={t("reader.textSearch")}
+          >
             <div className="reader-search-header">
               <form
                 role="search"
@@ -1045,32 +1108,32 @@ export function PdfReader({
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
-                <button type="submit" disabled={!searchQuery.trim() || isSearching}>
-                  {isSearching ? t("reader.searchingAction") : t("reader.searchAction")}
+                <button
+                  type="submit"
+                  disabled={!searchQuery.trim() || isSearching}
+                >
+                  {isSearching
+                    ? t("reader.searchingAction")
+                    : t("reader.searchAction")}
                 </button>
               </form>
-              <p className={indexError ? "reader-index-status is-error" : "reader-index-status"} aria-live="polite">
-                {indexError
-                  ? t("reader.indexInterrupted")
-                  : isIndexing
-                    ? t("reader.indexProgress", { current: indexedPageCount, total: numPages })
-                    : indexedPageCount > 0
-                      ? t("reader.indexReady", { count: indexedPageCount })
-                      : t("reader.indexPreparing")}
-              </p>
             </div>
             <div className="reader-search-scroll">
               {searchError ? (
-                <p className="reader-search-message is-error" role="alert">{searchError}</p>
+                <p className="reader-search-message is-error" role="alert">
+                  {searchError}
+                </p>
               ) : !submittedSearchQuery ? (
-                <p className="reader-search-message">{t("reader.searchPrompt")}</p>
+                <p className="reader-search-message">
+                  {t("reader.searchPrompt")}
+                </p>
               ) : isSearching ? (
-                <p className="reader-search-message">{t("reader.searchingFor", { query: submittedSearchQuery })}</p>
+                <p className="reader-search-message">
+                  {t("reader.searchingFor", { query: submittedSearchQuery })}
+                </p>
               ) : searchResults.length === 0 ? (
                 <p className="reader-search-message">
-                  {isIndexing
-                    ? t("reader.noResultsPartial", { count: indexedPageCount, query: submittedSearchQuery })
-                    : t("reader.noResults", { query: submittedSearchQuery })}
+                  {t("reader.noResults", { query: submittedSearchQuery })}
                 </p>
               ) : (
                 <>
@@ -1082,16 +1145,29 @@ export function PdfReader({
                       <li key={result.pageNumber}>
                         <button
                           type="button"
-                          className={result.pageNumber === pageNumber ? "is-active" : ""}
-                          aria-label={t("reader.goToResult", { page: result.pageNumber })}
+                          className={
+                            result.pageNumber === pageNumber ? "is-active" : ""
+                          }
+                          aria-label={t("reader.goToResult", {
+                            page: result.pageNumber,
+                          })}
                           onClick={() => jumpToOutlinePage(result.pageNumber)}
                         >
                           <span className="reader-search-result-meta">
-                            <strong>PAGE {String(result.pageNumber).padStart(3, "0")}</strong>
-                            <span>{t("reader.matches", { count: result.matchCount })}</span>
+                            <strong>
+                              PAGE {String(result.pageNumber).padStart(3, "0")}
+                            </strong>
+                            <span>
+                              {t("reader.matches", {
+                                count: result.matchCount,
+                              })}
+                            </span>
                           </span>
                           <span className="reader-search-excerpt">
-                            <HighlightedExcerpt text={result.excerpt} query={submittedSearchQuery} />
+                            <HighlightedExcerpt
+                              text={result.excerpt}
+                              query={submittedSearchQuery}
+                            />
                           </span>
                         </button>
                       </li>
@@ -1103,14 +1179,19 @@ export function PdfReader({
           </aside>
         )}
         {isBookmarksOpen && (
-          <aside className="reader-toc reader-bookmarks" aria-label={t("reader.bookmarks")}>
+          <aside
+            className="reader-toc reader-bookmarks"
+            aria-label={t("reader.bookmarks")}
+          >
             <div className="reader-toc-header">
               <span>{t("reader.bookmarks")}</span>
               {bookmarks.length > 0 && <strong>{bookmarks.length}</strong>}
             </div>
             <div className="reader-toc-scroll">
               {!bookmarksLoaded ? (
-                <p className="reader-toc-empty">{t("reader.loadingBookmarks")}</p>
+                <p className="reader-toc-empty">
+                  {t("reader.loadingBookmarks")}
+                </p>
               ) : bookmarkError && bookmarks.length === 0 ? (
                 <p className="reader-toc-empty is-error">{bookmarkError}</p>
               ) : bookmarks.length === 0 ? (
@@ -1118,34 +1199,60 @@ export function PdfReader({
               ) : (
                 <ol className="reader-bookmark-list">
                   {bookmarks.map((bookmark) => (
-                    <li key={bookmark.pageNumber} className={bookmark.pageNumber === pageNumber ? "is-active" : ""}>
+                    <li
+                      key={bookmark.pageNumber}
+                      className={
+                        bookmark.pageNumber === pageNumber ? "is-active" : ""
+                      }
+                    >
                       <button
                         type="button"
                         className="reader-bookmark-link"
-                        aria-label={t("reader.goToBookmark", { page: bookmark.pageNumber })}
+                        aria-label={t("reader.goToBookmark", {
+                          page: bookmark.pageNumber,
+                        })}
                         onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
                       >
-                        <BookmarkSimple size={16} weight="fill" aria-hidden="true" />
+                        <BookmarkSimple
+                          size={16}
+                          weight="fill"
+                          aria-hidden="true"
+                        />
                         <span>
-                          <strong>{t("reader.bookmarkPage", { page: bookmark.pageNumber })}</strong>
+                          <strong>
+                            {t("reader.bookmarkPage", {
+                              page: bookmark.pageNumber,
+                            })}
+                          </strong>
                           <small>{t("reader.bookmarkSaved")}</small>
                         </span>
                       </button>
                       <button
                         type="button"
                         className="reader-bookmark-remove"
-                        aria-label={t("reader.removePageBookmark", { page: bookmark.pageNumber })}
+                        aria-label={t("reader.removePageBookmark", {
+                          page: bookmark.pageNumber,
+                        })}
                         disabled={bookmarkBusyPage !== null}
                         onClick={() => {
                           setBookmarkBusyPage(bookmark.pageNumber);
                           setBookmarkError("");
                           void removeBookmark(book.id, bookmark.pageNumber)
-                            .then(() => setBookmarks((current) => current.filter(
-                              (entry) => entry.pageNumber !== bookmark.pageNumber,
-                            )))
-                            .catch((reason: unknown) => setBookmarkError(
-                              reason instanceof Error ? reason.message : t("error.saveBookmark"),
-                            ))
+                            .then(() =>
+                              setBookmarks((current) =>
+                                current.filter(
+                                  (entry) =>
+                                    entry.pageNumber !== bookmark.pageNumber,
+                                ),
+                              ),
+                            )
+                            .catch((reason: unknown) =>
+                              setBookmarkError(
+                                reason instanceof Error
+                                  ? reason.message
+                                  : t("error.saveBookmark"),
+                              ),
+                            )
                             .finally(() => setBookmarkBusyPage(null));
                         }}
                       >
@@ -1159,9 +1266,17 @@ export function PdfReader({
           </aside>
         )}
         <div className="pdf-stage" ref={stageRef}>
-          {loading && <div className="reader-status">{t("reader.loadingPdf")}</div>}
-          {error && <div className="reader-error" role="alert">{error}</div>}
-          <div className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}>
+          {loading && (
+            <div className="reader-status">{t("reader.loadingPdf")}</div>
+          )}
+          {error && (
+            <div className="reader-error" role="alert">
+              {error}
+            </div>
+          )}
+          <div
+            className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}
+          >
             <div className="pdf-page">
               <canvas
                 ref={canvasLeftRef}
@@ -1211,32 +1326,48 @@ export function PdfReader({
             step={1}
             value={sliderValue}
             aria-label={t("reader.pageSlider")}
-            aria-valuetext={t("reader.pageOfTotal", { current: sliderValue, total: numPages || 1 })}
+            aria-valuetext={t("reader.pageOfTotal", {
+              current: sliderValue,
+              total: numPages || 1,
+            })}
             disabled={!document}
             style={{ "--page-progress": `${sliderProgress}%` } as CSSProperties}
             onChange={(event) => setPageNumber(Number(event.target.value))}
           />
           <div className="reader-slider-bookmarks">
-            {document && bookmarks.map((bookmark) => {
-              const markerPosition = numPages > 1
-                ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100
-                : 0;
-              const isCurrent = bookmark.pageNumber === pageNumber;
-              return (
-                <button
-                  key={bookmark.pageNumber}
-                  type="button"
-                  className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
-                  style={{ "--bookmark-position": `${markerPosition}%` } as CSSProperties}
-                  aria-label={t("reader.sliderBookmark", { page: bookmark.pageNumber })}
-                  aria-current={isCurrent ? "page" : undefined}
-                  data-tooltip={t("reader.bookmarkPage", { page: bookmark.pageNumber })}
-                  onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
-                >
-                  <span className="reader-slider-bookmark-dot" aria-hidden="true" />
-                </button>
-              );
-            })}
+            {document &&
+              bookmarks.map((bookmark) => {
+                const markerPosition =
+                  numPages > 1
+                    ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100
+                    : 0;
+                const isCurrent = bookmark.pageNumber === pageNumber;
+                return (
+                  <button
+                    key={bookmark.pageNumber}
+                    type="button"
+                    className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
+                    style={
+                      {
+                        "--bookmark-position": `${markerPosition}%`,
+                      } as CSSProperties
+                    }
+                    aria-label={t("reader.sliderBookmark", {
+                      page: bookmark.pageNumber,
+                    })}
+                    aria-current={isCurrent ? "page" : undefined}
+                    data-tooltip={t("reader.bookmarkPage", {
+                      page: bookmark.pageNumber,
+                    })}
+                    onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
+                  >
+                    <span
+                      className="reader-slider-bookmark-dot"
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
           </div>
         </div>
       </div>
@@ -1251,7 +1382,10 @@ function getTextOffset(root: HTMLElement, node: Node, offset: number): number {
   return range.toString().length;
 }
 
-function getTextBoundary(root: HTMLElement, targetOffset: number): { node: Text; offset: number } | null {
+function getTextBoundary(
+  root: HTMLElement,
+  targetOffset: number,
+): { node: Text; offset: number } | null {
   const showText = root.ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4;
   const walker = root.ownerDocument.createTreeWalker(root, showText);
   let consumed = 0;
@@ -1303,12 +1437,16 @@ function getSelectionHighlightRects(
 
   return rawRects.reduce<HighlightRect[]>((merged, rect) => {
     const previous = merged.at(-1);
-    const sameLine = previous
-      && Math.abs(previous.top - rect.top) <= 2
-      && Math.abs(previous.height - rect.height) <= 3;
-    const touchesPrevious = previous && rect.left <= previous.left + previous.width + 3;
+    const sameLine =
+      previous &&
+      Math.abs(previous.top - rect.top) <= 2 &&
+      Math.abs(previous.height - rect.height) <= 3;
+    const touchesPrevious =
+      previous && rect.left <= previous.left + previous.width + 3;
     if (previous && sameLine && touchesPrevious) {
-      previous.width = Math.max(previous.left + previous.width, rect.left + rect.width) - previous.left;
+      previous.width =
+        Math.max(previous.left + previous.width, rect.left + rect.width) -
+        previous.left;
       previous.height = Math.max(previous.height, rect.height);
       return merged;
     }
@@ -1317,7 +1455,13 @@ function getSelectionHighlightRects(
   }, []);
 }
 
-function SelectionHighlight({ pageNumber, rects }: { pageNumber: number; rects: HighlightRect[] }) {
+function SelectionHighlight({
+  pageNumber,
+  rects,
+}: {
+  pageNumber: number;
+  rects: HighlightRect[];
+}) {
   const pageRects = rects.filter((rect) => rect.pageNumber === pageNumber);
   return (
     <div className="context-highlight-layer" aria-hidden="true">
@@ -1345,7 +1489,13 @@ type OutlineListProps = {
   onSelect: (pageNumber: number) => void;
 };
 
-function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineListProps) {
+function OutlineList({
+  nodes,
+  parentPath,
+  depth,
+  activeKey,
+  onSelect,
+}: OutlineListProps) {
   const { t } = useTranslation();
   return (
     <ul className="reader-toc-list" role={depth === 0 ? "tree" : "group"}>
@@ -1354,7 +1504,11 @@ function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineL
         const isActive = path === activeKey;
         const hasPage = node.pageNumber !== null;
         return (
-          <li key={path} role="treeitem" aria-expanded={node.children.length > 0 ? true : undefined}>
+          <li
+            key={path}
+            role="treeitem"
+            aria-expanded={node.children.length > 0 ? true : undefined}
+          >
             <button
               type="button"
               className={`reader-toc-item${isActive ? " is-active" : ""}`}
@@ -1362,7 +1516,9 @@ function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineL
               disabled={!hasPage}
               onClick={() => hasPage && onSelect(node.pageNumber as number)}
             >
-              <span className="reader-toc-title">{node.title || t("reader.untitled")}</span>
+              <span className="reader-toc-title">
+                {node.title || t("reader.untitled")}
+              </span>
               {hasPage && (
                 <span className="reader-toc-page">{node.pageNumber}</span>
               )}
@@ -1382,4 +1538,3 @@ function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineL
     </ul>
   );
 }
-

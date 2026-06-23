@@ -4,6 +4,7 @@ import { BookOpenText, Books, GearSix, MagnifyingGlass, SidebarSimple } from "@p
 import { useTranslation } from "react-i18next";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
+import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
 import { Library } from "./features/library/Library";
 import { LibrarySearch, type LibrarySearchStatus } from "./features/library/LibrarySearch";
 import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
@@ -56,6 +57,7 @@ function AppContent() {
   const [searchResults, setSearchResults] = useState<LibrarySearchHit[]>([]);
   const [searchStatus, setSearchStatus] = useState<LibrarySearchStatus>("idle");
   const [searchError, setSearchError] = useState("");
+  const indexAbortersRef = useRef<Map<string, AbortController>>(new Map());
   const searchRequestRef = useRef(0);
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null);
   const generatingCovers = useRef(new Set<string>());
@@ -136,6 +138,46 @@ function AppContent() {
     }
   }, [refreshLibrary]);
 
+  const ensureBookIndexed = useCallback((target: IndexableBook) => {
+    if (!target.url || !target.id) {
+      return;
+    }
+    if (indexAbortersRef.current.has(target.id)) {
+      return;
+    }
+    const controller = new AbortController();
+    indexAbortersRef.current.set(target.id, controller);
+    void indexBookPages(
+      { id: target.id, url: target.url, indexedPageCount: target.indexedPageCount ?? 0 },
+      { signal: controller.signal },
+    )
+      .then((result) => {
+        setBook((book) =>
+          book && book.id === target.id
+            ? { ...book, indexedPageCount: result.persistedCount }
+            : book,
+        );
+        void refreshLibrary();
+      })
+      .catch((reason: unknown) => {
+        if (isAbortError(reason)) {
+          return;
+        }
+        console.warn("Book indexing failed", reason);
+      })
+      .finally(() => {
+        indexAbortersRef.current.delete(target.id);
+      });
+  }, [refreshLibrary]);
+
+  useEffect(() => {
+    const aborters = indexAbortersRef.current;
+    return () => {
+      aborters.forEach((controller) => controller.abort());
+      aborters.clear();
+    };
+  }, []);
+
   const showReader = useCallback((selected: BookFile) => {
     lastSavedPosition.current = "";
     setPageContext({ pageNumber: 0, text: "" });
@@ -143,14 +185,11 @@ function AppContent() {
     setBook(selected);
     setView("reader");
     void ensureCover(selected);
-  }, [ensureCover]);
+    ensureBookIndexed(selected);
+  }, [ensureCover, ensureBookIndexed]);
 
   const handleSelectionChange = useCallback((next: ReaderSelection | null) => {
     setSelection(next);
-  }, []);
-
-  const handleIndexedPageCountChange = useCallback((count: number) => {
-    setBook((current) => current ? { ...current, indexedPageCount: count } : current);
   }, []);
 
   async function handleImportPDF() {
@@ -519,7 +558,6 @@ function AppContent() {
                   selection={selection}
                   onPageContextChange={handlePageContextChange}
                   onSelectionChange={handleSelectionChange}
-                  onIndexedPageCountChange={handleIndexedPageCountChange}
                 />
 
                 {assistantVisible && (
