@@ -93,6 +93,12 @@ input {
   font: inherit;
 }
 
+textarea,
+input,
+[contenteditable="true"] {
+  user-select: text;
+}
+
 button {
   color: inherit;
 }
@@ -121,6 +127,7 @@ input:focus-visible,
   display: grid;
   grid-template-rows: 44px minmax(0, 1fr);
   background: var(--mist);
+  user-select: none;
 }
 
 .app-body {
@@ -361,6 +368,20 @@ input:focus-visible,
   background: var(--mist);
   scrollbar-color: #aeb7b6 transparent;
   scrollbar-width: thin;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.library * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.library :is(input, textarea, [contenteditable="true"]) {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .library-heading {
@@ -371,6 +392,14 @@ input:focus-visible,
   margin: 0 auto 38px;
   padding-bottom: 23px;
   border-bottom: 1px solid var(--line-strong);
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.library-heading * {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .library-heading h1 {
@@ -708,7 +737,7 @@ input:focus-visible,
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: text;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1620,6 +1649,7 @@ button.page-count:disabled {
   transform-origin: 0 0;
   caret-color: CanvasText;
   z-index: 2;
+  user-select: text;
 }
 
 .text-layer :is(span, br) {
@@ -1804,6 +1834,20 @@ button.page-count:disabled {
   background: var(--mist);
   scrollbar-color: #aeb7b6 transparent;
   scrollbar-width: thin;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.settings-page * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.settings-page :is(input, textarea, [contenteditable="true"]) {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .settings-page-shell {
@@ -2478,6 +2522,7 @@ button.page-count:disabled {
   padding: 8px 18px 22px;
   scrollbar-color: #bac1c0 transparent;
   scrollbar-width: thin;
+  user-select: text;
 }
 
 .message {
