@@ -3,11 +3,11 @@ export namespace books {
 	export class BookBookmark {
 	    pageNumber: number;
 	    createdAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BookBookmark(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pageNumber = source["pageNumber"];
@@ -224,3 +224,4 @@ export namespace settings {
 	}
 
 }
+
