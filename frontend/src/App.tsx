@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { BookOpenText, Books, GearSix, SidebarSimple } from "@phosphor-icons/react";
+import { BookOpenText, Books, GearSix, MagnifyingGlass, SidebarSimple } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { Library } from "./features/library/Library";
+import { LibrarySearch, type LibrarySearchStatus } from "./features/library/LibrarySearch";
 import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
 import { LLMSettingsPage } from "./features/settings/LLMSettingsPage";
 import { syncDocumentTheme } from "./features/settings/theme";
@@ -21,8 +22,10 @@ import {
   saveBookCover,
   saveAppearanceSettings,
   saveReadingPosition,
+  searchLibrary,
   type BookFile,
   type BookSummary,
+  type LibrarySearchHit,
   type ThemePreference,
 } from "./shared/api/backend";
 
@@ -33,8 +36,8 @@ type PageContext = {
 
 function AppContent() {
   const { t } = useTranslation();
-  const [view, setView] = useState<"library" | "reader" | "settings">("library");
-  const [settingsReturnView, setSettingsReturnView] = useState<"library" | "reader">("library");
+  const [view, setView] = useState<"library" | "search" | "reader" | "settings">("library");
+  const [settingsReturnView, setSettingsReturnView] = useState<"library" | "search" | "reader">("library");
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState("");
@@ -48,6 +51,12 @@ function AppContent() {
   const [themeError, setThemeError] = useState("");
   const [assistantWidth, setAssistantWidth] = useState(390);
   const [assistantVisible, setAssistantVisible] = useState(true);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LibrarySearchHit[]>([]);
+  const [searchStatus, setSearchStatus] = useState<LibrarySearchStatus>("idle");
+  const [searchError, setSearchError] = useState("");
+  const searchRequestRef = useRef(0);
   const resizeState = useRef<{ startX: number; startWidth: number } | null>(null);
   const generatingCovers = useRef(new Set<string>());
   const lastSavedPosition = useRef("");
@@ -177,6 +186,60 @@ function AppContent() {
     }
   }
 
+  async function handleOpenBookAtPage(summary: BookSummary, pageNumber: number) {
+    if (!summary.available) {
+      return;
+    }
+    setBusyBookId(summary.id);
+    setLibraryError("");
+    try {
+      const opened = await openBook(summary.id);
+      showReader({ ...opened, initialPage: pageNumber });
+      await refreshLibrary();
+    } catch (reason) {
+      setLibraryError(reason instanceof Error ? reason.message : t("error.openBook"));
+      await refreshLibrary();
+    } finally {
+      setBusyBookId("");
+    }
+  }
+
+  const handleLibrarySearchSubmit = useCallback(async () => {
+    const query = searchInput.trim();
+    if (!query) {
+      return;
+    }
+    const request = searchRequestRef.current + 1;
+    searchRequestRef.current = request;
+    setSearchQuery(query);
+    setSearchStatus("loading");
+    setSearchError("");
+    try {
+      const hits = await searchLibrary(query);
+      if (searchRequestRef.current !== request) {
+        return;
+      }
+      setSearchResults(hits);
+      setSearchStatus("ready");
+    } catch (reason) {
+      if (searchRequestRef.current !== request) {
+        return;
+      }
+      setSearchResults([]);
+      setSearchStatus("error");
+      setSearchError(reason instanceof Error ? reason.message : t("error.searchLibrary"));
+    }
+  }, [searchInput, t]);
+
+  const handleLibrarySearchClear = useCallback(() => {
+    searchRequestRef.current += 1;
+    setSearchInput("");
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchStatus("idle");
+    setSearchError("");
+  }, []);
+
   async function handleRemoveBook(summary: BookSummary) {
     setBusyBookId(summary.id);
     setLibraryError("");
@@ -276,7 +339,8 @@ function AppContent() {
     if (view === "settings") {
       return;
     }
-    const returnView = view === "reader" && book ? "reader" : "library";
+    const returnView: "library" | "search" | "reader" =
+      view === "reader" && book ? "reader" : view === "search" ? "search" : "library";
     if (returnView === "reader" && pageContext.pageNumber > 0) {
       setBook((current) => current ? { ...current, initialPage: pageContext.pageNumber } : current);
     }
@@ -285,13 +349,21 @@ function AppContent() {
   }, [book, pageContext.pageNumber, view]);
 
   const closeSettings = useCallback(() => {
-    setView(settingsReturnView === "reader" && book ? "reader" : "library");
+    if (settingsReturnView === "reader" && book) {
+      setView("reader");
+    } else {
+      setView(settingsReturnView === "search" ? "search" : "library");
+    }
   }, [book, settingsReturnView]);
 
   const showLibrary = useCallback(() => {
     setView("library");
     void refreshLibrary();
   }, [refreshLibrary]);
+
+  const showSearch = useCallback(() => {
+    setView("search");
+  }, []);
 
   const resumeReader = useCallback(() => {
     if (!book) {
@@ -308,8 +380,17 @@ function AppContent() {
       ? book.title
       : view === "settings"
         ? t("app.settings")
-        : t("app.library");
-  const ContextIcon = view === "reader" && book ? BookOpenText : view === "settings" ? GearSix : Books;
+        : view === "search"
+          ? t("app.search")
+          : t("app.library");
+  const ContextIcon =
+    view === "reader" && book
+      ? BookOpenText
+      : view === "settings"
+        ? GearSix
+        : view === "search"
+          ? MagnifyingGlass
+          : Books;
 
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
@@ -350,6 +431,15 @@ function AppContent() {
               >
                 <Books size={20} weight={view === "library" ? "fill" : "regular"} />
                 <span>{t("app.library")}</span>
+              </button>
+              <button
+                type="button"
+                className={view === "search" ? "app-nav-button is-active" : "app-nav-button"}
+                aria-current={view === "search" ? "page" : undefined}
+                onClick={showSearch}
+              >
+                <MagnifyingGlass size={20} weight={view === "search" ? "fill" : "regular"} />
+                <span>{t("app.search")}</span>
               </button>
               <button
                 type="button"
@@ -404,6 +494,19 @@ function AppContent() {
                 onRelink={handleRelinkBook}
                 onRemove={handleRemoveBook}
                 onRename={handleRenameBook}
+              />
+            ) : view === "search" ? (
+              <LibrarySearch
+                busyBookId={busyBookId}
+                searchQuery={searchQuery}
+                searchInput={searchInput}
+                searchResults={searchResults}
+                searchStatus={searchStatus}
+                searchError={searchError}
+                onSearchInputChange={setSearchInput}
+                onSearchSubmit={handleLibrarySearchSubmit}
+                onSearchClear={handleLibrarySearchClear}
+                onOpenAtPage={handleOpenBookAtPage}
               />
             ) : (
               <div

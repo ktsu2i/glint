@@ -15,11 +15,14 @@ import (
 )
 
 const (
-	maxBookPageBatchSize = 50
-	maxBookPageTextBytes = 4 * 1024 * 1024
-	maxBookSearchRunes   = 200
-	maxBookSearchTerms   = 12
-	searchExcerptRunes   = 180
+	maxBookPageBatchSize       = 50
+	maxBookPageTextBytes       = 4 * 1024 * 1024
+	maxBookSearchRunes         = 200
+	maxBookSearchTerms         = 12
+	searchExcerptRunes         = 180
+	defaultLibrarySearchBooks  = 30
+	defaultLibrarySearchPages  = 3
+	libraryMatchRowCeiling     = 5_000
 )
 
 var (
@@ -41,6 +44,14 @@ type BookPageSearchResult struct {
 	PageNumber int
 	Excerpt    string
 	MatchCount int
+}
+
+// BookLibrarySearchHit groups search matches for one book so the UI can show
+// per-book context (cover, title) above its top pages instead of one flat list.
+type BookLibrarySearchHit struct {
+	BookID       string
+	TotalMatches int
+	Pages        []BookPageSearchResult
 }
 
 type bookPageRecord struct {
@@ -156,11 +167,132 @@ func (store *Store) SearchBookPages(
 		return nil, fmt.Errorf("search book pages: %w", err)
 	}
 
-	type rankedResult struct {
-		BookPageSearchResult
+	ranked := rankPageMatches(records, phrase, terms)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].score != ranked[j].score {
+			return ranked[i].score > ranked[j].score
+		}
+		return ranked[i].PageNumber < ranked[j].PageNumber
+	})
+	if len(ranked) > limit {
+		ranked = ranked[:limit]
+	}
+	results := make([]BookPageSearchResult, len(ranked))
+	for i := range ranked {
+		results[i] = ranked[i].BookPageSearchResult
+	}
+	return results, nil
+}
+
+// SearchLibraryPages runs the same lexical match as SearchBookPages but across
+// every imported book. Results are grouped per book so the UI can keep the
+// "which book did this come from" context, then books are ordered by overall
+// match strength so the most relevant book surfaces first.
+func (store *Store) SearchLibraryPages(
+	ctx context.Context,
+	query string,
+	pagesPerBook, bookLimit int,
+) ([]BookLibrarySearchHit, error) {
+	phrase, terms, err := normalizeBookSearchQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	if pagesPerBook < 1 {
+		pagesPerBook = defaultLibrarySearchPages
+	}
+	if pagesPerBook > 20 {
+		pagesPerBook = 20
+	}
+	if bookLimit < 1 {
+		bookLimit = defaultLibrarySearchBooks
+	}
+	if bookLimit > 200 {
+		bookLimit = 200
+	}
+
+	db := store.db.WithContext(ctx).Model(&bookPageRecord{})
+	for _, term := range terms {
+		db = db.Where(`text LIKE ? ESCAPE '\' COLLATE NOCASE`, "%"+escapeLikeTerm(term)+"%")
+	}
+	var records []bookPageRecord
+	if err := db.Order("book_id ASC, page_number ASC").
+		Limit(libraryMatchRowCeiling).Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("search library pages: %w", err)
+	}
+
+	grouped := make(map[string][]bookPageRecord)
+	bookOrder := make([]string, 0)
+	for _, record := range records {
+		if _, seen := grouped[record.BookID]; !seen {
+			bookOrder = append(bookOrder, record.BookID)
+		}
+		grouped[record.BookID] = append(grouped[record.BookID], record)
+	}
+
+	type rankedHit struct {
+		BookLibrarySearchHit
 		score int
 	}
-	ranked := make([]rankedResult, 0, len(records))
+	hits := make([]rankedHit, 0, len(bookOrder))
+	for _, bookID := range bookOrder {
+		ranked := rankPageMatches(grouped[bookID], phrase, terms)
+		if len(ranked) == 0 {
+			continue
+		}
+		sort.SliceStable(ranked, func(i, j int) bool {
+			if ranked[i].score != ranked[j].score {
+				return ranked[i].score > ranked[j].score
+			}
+			return ranked[i].PageNumber < ranked[j].PageNumber
+		})
+		bookScore := 0
+		totalMatches := 0
+		for _, page := range ranked {
+			bookScore += page.score
+			totalMatches += page.MatchCount
+		}
+		if len(ranked) > pagesPerBook {
+			ranked = ranked[:pagesPerBook]
+		}
+		pages := make([]BookPageSearchResult, len(ranked))
+		for i := range ranked {
+			pages[i] = ranked[i].BookPageSearchResult
+		}
+		hits = append(hits, rankedHit{
+			BookLibrarySearchHit: BookLibrarySearchHit{
+				BookID:       bookID,
+				TotalMatches: totalMatches,
+				Pages:        pages,
+			},
+			score: bookScore,
+		})
+	}
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].score != hits[j].score {
+			return hits[i].score > hits[j].score
+		}
+		if hits[i].TotalMatches != hits[j].TotalMatches {
+			return hits[i].TotalMatches > hits[j].TotalMatches
+		}
+		return hits[i].BookID < hits[j].BookID
+	})
+	if len(hits) > bookLimit {
+		hits = hits[:bookLimit]
+	}
+	results := make([]BookLibrarySearchHit, len(hits))
+	for i := range hits {
+		results[i] = hits[i].BookLibrarySearchHit
+	}
+	return results, nil
+}
+
+type rankedPageResult struct {
+	BookPageSearchResult
+	score int
+}
+
+func rankPageMatches(records []bookPageRecord, phrase string, terms []string) []rankedPageResult {
+	ranked := make([]rankedPageResult, 0, len(records))
 	for _, record := range records {
 		compact := strings.Join(strings.Fields(record.Text), " ")
 		folded := strings.ToLower(compact)
@@ -186,7 +318,7 @@ func (store *Store) SearchBookPages(
 		if phraseMatches > 0 {
 			firstMatch = strings.Index(folded, phrase)
 		}
-		ranked = append(ranked, rankedResult{
+		ranked = append(ranked, rankedPageResult{
 			BookPageSearchResult: BookPageSearchResult{
 				PageNumber: record.PageNumber,
 				Excerpt:    searchExcerpt(compact, firstMatch),
@@ -195,20 +327,7 @@ func (store *Store) SearchBookPages(
 			score: score,
 		})
 	}
-	sort.SliceStable(ranked, func(i, j int) bool {
-		if ranked[i].score != ranked[j].score {
-			return ranked[i].score > ranked[j].score
-		}
-		return ranked[i].PageNumber < ranked[j].PageNumber
-	})
-	if len(ranked) > limit {
-		ranked = ranked[:limit]
-	}
-	results := make([]BookPageSearchResult, len(ranked))
-	for i := range ranked {
-		results[i] = ranked[i].BookPageSearchResult
-	}
-	return results, nil
+	return ranked
 }
 
 func normalizeBookSearchQuery(query string) (string, []string, error) {

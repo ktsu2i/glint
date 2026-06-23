@@ -15,6 +15,7 @@ const bindings = vi.hoisted(() => ({
   saveBookPages: vi.fn(),
   saveReadingPosition: vi.fn(),
   searchBook: vi.fn(),
+  searchLibrary: vi.fn(),
   getAppearanceSettings: vi.fn(),
   getLLMSettings: vi.fn(),
   saveAppearanceSettings: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   SaveBookPages: bindings.saveBookPages,
   SaveReadingPosition: bindings.saveReadingPosition,
   SearchBook: bindings.searchBook,
+  SearchLibrary: bindings.searchLibrary,
 }));
 
 vi.mock("../../../wailsjs/go/chat/Service", () => ({
@@ -76,6 +78,7 @@ import {
   saveAppearanceSettings,
   saveReadingPosition,
   searchBook,
+  searchLibrary,
   saveLLMSettings,
   startChat,
 } from "./backend";
@@ -140,6 +143,12 @@ describe("backend facade", () => {
     bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
     bindings.saveBookPages.mockResolvedValue(2);
     bindings.searchBook.mockResolvedValue([{ pageNumber: 2, excerpt: "match", matchCount: 1 }]);
+    const libraryHit = {
+      book: { id: "book-1", title: "Book", coverUrl: "/cover/1", available: true },
+      totalMatches: 3,
+      pages: [{ pageNumber: 7, excerpt: "library hit", matchCount: 2 }],
+    };
+    bindings.searchLibrary.mockResolvedValue([libraryHit]);
     const bookmark = { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" };
     bindings.listBookmarks.mockResolvedValue([bookmark]);
     bindings.addBookmark.mockResolvedValue(bookmark);
@@ -159,6 +168,7 @@ describe("backend facade", () => {
     await expect(searchBook("book-1", "page")).resolves.toEqual([
       { pageNumber: 2, excerpt: "match", matchCount: 1 },
     ]);
+    await expect(searchLibrary("page")).resolves.toEqual([libraryHit]);
     await expect(listBookmarks("book-1")).resolves.toEqual([bookmark]);
     await expect(addBookmark("book-1", 4, 10)).resolves.toEqual(bookmark);
     await removeBookmark("book-1", 4);
@@ -170,6 +180,7 @@ describe("backend facade", () => {
       pageNumber: 1, text: "page text", width: 612, height: 792,
     }], 10);
     expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
+    expect(bindings.searchLibrary).toHaveBeenCalledWith("page");
     expect(bindings.listBookmarks).toHaveBeenCalledWith("book-1");
     expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", 4, 10);
     expect(bindings.removeBookmark).toHaveBeenCalledWith("book-1", 4);

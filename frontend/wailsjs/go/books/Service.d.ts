@@ -29,3 +29,5 @@ export function SaveBookPages(arg1:string,arg2:Array<books.BookPageInput>,arg3:n
 export function SaveReadingPosition(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function SearchBook(arg1:string,arg2:string):Promise<Array<books.BookSearchResult>>;
+
+export function SearchLibrary(arg1:string):Promise<Array<books.LibrarySearchHit>>;

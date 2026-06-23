@@ -58,6 +58,12 @@ type BookSummary struct {
 	Available   bool   `json:"available"`
 }
 
+type LibrarySearchHit struct {
+	Book         BookSummary        `json:"book"`
+	TotalMatches int                `json:"totalMatches"`
+	Pages        []BookSearchResult `json:"pages"`
+}
+
 type Service struct {
 	ctx           context.Context
 	library       *library.Store
@@ -332,6 +338,53 @@ func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
 			Excerpt:    result.Excerpt,
 			MatchCount: result.MatchCount,
 		}
+	}
+	return output, nil
+}
+
+// SearchLibrary runs a library-wide lexical search and returns matches grouped
+// by book, with book metadata pre-resolved so the result list can render covers
+// and titles without an extra round trip.
+func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
+	hits, err := s.library.SearchLibraryPages(context.Background(), query, 0, 0)
+	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
+		return nil, errors.New(s.localized(
+			"Search terms must be between 1 and 200 characters.",
+			"検索語は1〜200文字で入力してください。",
+		))
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(hits) == 0 {
+		return []LibrarySearchHit{}, nil
+	}
+	output := make([]LibrarySearchHit, 0, len(hits))
+	for _, hit := range hits {
+		book, err := s.library.Get(context.Background(), hit.BookID)
+		if errors.Is(err, library.ErrBookNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		summary, err := s.bookSummary(book)
+		if err != nil {
+			return nil, err
+		}
+		pages := make([]BookSearchResult, len(hit.Pages))
+		for i, page := range hit.Pages {
+			pages[i] = BookSearchResult{
+				PageNumber: page.PageNumber,
+				Excerpt:    page.Excerpt,
+				MatchCount: page.MatchCount,
+			}
+		}
+		output = append(output, LibrarySearchHit{
+			Book:         summary,
+			TotalMatches: hit.TotalMatches,
+			Pages:        pages,
+		})
 	}
 	return output, nil
 }

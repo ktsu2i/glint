@@ -13,6 +13,7 @@ import {
   SaveBookCover,
   SaveReadingPosition,
   SearchBook,
+  SearchLibrary,
 } from "../../../wailsjs/go/books/Service";
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
@@ -66,6 +67,12 @@ export type BookSummary = {
   coverUrl: string;
   coverStatus: "pending" | "ready" | "failed";
   available: boolean;
+};
+
+export type LibrarySearchHit = {
+  book: BookSummary;
+  totalMatches: number;
+  pages: BookSearchResult[];
 };
 
 export type ChatRequest = {
@@ -168,6 +175,10 @@ export async function saveBookPages(
 
 export async function searchBook(bookId: string, query: string): Promise<BookSearchResult[]> {
   return (await SearchBook(bookId, query)) as BookSearchResult[];
+}
+
+export async function searchLibrary(query: string): Promise<LibrarySearchHit[]> {
+  return (await SearchLibrary(query)) as LibrarySearchHit[];
 }
 
 export async function saveBookCover(bookId: string, dataUrl: string): Promise<void> {

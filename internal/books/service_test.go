@@ -255,6 +255,50 @@ func TestServiceIndexesAndSearchesBookPages(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestServiceSearchesLibraryAcrossBooks(t *testing.T) {
+	h := newHarness(t)
+	guidePath := h.writePDF("Guide.pdf", "%PDF-1.7\nguide")
+	cookbookPath := h.writePDF("Cookbook.pdf", "%PDF-1.7\ncookbook")
+	notesPath := h.writePDF("Notes.pdf", "%PDF-1.7\nnotes")
+
+	guide, err := h.service.selectPDF(guidePath)
+	require.NoError(t, err)
+	cookbook, err := h.service.selectPDF(cookbookPath)
+	require.NoError(t, err)
+	notes, err := h.service.selectPDF(notesPath)
+	require.NoError(t, err)
+
+	_, err = h.service.SaveBookPages(guide.ID, []BookPageInput{
+		{PageNumber: 1, Text: "Context builder filters what gets sent.", Width: 612, Height: 792},
+		{PageNumber: 2, Text: "Mention of context builder once more.", Width: 612, Height: 792},
+	}, 2)
+	require.NoError(t, err)
+	_, err = h.service.SaveBookPages(cookbook.ID, []BookPageInput{
+		{PageNumber: 1, Text: "Context builder. Context builder. Context builder.", Width: 612, Height: 792},
+	}, 1)
+	require.NoError(t, err)
+	_, err = h.service.SaveBookPages(notes.ID, []BookPageInput{
+		{PageNumber: 1, Text: "Unrelated lexical evidence about retrieval.", Width: 612, Height: 792},
+	}, 1)
+	require.NoError(t, err)
+
+	hits, err := h.service.SearchLibrary("context builder")
+	require.NoError(t, err)
+	require.Len(t, hits, 2, "only matching books should be returned")
+	assert.Equal(t, cookbook.ID, hits[0].Book.ID)
+	assert.NotEmpty(t, hits[0].Book.Title)
+	assert.GreaterOrEqual(t, hits[0].TotalMatches, 3)
+	assert.NotEmpty(t, hits[0].Pages)
+	assert.Equal(t, guide.ID, hits[1].Book.ID)
+	assert.Len(t, hits[1].Pages, 2)
+
+	_, err = h.service.SearchLibrary("   ")
+	assert.Error(t, err)
+	empty, err := h.service.SearchLibrary("nonexistent_term")
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}
+
 func TestServicePersistsPageBookmarks(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Bookmarks.pdf", "%PDF-1.7\nfixture")

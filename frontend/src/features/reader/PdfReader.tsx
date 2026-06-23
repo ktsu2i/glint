@@ -39,6 +39,7 @@ import {
   type BookPageInput,
   type BookSearchResult,
 } from "../../shared/api/backend";
+import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
 import { LocalizedError } from "../../shared/i18n/error";
@@ -1382,20 +1383,3 @@ function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineL
   );
 }
 
-function HighlightedExcerpt({ text, query }: { text: string; query: string }) {
-  const terms = [...new Set(query.trim().split(/\s+/).filter(Boolean))]
-    .sort((left, right) => right.length - left.length);
-  if (terms.length === 0) {
-    return text;
-  }
-  const expression = new RegExp(
-    `(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
-    "giu",
-  );
-  const foldedTerms = new Set(terms.map((term) => term.toLocaleLowerCase()));
-  return text.split(expression).map((part, index) =>
-    foldedTerms.has(part.toLocaleLowerCase())
-      ? <mark key={`${index}-${part}`}>{part}</mark>
-      : part,
-  );
-}

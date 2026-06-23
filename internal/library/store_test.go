@@ -243,6 +243,59 @@ func TestStoreClearsIndexedPagesWhenPDFContentChanges(t *testing.T) {
 	assert.Zero(t, count)
 }
 
+func TestStoreSearchesLibraryAcrossBooks(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+
+	guide, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	require.NoError(t, err)
+	cookbook, err := store.Import(context.Background(), "book-2", "/tmp/Cookbook.pdf", "hash-2", 10, now)
+	require.NoError(t, err)
+	notes, err := store.Import(context.Background(), "book-3", "/tmp/Notes.pdf", "hash-3", 10, now)
+	require.NoError(t, err)
+
+	_, err = store.SaveBookPages(context.Background(), guide.ID, []BookPage{
+		{PageNumber: 1, Text: "Context builder filters what gets sent.", Width: 612, Height: 792},
+		{PageNumber: 2, Text: "Mention of context builder once more.", Width: 612, Height: 792},
+	}, 2, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookPages(context.Background(), cookbook.ID, []BookPage{
+		{PageNumber: 1, Text: "Context builder. Context builder. Context builder.", Width: 612, Height: 792},
+	}, 1, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookPages(context.Background(), notes.ID, []BookPage{
+		{PageNumber: 1, Text: "Unrelated lexical evidence about retrieval.", Width: 612, Height: 792},
+	}, 1, now)
+	require.NoError(t, err)
+
+	hits, err := store.SearchLibraryPages(context.Background(), "context builder", 3, 10)
+	require.NoError(t, err)
+	require.Len(t, hits, 2, "only matching books should be returned")
+	assert.Equal(t, cookbook.ID, hits[0].BookID, "book with denser phrase matches ranks first")
+	assert.GreaterOrEqual(t, hits[0].TotalMatches, 3)
+	assert.NotEmpty(t, hits[0].Pages)
+	assert.Equal(t, guide.ID, hits[1].BookID)
+	assert.Len(t, hits[1].Pages, 2, "both matching pages from a book are kept under the per-book cap")
+
+	limited, err := store.SearchLibraryPages(context.Background(), "context builder", 1, 10)
+	require.NoError(t, err)
+	require.Len(t, limited, 2)
+	assert.Len(t, limited[1].Pages, 1, "pagesPerBook caps the number of pages returned")
+
+	capped, err := store.SearchLibraryPages(context.Background(), "context builder", 3, 1)
+	require.NoError(t, err)
+	require.Len(t, capped, 1, "bookLimit caps the number of books returned")
+	assert.Equal(t, cookbook.ID, capped[0].BookID)
+
+	_, err = store.SearchLibraryPages(context.Background(), "   ", 3, 10)
+	assert.ErrorIs(t, err, ErrInvalidBookSearchQuery)
+	empty, err := store.SearchLibraryPages(context.Background(), "nonexistent_term", 3, 10)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}
+
 func TestStoreValidatesBookPageAndSearchInputs(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
 	require.NoError(t, err)

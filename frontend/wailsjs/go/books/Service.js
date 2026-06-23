@@ -57,3 +57,7 @@ export function SaveReadingPosition(arg1, arg2, arg3) {
 export function SearchBook(arg1, arg2) {
   return window['go']['books']['Service']['SearchBook'](arg1, arg2);
 }
+
+export function SearchLibrary(arg1) {
+  return window['go']['books']['Service']['SearchLibrary'](arg1);
+}
