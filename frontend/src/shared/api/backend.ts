@@ -17,12 +17,14 @@ import {
 } from "../../../wailsjs/go/books/Service";
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
+  DeleteProviderSettings,
   GetAppearanceSettings,
   GetLanguageSettings,
-  GetLLMSettings,
+  GetLLMConfig,
   SaveAppearanceSettings,
   SaveLanguageSettings,
-  SaveLLMSettings,
+  SetActiveProvider,
+  UpsertProviderSettings,
 } from "../../../wailsjs/go/settings/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
 
@@ -90,19 +92,59 @@ export type AnswerDelta = {
   error?: string;
 };
 
-export type LLMSettings = {
-  provider: "openrouter";
-  model: string;
-  zdr: boolean;
-  hasApiKey: boolean;
-  configured: boolean;
+export type ProviderAuthKind = "bearer" | "x-api-key" | "query-key" | "none";
+
+export type ProviderOptionType = "string" | "bool" | "url" | "headers";
+
+export type ProviderOption = {
+  key: string;
+  label: string;
+  type: ProviderOptionType;
+  required: boolean;
+  default?: unknown;
+  helpText?: string;
 };
 
-export type SaveLLMSettingsRequest = {
+export type ProviderCapabilities = {
+  streaming: boolean;
+  tools: boolean;
+  images: boolean;
+};
+
+export type ProviderDescriptor = {
+  id: string;
+  displayName: string;
+  authKind: ProviderAuthKind;
+  defaultBaseUrl?: string;
+  optionSchema: ProviderOption[];
+  capabilities: ProviderCapabilities;
+  notes?: string;
+};
+
+export type ProviderSettings = {
+  providerId: string;
+  displayLabel?: string;
   model: string;
-  apiKey: string;
-  zdr: boolean;
-  clearApiKey: boolean;
+  options?: Record<string, unknown>;
+  hasApiKey: boolean;
+  configured: boolean;
+  isActive: boolean;
+};
+
+export type LLMConfig = {
+  activeProviderId: string;
+  providers: ProviderSettings[];
+  catalog: ProviderDescriptor[];
+};
+
+export type UpsertProviderRequest = {
+  providerId: string;
+  displayLabel?: string;
+  model: string;
+  options?: Record<string, unknown>;
+  apiKey?: string;
+  clearApiKey?: boolean;
+  activate?: boolean;
 };
 
 export type ThemePreference = "light" | "dark" | "system";
@@ -197,8 +239,20 @@ export async function cancelChat(requestId: string): Promise<void> {
   await CancelChat(requestId);
 }
 
-export async function getLLMSettings(): Promise<LLMSettings> {
-  return (await GetLLMSettings()) as LLMSettings;
+export async function getLLMConfig(): Promise<LLMConfig> {
+  return (await GetLLMConfig()) as LLMConfig;
+}
+
+export async function upsertProviderSettings(request: UpsertProviderRequest): Promise<LLMConfig> {
+  return (await UpsertProviderSettings(request)) as LLMConfig;
+}
+
+export async function deleteProviderSettings(providerId: string): Promise<LLMConfig> {
+  return (await DeleteProviderSettings(providerId)) as LLMConfig;
+}
+
+export async function setActiveProvider(providerId: string): Promise<LLMConfig> {
+  return (await SetActiveProvider(providerId)) as LLMConfig;
 }
 
 export async function getAppearanceSettings(): Promise<AppearanceSettings> {
@@ -215,10 +269,6 @@ export async function getLanguageSettings(): Promise<LanguageSettings> {
 
 export async function saveLanguageSettings(language: LanguagePreference): Promise<LanguageSettings> {
   return (await SaveLanguageSettings({ language })) as LanguageSettings;
-}
-
-export async function saveLLMSettings(request: SaveLLMSettingsRequest): Promise<LLMSettings> {
-  return (await SaveLLMSettings(request)) as LLMSettings;
 }
 
 export function onAnswerDelta(callback: (delta: AnswerDelta) => void): () => void {

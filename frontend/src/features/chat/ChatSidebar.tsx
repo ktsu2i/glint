@@ -11,11 +11,12 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   cancelChat,
-  getLLMSettings,
+  getLLMConfig,
   onAnswerDelta,
   startChat,
   type AnswerDelta,
-  type LLMSettings,
+  type LLMConfig,
+  type ProviderSettings,
 } from "../../shared/api/backend";
 import { contextPreview, trimChatContext } from "../../shared/lib/text";
 import { localizeBackendError } from "../../shared/i18n/error";
@@ -55,19 +56,25 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [llmSettings, setLLMSettings] = useState<LLMSettings | null>(null);
+  const [llmConfig, setLLMConfig] = useState<LLMConfig | null>(null);
   const [settingsError, setSettingsError] = useState("");
   const activeRequest = useRef("");
   const messageEndRef = useRef<HTMLDivElement>(null);
 
   const hasSelection = !!selection && selection.text.length > 0;
+  const activeProvider: ProviderSettings | null =
+    llmConfig?.providers.find((provider) => provider.providerId === llmConfig.activeProviderId) ?? null;
+  const providerConfigured = activeProvider?.configured ?? false;
 
   const refreshSettings = useCallback(async () => {
     try {
-      setLLMSettings(await getLLMSettings());
+      setLLMConfig(await getLLMConfig());
       setSettingsError("");
     } catch (reason) {
-      setSettingsError(reason instanceof Error ? reason.message : t("chat.loadSettingsError"));
+      let message: string = t("chat.loadSettingsError");
+      if (reason instanceof Error) message = reason.message;
+      else if (typeof reason === "string" && reason.trim() !== "") message = reason;
+      setSettingsError(message);
     }
   }, [t]);
 
@@ -151,7 +158,7 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
     if (!normalizedQuestion || sending) {
       return;
     }
-    if (!llmSettings?.configured) {
+    if (!providerConfigured) {
       setError(t("chat.configureError"));
       return;
     }
@@ -290,14 +297,14 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
           }}
         />
         <div className="composer-footer">
-          <span>{llmSettings?.configured ? composerLabel : t("chat.openRouterRequired")}</span>
+          <span>{providerConfigured ? composerLabel : t("chat.openRouterRequired")}</span>
           {sending ? (
             <button type="button" className="chat-cancel" onClick={() => void handleCancel()}>
               <span>{t("chat.cancel")}</span>
               <Stop size={12} weight="fill" />
             </button>
           ) : (
-            <button type="submit" disabled={!question.trim() || !llmSettings?.configured}>
+            <button type="submit" disabled={!question.trim() || !providerConfigured}>
               <span>{t("chat.send")}</span>
               <ArrowUp size={14} weight="bold" />
             </button>

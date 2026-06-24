@@ -11,17 +11,17 @@ const backend = vi.hoisted(() => ({
   }) => void) | undefined,
   unsubscribe: vi.fn(),
   cancelChat: vi.fn(),
-  getLLMSettings: vi.fn(),
+  getLLMConfig: vi.fn(),
   onAnswerDelta: vi.fn(),
-  saveLLMSettings: vi.fn(),
+  upsertProviderSettings: vi.fn(),
   startChat: vi.fn(),
 }));
 
 vi.mock("../../shared/api/backend", () => ({
   cancelChat: backend.cancelChat,
-  getLLMSettings: backend.getLLMSettings,
+  getLLMConfig: backend.getLLMConfig,
   onAnswerDelta: backend.onAnswerDelta,
-  saveLLMSettings: backend.saveLLMSettings,
+  upsertProviderSettings: backend.upsertProviderSettings,
   startChat: backend.startChat,
 }));
 
@@ -39,12 +39,23 @@ beforeEach(() => {
     backend.listener = listener;
     return backend.unsubscribe;
   });
-  backend.getLLMSettings.mockResolvedValue({
-    provider: "openrouter",
-    model: "provider/model",
-    zdr: true,
-    hasApiKey: true,
-    configured: true,
+  backend.getLLMConfig.mockResolvedValue({
+    activeProviderId: "openrouter",
+    providers: [{
+      providerId: "openrouter",
+      model: "provider/model",
+      options: { zdr: true },
+      hasApiKey: true,
+      configured: true,
+      isActive: true,
+    }],
+    catalog: [{
+      id: "openrouter",
+      displayName: "OpenRouter",
+      authKind: "bearer",
+      optionSchema: [],
+      capabilities: { streaming: true, tools: false, images: false },
+    }],
   });
   backend.startChat.mockResolvedValue(undefined);
   backend.cancelChat.mockResolvedValue(undefined);
@@ -57,7 +68,7 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "", pageNumber: 0 }} />,
     );
 
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
     expect(container.querySelector(".context-chip")).toBeNull();
     expect(screen.getByText("文脈なし")).toBeTruthy();
     fireEvent.submit(container.querySelector("form")!);
@@ -77,7 +88,7 @@ describe("ChatSidebar", () => {
     );
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
 
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.change(textarea, { target: { value: "  Explain this  " } });
     expect(fireEvent.keyDown(textarea, { key: "Enter" })).toBe(true);
@@ -123,7 +134,7 @@ describe("ChatSidebar", () => {
         selection={{ pageNumber: 6, text: "  highlighted   phrase   from\n\nbook   " }}
       />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     const chip = container.querySelector(".context-chip");
     expect(chip).not.toBeNull();
@@ -142,7 +153,7 @@ describe("ChatSidebar", () => {
         onClearSelection={onClearSelection}
       />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.click(screen.getByRole("button", { name: "この文脈を取り外す" }));
     expect(onClearSelection).toHaveBeenCalledOnce();
@@ -157,7 +168,7 @@ describe("ChatSidebar", () => {
         onClearSelection={onClearSelection}
       />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -180,7 +191,7 @@ describe("ChatSidebar", () => {
         onClearSelection={onClearSelection}
       />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -201,7 +212,7 @@ describe("ChatSidebar", () => {
       />,
     );
 
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     const textarea = screen.getByPlaceholderText("このページについて質問する…");
     fireEvent.change(textarea, { target: { value: "first" } });
@@ -226,7 +237,7 @@ describe("ChatSidebar", () => {
       />,
     );
 
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "question" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -240,7 +251,7 @@ describe("ChatSidebar", () => {
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 5 }} />,
     );
 
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
     expect(container.querySelector(".context-chip")).toBeNull();
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "what is this" } });
@@ -265,7 +276,7 @@ describe("ChatSidebar", () => {
         selection={{ pageNumber: 2, text: "context" }}
       />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "long question" } });
     fireEvent.submit(container.querySelector("form")!);
@@ -288,7 +299,7 @@ describe("ChatSidebar", () => {
     const { container } = render(
       <ChatSidebar context={{ bookName: "Guide.pdf", pageNumber: 2 }} />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(backend.cancelChat).not.toHaveBeenCalled();
@@ -318,7 +329,7 @@ describe("ChatSidebar", () => {
         selection={{ pageNumber: 2, text: "context" }}
       />,
     );
-    await waitFor(() => expect(backend.getLLMSettings).toHaveBeenCalledOnce());
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "question" } });
     fireEvent.submit(container.querySelector("form")!);

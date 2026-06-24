@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@base-ui/react/switch";
 import { useTranslation } from "react-i18next";
 import {
@@ -15,9 +15,11 @@ import {
   Translate,
 } from "@phosphor-icons/react";
 import {
-  getLLMSettings,
-  saveLLMSettings,
-  type LLMSettings,
+  getLLMConfig,
+  upsertProviderSettings,
+  type LLMConfig,
+  type ProviderDescriptor,
+  type ProviderSettings,
   type ThemePreference,
 } from "../../shared/api/backend";
 import { useLanguageSettings } from "../../shared/i18n/i18n";
@@ -39,6 +41,36 @@ const themeOptions: Array<{
   { value: "system", icon: Monitor },
 ];
 
+function extractErrorMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === "string" && reason.trim() !== "") return reason;
+  return fallback;
+}
+
+function defaultOptionsFor(descriptor: ProviderDescriptor): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  for (const option of descriptor.optionSchema) {
+    if (option.default !== undefined) {
+      defaults[option.key] = option.default;
+    } else if (option.type === "bool") {
+      defaults[option.key] = false;
+    } else if (option.type === "headers") {
+      defaults[option.key] = {};
+    } else {
+      defaults[option.key] = "";
+    }
+  }
+  return defaults;
+}
+
+function mergeOptions(
+  descriptor: ProviderDescriptor,
+  stored: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const defaults = defaultOptionsFor(descriptor);
+  return { ...defaults, ...(stored ?? {}) };
+}
+
 export function LLMSettingsPage({
   onBack,
   theme = "system",
@@ -55,11 +87,13 @@ export function LLMSettingsPage({
   } = useLanguageSettings();
   const translationRef = useRef(t);
   translationRef.current = t;
-  const [settings, setSettings] = useState<LLMSettings | null>(null);
+
+  const [config, setConfig] = useState<LLMConfig | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
   const [model, setModel] = useState("");
+  const [options, setOptions] = useState<Record<string, unknown>>({});
   const [apiKey, setAPIKey] = useState("");
   const [showAPIKey, setShowAPIKey] = useState(false);
-  const [zdr, setZDR] = useState(true);
   const [clearAPIKey, setClearAPIKey] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,22 +103,45 @@ export function LLMSettingsPage({
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
+  const selectedDescriptor: ProviderDescriptor | null = useMemo(() => {
+    if (!config) return null;
+    return config.catalog.find((descriptor) => descriptor.id === selectedProviderId) ?? null;
+  }, [config, selectedProviderId]);
+
+  const storedProvider: ProviderSettings | null = useMemo(() => {
+    if (!config) return null;
+    return config.providers.find((provider) => provider.providerId === selectedProviderId) ?? null;
+  }, [config, selectedProviderId]);
+
+  const adoptProvider = useCallback(
+    (providerId: string, nextConfig: LLMConfig) => {
+      const descriptor = nextConfig.catalog.find((descriptor) => descriptor.id === providerId);
+      if (!descriptor) return;
+      const stored = nextConfig.providers.find((provider) => provider.providerId === providerId);
+      setSelectedProviderId(descriptor.id);
+      setModel(stored?.model ?? "");
+      setOptions(mergeOptions(descriptor, stored?.options));
+      setAPIKey("");
+      setShowAPIKey(false);
+      setClearAPIKey(false);
+    },
+    [],
+  );
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const loaded = await getLLMSettings();
-      setSettings(loaded);
-      setModel(loaded.model);
-      setZDR(loaded.zdr);
-      setAPIKey("");
-      setClearAPIKey(false);
+      const loaded = await getLLMConfig();
+      setConfig(loaded);
+      const preferred = loaded.activeProviderId || loaded.providers[0]?.providerId || loaded.catalog[0]?.id || "";
+      adoptProvider(preferred, loaded);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : translationRef.current("settings.loadError"));
+      setError(extractErrorMessage(reason, translationRef.current("settings.loadError")));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [adoptProvider]);
 
   useEffect(() => {
     void loadSettings();
@@ -92,30 +149,24 @@ export function LLMSettingsPage({
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving) return;
-    if (!model.trim().includes("/")) {
-      setError(t("settings.invalidModel"));
-      return;
-    }
+    if (saving || !selectedDescriptor) return;
     setSaving(true);
     setError("");
     setSaved(false);
     try {
-      const next = await saveLLMSettings({
+      const next = await upsertProviderSettings({
+        providerId: selectedDescriptor.id,
         model: model.trim(),
+        options,
         apiKey: apiKey.trim(),
-        zdr,
         clearApiKey: clearAPIKey,
+        activate: true,
       });
-      setSettings(next);
-      setModel(next.model);
-      setZDR(next.zdr);
-      setAPIKey("");
-      setShowAPIKey(false);
-      setClearAPIKey(false);
+      setConfig(next);
+      adoptProvider(selectedDescriptor.id, next);
       setSaved(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("settings.saveError"));
+      setError(extractErrorMessage(reason, t("settings.saveError")));
     } finally {
       setSaving(false);
     }
@@ -128,7 +179,7 @@ export function LLMSettingsPage({
     try {
       await onThemeChange(next);
     } catch (reason) {
-      setLocalThemeError(reason instanceof Error ? reason.message : t("error.saveAppearance"));
+      setLocalThemeError(extractErrorMessage(reason, t("error.saveAppearance")));
     } finally {
       setSavingTheme(false);
     }
@@ -152,9 +203,12 @@ export function LLMSettingsPage({
     system: [t("settings.themeSystem"), t("settings.themeSystemDescription")],
   } as const;
 
-  const hasCredential = settings?.hasApiKey ?? false;
-  const willHaveCredential = apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
+  const hasCredential = storedProvider?.hasApiKey ?? false;
+  const requiresAPIKey = selectedDescriptor ? selectedDescriptor.authKind !== "none" : true;
+  const willHaveCredential = !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
   const canSave = !loading && !saving && model.trim() !== "" && (willHaveCredential || clearAPIKey);
+  const zdrOption = selectedDescriptor?.optionSchema.find((option) => option.key === "zdr");
+  const zdrEnabled = zdrOption ? Boolean(options[zdrOption.key]) : false;
 
   return (
     <section className="settings-page" aria-labelledby="settings-title">
@@ -165,11 +219,11 @@ export function LLMSettingsPage({
             <h1 id="settings-title">{t("settings.title")}</h1>
             <p>{t("settings.description")}</p>
           </div>
-          <div className={settings?.configured ? "settings-connection is-ready" : "settings-connection"}>
+          <div className={storedProvider?.configured ? "settings-connection is-ready" : "settings-connection"}>
             <span className="settings-connection-dot" />
             <div>
               <small>{t("settings.connection")}</small>
-              <strong>{loading ? t("settings.checking") : settings?.configured ? t("settings.available") : t("settings.notConfigured")}</strong>
+              <strong>{loading ? t("settings.checking") : storedProvider?.configured ? t("settings.available") : t("settings.notConfigured")}</strong>
             </div>
           </div>
         </header>
@@ -273,25 +327,49 @@ export function LLMSettingsPage({
             <div className="settings-section-heading">
               <div>
                 <span className="settings-kicker">{t("settings.remoteRoute")}</span>
-                <h2>{t("settings.openRouterConnection")}</h2>
+                <h2>{selectedDescriptor ? t("settings.providerConnection", { provider: selectedDescriptor.displayName }) : t("settings.openRouterConnection")}</h2>
               </div>
-              <span className="provider-badge">OpenRouter</span>
+              <span className="provider-badge">{selectedDescriptor?.displayName ?? "—"}</span>
             </div>
 
-            <div className="route-ledger" aria-label={t("settings.sendingRoute")}>
-              <span><LockKey size={13} /> Glint</span>
-              <ArrowRight size={12} />
-              <span>OpenRouter</span>
-              <ArrowRight size={12} />
-              <span className={zdr ? "route-guard is-active" : "route-guard"}>
-                {zdr ? t("settings.zdrEndpoint") : t("settings.providerRoute")}
-              </span>
-            </div>
+            {config && config.catalog.length > 1 && (
+              <div className="provider-selector" role="radiogroup" aria-label={t("settings.providerPickerLabel")}>
+                {config.catalog.map((descriptor) => (
+                  <button
+                    key={descriptor.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={descriptor.id === selectedProviderId}
+                    className={descriptor.id === selectedProviderId ? "provider-pill is-selected" : "provider-pill"}
+                    onClick={() => {
+                      if (descriptor.id === selectedProviderId) return;
+                      adoptProvider(descriptor.id, config);
+                      setSaved(false);
+                      setError("");
+                    }}
+                  >
+                    {descriptor.displayName}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {zdrOption && (
+              <div className="route-ledger" aria-label={t("settings.sendingRoute")}>
+                <span><LockKey size={13} /> Glint</span>
+                <ArrowRight size={12} />
+                <span>{selectedDescriptor?.displayName ?? "—"}</span>
+                <ArrowRight size={12} />
+                <span className={zdrEnabled ? "route-guard is-active" : "route-guard"}>
+                  {zdrEnabled ? t("settings.zdrEndpoint") : t("settings.providerRoute")}
+                </span>
+              </div>
+            )}
 
             {error && (
               <div className="settings-error" role="alert">
                 <span>{error}</span>
-                {!settings && !loading && (
+                {!config && !loading && (
                   <button type="button" onClick={() => void loadSettings()}>{t("settings.reload")}</button>
                 )}
               </div>
@@ -300,12 +378,12 @@ export function LLMSettingsPage({
               <p className="settings-saved" role="status"><Check size={14} /> {t("settings.saved")}</p>
             )}
 
-            <fieldset className="settings-fieldset" disabled={loading || saving}>
+            <fieldset className="settings-fieldset" disabled={loading || saving || !selectedDescriptor}>
               <legend>{t("settings.model")}</legend>
               <div className="settings-field">
-                <label htmlFor="openrouter-model">{t("settings.modelId")}</label>
+                <label htmlFor="provider-model">{t("settings.modelId")}</label>
                 <input
-                  id="openrouter-model"
+                  id="provider-model"
                   value={model}
                   onChange={(event) => {
                     setModel(event.target.value);
@@ -320,86 +398,90 @@ export function LLMSettingsPage({
               </div>
             </fieldset>
 
-            <fieldset className="settings-fieldset" disabled={loading || saving}>
-              <legend>{t("settings.credential")}</legend>
-              <div className="settings-field">
-                <span className="settings-field-label">
-                  <label htmlFor="openrouter-api-key">{t("settings.apiKey")}</label>
-                  {hasCredential && !clearAPIKey && (
-                    <em><Key size={11} /> {t("settings.keyStored")}</em>
+            {requiresAPIKey && (
+              <fieldset className="settings-fieldset" disabled={loading || saving}>
+                <legend>{t("settings.credential")}</legend>
+                <div className="settings-field">
+                  <span className="settings-field-label">
+                    <label htmlFor="provider-api-key">{t("settings.apiKey")}</label>
+                    {hasCredential && !clearAPIKey && (
+                      <em><Key size={11} /> {t("settings.keyStored")}</em>
+                    )}
+                  </span>
+                  <div className="credential-input">
+                    <input
+                      id="provider-api-key"
+                      className={hasCredential && !apiKey ? "has-saved-credential" : ""}
+                      type={showAPIKey ? "text" : "password"}
+                      value={apiKey}
+                      onChange={(event) => {
+                        setAPIKey(event.target.value);
+                        if (event.target.value) setClearAPIKey(false);
+                        setSaved(false);
+                      }}
+                      placeholder={clearAPIKey ? t("settings.keyScheduledForRemoval") : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
+                      autoComplete="new-password"
+                      disabled={clearAPIKey}
+                      required={!hasCredential}
+                    />
+                    <button
+                      type="button"
+                      className="credential-visibility"
+                      onClick={() => setShowAPIKey((current) => !current)}
+                      disabled={clearAPIKey || apiKey === ""}
+                      aria-label={showAPIKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
+                    >
+                      {showAPIKey ? <EyeSlash size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <small>
+                    {hasCredential && !apiKey && !clearAPIKey
+                      ? t("settings.savedKeyHelp")
+                      : t("settings.newKeyHelp")}
+                  </small>
+                  {hasCredential && (
+                    <button
+                      type="button"
+                      className={clearAPIKey ? "credential-action is-pending" : "credential-action"}
+                      onClick={() => {
+                        setClearAPIKey((current) => !current);
+                        setAPIKey("");
+                        setShowAPIKey(false);
+                        setSaved(false);
+                      }}
+                    >
+                      {clearAPIKey ? t("settings.keepApiKey") : t("settings.removeApiKey")}
+                    </button>
                   )}
-                </span>
-                <div className="credential-input">
-                  <input
-                    id="openrouter-api-key"
-                    className={hasCredential && !apiKey ? "has-saved-credential" : ""}
-                    type={showAPIKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(event) => {
-                      setAPIKey(event.target.value);
-                      if (event.target.value) setClearAPIKey(false);
-                      setSaved(false);
-                    }}
-                    placeholder={clearAPIKey ? t("settings.keyScheduledForRemoval") : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
-                    autoComplete="new-password"
-                    disabled={clearAPIKey}
-                    required={!hasCredential}
-                  />
-                  <button
-                    type="button"
-                    className="credential-visibility"
-                    onClick={() => setShowAPIKey((current) => !current)}
-                    disabled={clearAPIKey || apiKey === ""}
-                    aria-label={showAPIKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
-                  >
-                    {showAPIKey ? <EyeSlash size={16} /> : <Eye size={16} />}
-                  </button>
                 </div>
-                <small>
-                  {hasCredential && !apiKey && !clearAPIKey
-                    ? t("settings.savedKeyHelp")
-                    : t("settings.newKeyHelp")}
-                </small>
-                {hasCredential && (
-                  <button
-                    type="button"
-                    className={clearAPIKey ? "credential-action is-pending" : "credential-action"}
-                    onClick={() => {
-                      setClearAPIKey((current) => !current);
-                      setAPIKey("");
-                      setShowAPIKey(false);
-                      setSaved(false);
-                    }}
-                  >
-                    {clearAPIKey ? t("settings.keepApiKey") : t("settings.removeApiKey")}
-                  </button>
-                )}
-              </div>
-            </fieldset>
+              </fieldset>
+            )}
 
-            <fieldset className="settings-fieldset" disabled={loading || saving}>
-              <legend>{t("settings.privacy")}</legend>
-              <div className="privacy-setting">
-                <div>
-                  <span><ShieldCheck size={16} /> {t("settings.zeroDataRetention")}</span>
-                  <p>{t("settings.zdrDescription")}</p>
+            {zdrOption && (
+              <fieldset className="settings-fieldset" disabled={loading || saving}>
+                <legend>{t("settings.privacy")}</legend>
+                <div className="privacy-setting">
+                  <div>
+                    <span><ShieldCheck size={16} /> {t("settings.zeroDataRetention")}</span>
+                    <p>{zdrOption.helpText ?? t("settings.zdrDescription")}</p>
+                  </div>
+                  <Switch.Root
+                    className="context-switch"
+                    checked={zdrEnabled}
+                    onCheckedChange={(checked) => {
+                      setOptions((current) => ({ ...current, [zdrOption.key]: checked }));
+                      setSaved(false);
+                    }}
+                    aria-label={t("settings.requireZdr")}
+                  >
+                    <Switch.Thumb className="context-switch-thumb" />
+                  </Switch.Root>
                 </div>
-                <Switch.Root
-                  className="context-switch"
-                  checked={zdr}
-                  onCheckedChange={(checked) => {
-                    setZDR(checked);
-                    setSaved(false);
-                  }}
-                  aria-label={t("settings.requireZdr")}
-                >
-                  <Switch.Thumb className="context-switch-thumb" />
-                </Switch.Root>
-              </div>
-              <p className="remote-data-note">
-                {t("settings.remoteDataNote")}
-              </p>
-            </fieldset>
+                <p className="remote-data-note">
+                  {t("settings.remoteDataNote")}
+                </p>
+              </fieldset>
+            )}
 
             <footer className="settings-page-actions">
               <button className="settings-secondary" type="button" onClick={onBack} disabled={saving}>

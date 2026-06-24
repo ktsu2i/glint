@@ -14,10 +14,12 @@ const mocks = vi.hoisted(() => ({
   generateCoverThumbnail: vi.fn(),
   getAppearanceSettings: vi.fn(),
   getLanguageSettings: vi.fn(),
-  getLLMSettings: vi.fn(),
+  getLLMConfig: vi.fn(),
   saveAppearanceSettings: vi.fn(),
   saveLanguageSettings: vi.fn(),
-  saveLLMSettings: vi.fn(),
+  upsertProviderSettings: vi.fn(),
+  deleteProviderSettings: vi.fn(),
+  setActiveProvider: vi.fn(),
 }));
 
 vi.mock("./shared/api/backend", () => ({
@@ -32,10 +34,12 @@ vi.mock("./shared/api/backend", () => ({
   saveReadingPosition: mocks.saveReadingPosition,
   getAppearanceSettings: mocks.getAppearanceSettings,
   getLanguageSettings: mocks.getLanguageSettings,
-  getLLMSettings: mocks.getLLMSettings,
+  getLLMConfig: mocks.getLLMConfig,
   saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLanguageSettings: mocks.saveLanguageSettings,
-  saveLLMSettings: mocks.saveLLMSettings,
+  upsertProviderSettings: mocks.upsertProviderSettings,
+  deleteProviderSettings: mocks.deleteProviderSettings,
+  setActiveProvider: mocks.setActiveProvider,
 }));
 vi.mock("./features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
@@ -126,13 +130,42 @@ beforeEach(() => {
   mocks.getLanguageSettings.mockResolvedValue({ language: "ja" });
   mocks.saveAppearanceSettings.mockImplementation(async (theme: string) => ({ theme }));
   mocks.saveLanguageSettings.mockImplementation(async (language: string) => ({ language }));
-  mocks.getLLMSettings.mockResolvedValue({
-    provider: "openrouter",
-    model: "provider/model",
-    zdr: true,
-    hasApiKey: true,
-    configured: true,
+  mocks.getLLMConfig.mockResolvedValue({
+    activeProviderId: "openrouter",
+    providers: [{
+      providerId: "openrouter",
+      model: "provider/model",
+      options: { zdr: true },
+      hasApiKey: true,
+      configured: true,
+      isActive: true,
+    }],
+    catalog: [{
+      id: "openrouter",
+      displayName: "OpenRouter",
+      authKind: "bearer",
+      optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
+      capabilities: { streaming: true, tools: false, images: false },
+    }],
   });
+  mocks.upsertProviderSettings.mockImplementation(async () => ({
+    activeProviderId: "openrouter",
+    providers: [{
+      providerId: "openrouter",
+      model: "provider/model",
+      options: { zdr: true },
+      hasApiKey: true,
+      configured: true,
+      isActive: true,
+    }],
+    catalog: [{
+      id: "openrouter",
+      displayName: "OpenRouter",
+      authKind: "bearer",
+      optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
+      capabilities: { streaming: true, tools: false, images: false },
+    }],
+  }));
 });
 
 describe("App", () => {

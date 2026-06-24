@@ -18,18 +18,32 @@ func Startup(service *Service, ctx context.Context) {
 	service.ctx = ctx
 }
 
-func (service *Service) GetLLMSettings() (LLMSettings, error) {
+func (service *Service) GetLLMConfig() (LLMConfig, error) {
 	if service.ctx == nil {
-		return LLMSettings{}, errors.New("application is not ready")
+		return LLMConfig{}, errors.New("application is not ready")
 	}
-	return service.manager.Get(service.ctx)
+	return service.manager.GetLLMConfig(service.ctx)
 }
 
-func (service *Service) SaveLLMSettings(request SaveLLMSettingsRequest) (LLMSettings, error) {
+func (service *Service) UpsertProviderSettings(request UpsertProviderRequest) (LLMConfig, error) {
 	if service.ctx == nil {
-		return LLMSettings{}, errors.New("application is not ready")
+		return LLMConfig{}, errors.New("application is not ready")
 	}
-	return service.manager.Save(service.ctx, request)
+	return service.manager.UpsertProviderSettings(service.ctx, request)
+}
+
+func (service *Service) DeleteProviderSettings(providerID string) (LLMConfig, error) {
+	if service.ctx == nil {
+		return LLMConfig{}, errors.New("application is not ready")
+	}
+	return service.manager.DeleteProviderSettings(service.ctx, providerID)
+}
+
+func (service *Service) SetActiveProvider(providerID string) (LLMConfig, error) {
+	if service.ctx == nil {
+		return LLMConfig{}, errors.New("application is not ready")
+	}
+	return service.manager.SetActiveProvider(service.ctx, providerID)
 }
 
 func (service *Service) GetAppearanceSettings() (AppearanceSettings, error) {

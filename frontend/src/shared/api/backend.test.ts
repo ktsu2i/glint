@@ -17,9 +17,11 @@ const bindings = vi.hoisted(() => ({
   searchBook: vi.fn(),
   searchLibrary: vi.fn(),
   getAppearanceSettings: vi.fn(),
-  getLLMSettings: vi.fn(),
+  getLLMConfig: vi.fn(),
   saveAppearanceSettings: vi.fn(),
-  saveLLMSettings: vi.fn(),
+  upsertProviderSettings: vi.fn(),
+  deleteProviderSettings: vi.fn(),
+  setActiveProvider: vi.fn(),
   startChat: vi.fn(),
   eventsOn: vi.fn(),
   eventsOff: vi.fn(),
@@ -49,9 +51,11 @@ vi.mock("../../../wailsjs/go/chat/Service", () => ({
 
 vi.mock("../../../wailsjs/go/settings/Service", () => ({
   GetAppearanceSettings: bindings.getAppearanceSettings,
-  GetLLMSettings: bindings.getLLMSettings,
+  GetLLMConfig: bindings.getLLMConfig,
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
-  SaveLLMSettings: bindings.saveLLMSettings,
+  UpsertProviderSettings: bindings.upsertProviderSettings,
+  DeleteProviderSettings: bindings.deleteProviderSettings,
+  SetActiveProvider: bindings.setActiveProvider,
 }));
 
 vi.mock("../../../wailsjs/runtime/runtime", () => ({
@@ -61,10 +65,11 @@ vi.mock("../../../wailsjs/runtime/runtime", () => ({
 
 import {
   addBookmark,
+  deleteProviderSettings,
   getAppearanceSettings,
+  getLLMConfig,
   listBooks,
   listBookmarks,
-  getLLMSettings,
   markBookCoverFailed,
   onAnswerDelta,
   openBook,
@@ -79,8 +84,9 @@ import {
   saveReadingPosition,
   searchBook,
   searchLibrary,
-  saveLLMSettings,
+  setActiveProvider,
   startChat,
+  upsertProviderSettings,
 } from "./backend";
 
 beforeEach(() => {
@@ -108,20 +114,34 @@ describe("backend facade", () => {
     expect(bindings.startChat).toHaveBeenCalledWith(request);
   });
 
-  it("delegates LLM settings without exposing credential implementation", async () => {
-    const settings = {
-      provider: "openrouter", model: "provider/model", zdr: true,
-      hasApiKey: true, configured: true,
+  it("delegates LLM config without exposing credential implementation", async () => {
+    const config = {
+      activeProviderId: "openrouter",
+      providers: [{
+        providerId: "openrouter", model: "provider/model",
+        options: { zdr: true }, hasApiKey: true, configured: true, isActive: true,
+      }],
+      catalog: [{
+        id: "openrouter", displayName: "OpenRouter", authKind: "bearer",
+        optionSchema: [], capabilities: { streaming: true, tools: false, images: false },
+      }],
     };
-    const request = {
-      model: "provider/model", apiKey: "new-key", zdr: true, clearApiKey: false,
+    const upsertRequest = {
+      providerId: "openrouter", model: "provider/model",
+      options: { zdr: true }, apiKey: "new-key", activate: true,
     };
-    bindings.getLLMSettings.mockResolvedValue(settings);
-    bindings.saveLLMSettings.mockResolvedValue(settings);
+    bindings.getLLMConfig.mockResolvedValue(config);
+    bindings.upsertProviderSettings.mockResolvedValue(config);
+    bindings.deleteProviderSettings.mockResolvedValue(config);
+    bindings.setActiveProvider.mockResolvedValue(config);
 
-    await expect(getLLMSettings()).resolves.toEqual(settings);
-    await expect(saveLLMSettings(request)).resolves.toEqual(settings);
-    expect(bindings.saveLLMSettings).toHaveBeenCalledWith(request);
+    await expect(getLLMConfig()).resolves.toEqual(config);
+    await expect(upsertProviderSettings(upsertRequest)).resolves.toEqual(config);
+    expect(bindings.upsertProviderSettings).toHaveBeenCalledWith(upsertRequest);
+    await expect(deleteProviderSettings("openrouter")).resolves.toEqual(config);
+    expect(bindings.deleteProviderSettings).toHaveBeenCalledWith("openrouter");
+    await expect(setActiveProvider("openrouter")).resolves.toEqual(config);
+    expect(bindings.setActiveProvider).toHaveBeenCalledWith("openrouter");
   });
 
   it("delegates appearance settings through a typed theme contract", async () => {

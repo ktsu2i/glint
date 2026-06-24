@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"sort"
 	"strings"
 
 	"github.com/kaito/glint/internal/llm"
@@ -12,9 +14,14 @@ import (
 )
 
 const (
-	llmSettingKey      = "llm.openrouter"
-	credentialService  = "com.glint.desktop"
-	openRouterKeyEntry = "openrouter-api-key"
+	credentialService = "com.glint.desktop"
+
+	legacyLLMSettingKey      = "llm.openrouter"
+	legacyOpenRouterKeyEntry = "openrouter-api-key"
+
+	llmActiveProviderKey = "llm.active_provider"
+	llmProvidersKey      = "llm.providers"
+	llmMigrationDoneKey  = "llm.migration_v2_done"
 )
 
 var ErrSecretNotFound = errors.New("credential not found")
@@ -52,131 +59,344 @@ func (KeyringStore) Delete(service, account string) error {
 	return err
 }
 
-type LLMSettings struct {
-	Provider   string `json:"provider"`
-	Model      string `json:"model"`
-	ZDR        bool   `json:"zdr"`
-	HasAPIKey  bool   `json:"hasApiKey"`
-	Configured bool   `json:"configured"`
+// ProviderSettings は frontend へ返す1 provider 分の状態。secret 自体は含まない。
+type ProviderSettings struct {
+	ProviderID   string         `json:"providerId"`
+	DisplayLabel string         `json:"displayLabel,omitempty"`
+	Model        string         `json:"model"`
+	Options      map[string]any `json:"options,omitempty"`
+	HasAPIKey    bool           `json:"hasApiKey"`
+	Configured   bool           `json:"configured"`
+	IsActive     bool           `json:"isActive"`
 }
 
-type SaveLLMSettingsRequest struct {
-	Model       string `json:"model"`
-	APIKey      string `json:"apiKey"`
-	ZDR         bool   `json:"zdr"`
-	ClearAPIKey bool   `json:"clearApiKey"`
+// LLMConfig は GetLLMConfig が返す top-level shape。
+type LLMConfig struct {
+	ActiveProviderID string                   `json:"activeProviderId"`
+	Providers        []ProviderSettings       `json:"providers"`
+	Catalog          []llm.ProviderDescriptor `json:"catalog"`
 }
 
-type storedLLMSettings struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	ZDR      bool   `json:"zdr"`
+// UpsertProviderRequest は frontend が provider 設定を upsert する時の入力。
+type UpsertProviderRequest struct {
+	ProviderID   string         `json:"providerId"`
+	DisplayLabel string         `json:"displayLabel,omitempty"`
+	Model        string         `json:"model"`
+	Options      map[string]any `json:"options,omitempty"`
+	APIKey       string         `json:"apiKey,omitempty"`
+	ClearAPIKey  bool           `json:"clearApiKey,omitempty"`
+	Activate     bool           `json:"activate,omitempty"`
+}
+
+type storedProvider struct {
+	DisplayLabel string         `json:"displayLabel,omitempty"`
+	Model        string         `json:"model"`
+	Options      map[string]any `json:"options,omitempty"`
 }
 
 type Manager struct {
-	store   SettingStore
-	secrets SecretStore
+	store     SettingStore
+	secrets   SecretStore
+	registry  *llm.Registry
+	migrated  bool
 }
 
 func NewManager(store SettingStore, secrets SecretStore) *Manager {
-	return &Manager{store: store, secrets: secrets}
+	return &Manager{
+		store:    store,
+		secrets:  secrets,
+		registry: llm.NewRegistry(),
+	}
 }
 
-func (manager *Manager) Get(ctx context.Context) (LLMSettings, error) {
-	stored, err := manager.load(ctx)
+// GetLLMConfig returns the catalog plus every configured provider with their
+// public state. Calls ensureMigration first so the result reflects the new
+// schema even on first read after upgrade.
+func (manager *Manager) GetLLMConfig(ctx context.Context) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return LLMConfig{}, err
+	}
+	active, err := manager.loadActiveProviderID(ctx)
 	if err != nil {
-		return LLMSettings{}, err
+		return LLMConfig{}, err
 	}
-	_, secretErr := manager.secrets.Get(credentialService, openRouterKeyEntry)
-	hasAPIKey := secretErr == nil
-	if secretErr != nil && !errors.Is(secretErr, ErrSecretNotFound) {
-		return LLMSettings{}, fmt.Errorf("read OpenRouter API key from credential store: %w", secretErr)
-	}
-	return publicSettings(stored, hasAPIKey), nil
-}
-
-func (manager *Manager) Save(ctx context.Context, request SaveLLMSettingsRequest) (LLMSettings, error) {
-	request.Model = strings.TrimSpace(request.Model)
-	request.APIKey = strings.TrimSpace(request.APIKey)
-	if request.Model == "" {
-		return LLMSettings{}, errors.New("OpenRouter modelを入力してください。")
-	}
-	if !strings.Contains(request.Model, "/") {
-		return LLMSettings{}, errors.New("modelは provider/model 形式で入力してください。")
-	}
-	if request.ClearAPIKey && request.APIKey != "" {
-		return LLMSettings{}, errors.New("API keyの更新と削除は同時に指定できません。")
-	}
-
-	if request.ClearAPIKey {
-		if err := manager.secrets.Delete(credentialService, openRouterKeyEntry); err != nil {
-			return LLMSettings{}, fmt.Errorf("delete OpenRouter API key from credential store: %w", err)
-		}
-	} else if request.APIKey != "" {
-		if err := manager.secrets.Set(credentialService, openRouterKeyEntry, request.APIKey); err != nil {
-			return LLMSettings{}, fmt.Errorf("save OpenRouter API key to credential store: %w", err)
-		}
-	}
-
-	stored := storedLLMSettings{Provider: "openrouter", Model: request.Model, ZDR: request.ZDR}
-	data, err := json.Marshal(stored)
+	stored, err := manager.loadStoredProviders(ctx)
 	if err != nil {
-		return LLMSettings{}, fmt.Errorf("encode LLM settings: %w", err)
+		return LLMConfig{}, err
 	}
-	if err := manager.store.SaveSetting(ctx, llmSettingKey, string(data)); err != nil {
-		return LLMSettings{}, err
-	}
-	return manager.Get(ctx)
+	return manager.buildConfig(active, stored)
 }
 
-// Gateway resolves the latest configuration for every request. This allows a
-// settings change to take effect without restarting the desktop app.
+// UpsertProviderSettings validates, persists, and optionally activates a
+// single provider. Returns the full LLMConfig so callers can refresh their
+// view in one round trip.
+func (manager *Manager) UpsertProviderSettings(ctx context.Context, request UpsertProviderRequest) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return LLMConfig{}, err
+	}
+	providerID := strings.TrimSpace(request.ProviderID)
+	if providerID == "" {
+		return LLMConfig{}, errors.New("providerIdを指定してください。")
+	}
+	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(providerID))
+	if !ok {
+		return LLMConfig{}, fmt.Errorf("未知のproviderです: %s", providerID)
+	}
+	if request.ClearAPIKey && strings.TrimSpace(request.APIKey) != "" {
+		return LLMConfig{}, errors.New("API keyの更新と削除は同時に指定できません。")
+	}
+
+	cleanedModel := strings.TrimSpace(request.Model)
+	cleanedLabel := strings.TrimSpace(request.DisplayLabel)
+	cfg := llm.ProviderConfig{
+		ProviderID:   descriptor.ID,
+		DisplayLabel: cleanedLabel,
+		Model:        cleanedModel,
+		Options:      normalizedOptions(request.Options),
+	}
+	if err := manager.registry.Validate(cfg); err != nil {
+		return LLMConfig{}, err
+	}
+
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	stored[providerID] = storedProvider{
+		DisplayLabel: cleanedLabel,
+		Model:        cleanedModel,
+		Options:      cfg.Options,
+	}
+	if err := manager.saveStoredProviders(ctx, stored); err != nil {
+		return LLMConfig{}, err
+	}
+
+	if descriptor.RequiresAPIKey() {
+		account := apiKeyAccount(providerID)
+		if request.ClearAPIKey {
+			if err := manager.secrets.Delete(credentialService, account); err != nil {
+				return LLMConfig{}, fmt.Errorf("delete %s API key: %w", providerID, err)
+			}
+		} else if apiKey := strings.TrimSpace(request.APIKey); apiKey != "" {
+			if err := manager.secrets.Set(credentialService, account, apiKey); err != nil {
+				return LLMConfig{}, fmt.Errorf("save %s API key: %w", providerID, err)
+			}
+		}
+	}
+
+	active, err := manager.loadActiveProviderID(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	if request.Activate || active == "" {
+		if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, providerID); err != nil {
+			return LLMConfig{}, err
+		}
+		active = providerID
+	}
+	return manager.buildConfig(active, stored)
+}
+
+// DeleteProviderSettings removes the persisted config + credential for the
+// given provider. If it was active, no provider becomes active automatically;
+// the frontend can call SetActiveProvider next.
+func (manager *Manager) DeleteProviderSettings(ctx context.Context, providerID string) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return LLMConfig{}, err
+	}
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		return LLMConfig{}, errors.New("providerIdを指定してください。")
+	}
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	if _, exists := stored[providerID]; !exists {
+		return manager.GetLLMConfig(ctx)
+	}
+	delete(stored, providerID)
+	if err := manager.saveStoredProviders(ctx, stored); err != nil {
+		return LLMConfig{}, err
+	}
+	if err := manager.secrets.Delete(credentialService, apiKeyAccount(providerID)); err != nil {
+		return LLMConfig{}, fmt.Errorf("delete %s API key: %w", providerID, err)
+	}
+
+	active, err := manager.loadActiveProviderID(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	if active == providerID {
+		if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, ""); err != nil {
+			return LLMConfig{}, err
+		}
+		active = ""
+	}
+	return manager.buildConfig(active, stored)
+}
+
+// SetActiveProvider switches the currently active provider. The target must
+// already exist in the stored config.
+func (manager *Manager) SetActiveProvider(ctx context.Context, providerID string) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return LLMConfig{}, err
+	}
+	providerID = strings.TrimSpace(providerID)
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	if providerID != "" {
+		if _, exists := stored[providerID]; !exists {
+			return LLMConfig{}, fmt.Errorf("provider %s is not configured", providerID)
+		}
+	}
+	if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, providerID); err != nil {
+		return LLMConfig{}, err
+	}
+	return manager.buildConfig(providerID, stored)
+}
+
+// Gateway resolves the active provider's config (and credential) each call so
+// settings changes propagate without restarting the app.
 func (manager *Manager) Gateway(ctx context.Context) (llm.Gateway, error) {
-	stored, err := manager.load(ctx)
+	if err := manager.ensureMigration(ctx); err != nil {
+		return nil, err
+	}
+	active, err := manager.loadActiveProviderID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(stored.Model) == "" {
-		return nil, errors.New("OpenRouterのmodelを設定してください。")
+	if active == "" {
+		return nil, errors.New("LLM providerが選択されていません。")
 	}
-	apiKey, err := manager.secrets.Get(credentialService, openRouterKeyEntry)
-	if errors.Is(err, ErrSecretNotFound) {
-		return nil, errors.New("OpenRouter API keyを設定してください。")
+	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(active))
+	if !ok {
+		return nil, fmt.Errorf("未知のproviderです: %s", active)
 	}
+	stored, err := manager.loadStoredProviders(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read OpenRouter API key from credential store: %w", err)
+		return nil, err
 	}
-	return llm.NewOpenRouterGateway(llm.OpenRouterConfig{
-		APIKey: apiKey,
-		Model:  stored.Model,
-		ZDR:    stored.ZDR,
-	})
+	entry, exists := stored[active]
+	if !exists {
+		return nil, fmt.Errorf("%sの設定が見つかりません。", descriptor.DisplayName)
+	}
+	cfg := llm.ProviderConfig{
+		ProviderID:   descriptor.ID,
+		DisplayLabel: entry.DisplayLabel,
+		Model:        entry.Model,
+		Options:      entry.Options,
+	}
+	if err := manager.registry.Validate(cfg); err != nil {
+		return nil, err
+	}
+	deps := llm.Deps{}
+	if descriptor.RequiresAPIKey() {
+		apiKey, err := manager.secrets.Get(credentialService, apiKeyAccount(active))
+		if errors.Is(err, ErrSecretNotFound) {
+			return nil, fmt.Errorf("%sのAPI keyを設定してください。", descriptor.DisplayName)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read %s API key from credential store: %w", active, err)
+		}
+		deps.APIKey = apiKey
+	}
+	return manager.registry.Build(cfg, deps)
 }
 
-func (manager *Manager) load(ctx context.Context) (storedLLMSettings, error) {
-	value, err := manager.store.Setting(ctx, llmSettingKey)
+func (manager *Manager) buildConfig(active string, stored map[string]storedProvider) (LLMConfig, error) {
+	descriptors := manager.registry.Descriptors()
+	providers := make([]ProviderSettings, 0, len(stored))
+	ids := make([]string, 0, len(stored))
+	for id := range stored {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		entry := stored[id]
+		descriptor, ok := manager.registry.Descriptor(llm.ProviderID(id))
+		if !ok {
+			continue
+		}
+		hasKey := false
+		if descriptor.RequiresAPIKey() {
+			_, err := manager.secrets.Get(credentialService, apiKeyAccount(id))
+			if err == nil {
+				hasKey = true
+			} else if !errors.Is(err, ErrSecretNotFound) {
+				return LLMConfig{}, fmt.Errorf("read %s API key from credential store: %w", id, err)
+			}
+		}
+		cfg := llm.ProviderConfig{
+			ProviderID:   descriptor.ID,
+			DisplayLabel: entry.DisplayLabel,
+			Model:        entry.Model,
+			Options:      entry.Options,
+		}
+		validationErr := manager.registry.Validate(cfg)
+		configured := validationErr == nil && (!descriptor.RequiresAPIKey() || hasKey)
+		providers = append(providers, ProviderSettings{
+			ProviderID:   id,
+			DisplayLabel: entry.DisplayLabel,
+			Model:        entry.Model,
+			Options:      entry.Options,
+			HasAPIKey:    hasKey,
+			Configured:   configured,
+			IsActive:     id == active,
+		})
+	}
+	return LLMConfig{
+		ActiveProviderID: active,
+		Providers:        providers,
+		Catalog:          descriptors,
+	}, nil
+}
+
+func (manager *Manager) loadActiveProviderID(ctx context.Context) (string, error) {
+	value, err := manager.store.Setting(ctx, llmActiveProviderKey)
 	if err != nil {
-		return storedLLMSettings{}, err
+		return "", err
+	}
+	return strings.TrimSpace(value), nil
+}
+
+func (manager *Manager) loadStoredProviders(ctx context.Context) (map[string]storedProvider, error) {
+	value, err := manager.store.Setting(ctx, llmProvidersKey)
+	if err != nil {
+		return nil, err
 	}
 	if value == "" {
-		return storedLLMSettings{Provider: "openrouter", ZDR: true}, nil
+		return map[string]storedProvider{}, nil
 	}
-	var stored storedLLMSettings
+	var stored map[string]storedProvider
 	if err := json.Unmarshal([]byte(value), &stored); err != nil {
-		return storedLLMSettings{}, fmt.Errorf("decode LLM settings: %w", err)
+		return nil, fmt.Errorf("decode LLM provider settings: %w", err)
 	}
-	if stored.Provider == "" {
-		stored.Provider = "openrouter"
+	if stored == nil {
+		stored = map[string]storedProvider{}
 	}
 	return stored, nil
 }
 
-func publicSettings(stored storedLLMSettings, hasAPIKey bool) LLMSettings {
-	return LLMSettings{
-		Provider:   stored.Provider,
-		Model:      stored.Model,
-		ZDR:        stored.ZDR,
-		HasAPIKey:  hasAPIKey,
-		Configured: stored.Model != "" && hasAPIKey,
+func (manager *Manager) saveStoredProviders(ctx context.Context, stored map[string]storedProvider) error {
+	data, err := json.Marshal(stored)
+	if err != nil {
+		return fmt.Errorf("encode LLM provider settings: %w", err)
 	}
+	return manager.store.SaveSetting(ctx, llmProvidersKey, string(data))
+}
+
+func normalizedOptions(options map[string]any) map[string]any {
+	if len(options) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(options))
+	maps.Copy(out, options)
+	return out
+}
+
+func apiKeyAccount(providerID string) string {
+	return "llm." + providerID + ".api_key"
 }

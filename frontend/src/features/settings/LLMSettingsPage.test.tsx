@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
-  getLLMSettings: vi.fn(),
-  saveLLMSettings: vi.fn(),
+  getLLMConfig: vi.fn(),
+  upsertProviderSettings: vi.fn(),
 }));
 
 vi.mock("../../shared/api/backend", () => ({
-  getLLMSettings: backend.getLLMSettings,
-  saveLLMSettings: backend.saveLLMSettings,
+  getLLMConfig: backend.getLLMConfig,
+  upsertProviderSettings: backend.upsertProviderSettings,
 }));
 
 import { LLMSettingsPage } from "./LLMSettingsPage";
@@ -19,21 +19,43 @@ function render(ui: ReactNode) {
   return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
 }
 
-const configuredSettings = {
-  provider: "openrouter" as const,
-  model: "provider/original",
-  zdr: true,
-  hasApiKey: true,
-  configured: true,
+const openRouterDescriptor = {
+  id: "openrouter",
+  displayName: "OpenRouter",
+  authKind: "bearer" as const,
+  defaultBaseUrl: "https://openrouter.ai/api/v1/chat/completions",
+  optionSchema: [{
+    key: "zdr",
+    label: "Zero Data Retention",
+    type: "bool" as const,
+    required: false,
+    default: true,
+    helpText: "データを保持しないendpointだけにroutingを制限します。",
+  }],
+  capabilities: { streaming: true, tools: false, images: false },
 };
+
+function configuredConfig(overrides: { hasApiKey?: boolean; configured?: boolean; model?: string; zdr?: boolean } = {}) {
+  const hasApiKey = overrides.hasApiKey ?? true;
+  const configured = overrides.configured ?? hasApiKey;
+  return {
+    activeProviderId: "openrouter",
+    providers: [{
+      providerId: "openrouter",
+      model: overrides.model ?? "provider/original",
+      options: { zdr: overrides.zdr ?? true },
+      hasApiKey,
+      configured,
+      isActive: true,
+    }],
+    catalog: [openRouterDescriptor],
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  backend.getLLMSettings.mockResolvedValue(configuredSettings);
-  backend.saveLLMSettings.mockResolvedValue({
-    ...configuredSettings,
-    model: "provider/next",
-  });
+  backend.getLLMConfig.mockResolvedValue(configuredConfig());
+  backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ model: "provider/next" }));
 });
 
 describe("LLMSettingsPage", () => {
@@ -66,11 +88,13 @@ describe("LLMSettingsPage", () => {
     fireEvent.change(modelInput, { target: { value: " provider/next " } });
     fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
 
-    await waitFor(() => expect(backend.saveLLMSettings).toHaveBeenCalledWith({
+    await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
+      providerId: "openrouter",
       model: "provider/next",
+      options: { zdr: true },
       apiKey: "",
-      zdr: true,
       clearApiKey: false,
+      activate: true,
     }));
     expect(await screen.findByRole("status")).toHaveProperty(
       "textContent",
@@ -79,11 +103,7 @@ describe("LLMSettingsPage", () => {
   });
 
   it("stores a new API key, toggles its visibility, and updates privacy settings", async () => {
-    backend.getLLMSettings.mockResolvedValue({
-      ...configuredSettings,
-      hasApiKey: false,
-      configured: false,
-    });
+    backend.getLLMConfig.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     const keyInput = await screen.findByLabelText("API key");
@@ -93,30 +113,30 @@ describe("LLMSettingsPage", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Zero Data Retentionを必須にする" }));
     fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
 
-    await waitFor(() => expect(backend.saveLLMSettings).toHaveBeenCalledWith({
+    await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
+      providerId: "openrouter",
       model: "provider/original",
+      options: { zdr: false },
       apiKey: "new-secret",
-      zdr: false,
       clearApiKey: false,
+      activate: true,
     }));
   });
 
   it("can remove a stored API key and return to the previous screen", async () => {
-    backend.saveLLMSettings.mockResolvedValue({
-      ...configuredSettings,
-      hasApiKey: false,
-      configured: false,
-    });
+    backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     const onBack = vi.fn();
     render(<LLMSettingsPage onBack={onBack} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "保存済みAPI keyを削除" }));
     fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
-    await waitFor(() => expect(backend.saveLLMSettings).toHaveBeenCalledWith({
+    await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
+      providerId: "openrouter",
       model: "provider/original",
+      options: { zdr: true },
       apiKey: "",
-      zdr: true,
       clearApiKey: true,
+      activate: true,
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "戻る" }));
@@ -124,14 +144,14 @@ describe("LLMSettingsPage", () => {
   });
 
   it("offers a retry when settings cannot be loaded", async () => {
-    backend.getLLMSettings.mockRejectedValueOnce(new Error("credential unavailable"));
+    backend.getLLMConfig.mockRejectedValueOnce(new Error("credential unavailable"));
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
       expect.stringContaining("credential unavailable"),
     );
-    backend.getLLMSettings.mockResolvedValue(configuredSettings);
+    backend.getLLMConfig.mockResolvedValue(configuredConfig());
     fireEvent.click(screen.getByRole("button", { name: "再読み込み" }));
     expect(await screen.findByDisplayValue("provider/original")).toBeTruthy();
   });
