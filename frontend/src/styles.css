@@ -2000,7 +2000,6 @@ button.page-count:disabled {
   top: 0;
 }
 
-.reader-status,
 .reader-error {
   position: absolute;
   z-index: 2;
@@ -2008,17 +2007,12 @@ button.page-count:disabled {
   left: 50%;
   transform: translateX(-50%);
   padding: 7px 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid #c6a19e;
   border-radius: 4px;
   background: rgb(247 247 243 / 94%);
-  color: var(--muted);
+  color: var(--danger);
   font-size: 10px;
   box-shadow: 0 4px 12px rgb(32 37 42 / 8%);
-}
-
-.reader-error {
-  color: var(--danger);
-  border-color: #c6a19e;
 }
 
 .panel-resizer {
@@ -3179,7 +3173,6 @@ button.page-count:disabled {
   background-image: linear-gradient(rgb(255 255 255 / 3%) 1px, transparent 1px);
 }
 
-:root[data-theme="dark"] .reader-status,
 :root[data-theme="dark"] .reader-error {
   background: rgb(37 43 46 / 95%);
   box-shadow: 0 4px 12px rgb(0 0 0 / 24%);

@@ -191,7 +191,6 @@ describe("PdfReader", () => {
       />,
     );
 
-    expect(screen.getByText("PDFを読み込んでいます…")).toBeTruthy();
     await waitFor(() => expect(loader.createPdfLoadingTask).toHaveBeenCalledWith(
       "/book/1",
       expect.any(AbortSignal),

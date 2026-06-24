@@ -134,7 +134,6 @@ export function PdfReader({
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [effectiveScale, setEffectiveScale] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   const [outlineLoaded, setOutlineLoaded] = useState(false);
@@ -234,7 +233,6 @@ export function PdfReader({
     let timedOut = false;
     const abortController = new AbortController();
     const bookUrl = book.url;
-    setLoading(true);
     setError("");
     setDocument(null);
     setOutline([]);
@@ -293,9 +291,6 @@ export function PdfReader({
         }
       } finally {
         window.clearTimeout(timeout);
-        if (active) {
-          setLoading(false);
-        }
       }
     }
 
@@ -1269,9 +1264,6 @@ export function PdfReader({
           </aside>
         )}
         <div className="pdf-stage" ref={stageRef}>
-          {loading && (
-            <div className="reader-status">{t("reader.loadingPdf")}</div>
-          )}
           {error && (
             <div className="reader-error" role="alert">
               {error}
