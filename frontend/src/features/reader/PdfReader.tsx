@@ -116,11 +116,15 @@ export function PdfReader({
   const textLayerRightRef = useRef<HTMLDivElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
   const selectionCallbackRef = useRef(onSelectionChange);
+  const pageContextCallbackRef = useRef(onPageContextChange);
   const selectionChangedSincePointerDownRef = useRef(false);
 
   useEffect(() => {
     selectionCallbackRef.current = onSelectionChange;
   }, [onSelectionChange]);
+  useEffect(() => {
+    pageContextCallbackRef.current = onPageContextChange;
+  }, [onPageContextChange]);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -221,7 +225,7 @@ export function PdfReader({
       searchRequestRef.current += 1;
       setIsSearching(false);
       setSearchError("");
-      onPageContextChange(0, "", 0);
+      pageContextCallbackRef.current(0, "", 0);
       return;
     }
 
@@ -245,7 +249,7 @@ export function PdfReader({
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
-    onPageContextChange(0, "", 0);
+    pageContextCallbackRef.current(0, "", 0);
 
     let timeout = 0;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -303,7 +307,7 @@ export function PdfReader({
       abortController.abort();
       void loadingTask?.destroy();
     };
-  }, [book?.id, book?.url, initialPage, onPageContextChange, t]);
+  }, [book?.id, book?.url, initialPage, t]);
 
   useEffect(() => {
     let active = true;
@@ -542,7 +546,7 @@ export function PdfReader({
           ),
         )
         .join("\n\n");
-      onPageContextChange(pageNumber, text, document!.numPages);
+      pageContextCallbackRef.current(pageNumber, text, document!.numPages);
 
       for (let i = 0; i < pages.length; i += 1) {
         const container = textLayerContainers[i];
@@ -608,7 +612,6 @@ export function PdfReader({
     };
   }, [
     document,
-    onPageContextChange,
     pageNumber,
     stageSize,
     t,
