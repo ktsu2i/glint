@@ -46,6 +46,13 @@ func (service *Service) SetActiveProvider(providerID string) (LLMConfig, error) 
 	return service.manager.SetActiveProvider(service.ctx, providerID)
 }
 
+func (service *Service) TestProviderConnection(providerID string) (TestProviderConnectionResult, error) {
+	if service.ctx == nil {
+		return TestProviderConnectionResult{}, errors.New("application is not ready")
+	}
+	return service.manager.TestProviderConnection(service.ctx, providerID)
+}
+
 func (service *Service) GetAppearanceSettings() (AppearanceSettings, error) {
 	if service.ctx == nil {
 		return AppearanceSettings{}, errors.New("application is not ready")

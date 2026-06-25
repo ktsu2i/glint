@@ -107,7 +107,25 @@ func (gateway *AnthropicGateway) Complete(ctx context.Context, request ChatReque
 		Stream:    true,
 		MaxTokens: gateway.maxTokens,
 	}
+	return gateway.stream(ctx, request.RequestID, body)
+}
 
+func (gateway *AnthropicGateway) TestConnection(ctx context.Context) error {
+	stream, err := gateway.stream(ctx, "connection-test", anthropicRequest{
+		Model: gateway.model,
+		Messages: []anthropicMessage{
+			{Role: "user", Content: "Reply with OK."},
+		},
+		Stream:    true,
+		MaxTokens: 1,
+	})
+	if err != nil {
+		return err
+	}
+	return awaitConnectionTest(ctx, stream)
+}
+
+func (gateway *AnthropicGateway) stream(ctx context.Context, requestID string, body anthropicRequest) (<-chan AnswerDelta, error) {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("encode Anthropic request: %w", err)
@@ -131,7 +149,7 @@ func (gateway *AnthropicGateway) Complete(ctx context.Context, request ChatReque
 	}
 
 	stream := make(chan AnswerDelta)
-	go gateway.readStream(ctx, request.RequestID, response.Body, stream)
+	go gateway.readStream(ctx, requestID, response.Body, stream)
 	return stream, nil
 }
 

@@ -73,6 +73,22 @@ func TestOpenAIGatewayValidatesConfiguration(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestOpenAIGatewayTestsConnectionWithOneToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload openAIRequest
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		assert.Equal(t, 1, payload.MaxCompletionTokens)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+	gateway, err := newOpenAIGateway(OpenAIConfig{
+		APIKey: "sk", Model: "gpt-5", BaseURL: server.URL,
+	}, server.Client())
+	require.NoError(t, err)
+	require.NoError(t, gateway.TestConnection(context.Background()))
+}
+
 func TestOpenAIGatewayRedactsSecretsBeforeSending(t *testing.T) {
 	var sent openAIRequest
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

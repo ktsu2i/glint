@@ -27,6 +27,7 @@ type ollamaRequest struct {
 	Messages  []ChatCompletionMessage `json:"messages"`
 	Stream    bool                    `json:"stream"`
 	KeepAlive string                  `json:"keep_alive,omitempty"`
+	Options   map[string]any          `json:"options,omitempty"`
 }
 
 func NewOllamaGateway(config OllamaConfig) (*OllamaGateway, error) {
@@ -78,4 +79,20 @@ func (gateway *OllamaGateway) Complete(ctx context.Context, request ChatRequest)
 		KeepAlive: gateway.keepAlive,
 	}
 	return gateway.client.Stream(ctx, request.RequestID, body)
+}
+
+func (gateway *OllamaGateway) TestConnection(ctx context.Context) error {
+	stream, err := gateway.client.Stream(ctx, "connection-test", ollamaRequest{
+		Model: gateway.model,
+		Messages: []ChatCompletionMessage{
+			{Role: "user", Content: "Reply with OK."},
+		},
+		Stream:    true,
+		KeepAlive: gateway.keepAlive,
+		Options:   map[string]any{"num_predict": 1},
+	})
+	if err != nil {
+		return err
+	}
+	return awaitConnectionTest(ctx, stream)
 }

@@ -29,9 +29,10 @@ type OpenAICompatibleGateway struct {
 }
 
 type openAICompatibleRequest struct {
-	Model    string                  `json:"model"`
-	Messages []ChatCompletionMessage `json:"messages"`
-	Stream   bool                    `json:"stream"`
+	Model     string                  `json:"model"`
+	Messages  []ChatCompletionMessage `json:"messages"`
+	Stream    bool                    `json:"stream"`
+	MaxTokens int                     `json:"max_tokens,omitempty"`
 }
 
 func NewOpenAICompatibleGateway(config OpenAICompatibleConfig) (*OpenAICompatibleGateway, error) {
@@ -101,6 +102,21 @@ func (gateway *OpenAICompatibleGateway) Complete(ctx context.Context, request Ch
 		Stream: true,
 	}
 	return gateway.client.Stream(ctx, request.RequestID, body)
+}
+
+func (gateway *OpenAICompatibleGateway) TestConnection(ctx context.Context) error {
+	stream, err := gateway.client.Stream(ctx, "connection-test", openAICompatibleRequest{
+		Model: gateway.model,
+		Messages: []ChatCompletionMessage{
+			{Role: "user", Content: "Reply with OK."},
+		},
+		Stream:    true,
+		MaxTokens: 1,
+	})
+	if err != nil {
+		return err
+	}
+	return awaitConnectionTest(ctx, stream)
 }
 
 // IsOpenAICompatibleID は provider id が `openai_compatible:<slug>` 形式かを判定する。

@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   getLLMConfig,
+  testProviderConnection,
   upsertProviderSettings,
   type LLMConfig,
   type ProviderDescriptor,
@@ -23,6 +24,7 @@ import {
   type ThemePreference,
 } from "../../shared/api/backend";
 import { useLanguageSettings } from "../../shared/i18n/i18n";
+import { localizeBackendError } from "../../shared/i18n/error";
 
 type LLMSettingsPageProps = {
   onBack: () => void;
@@ -136,6 +138,9 @@ export function LLMSettingsPage({
   const [saving, setSaving] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
   const [savingLanguage, setSavingLanguage] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTest, setConnectionTest] = useState<"success" | "error" | null>(null);
+  const [connectionTestError, setConnectionTestError] = useState("");
   const [localThemeError, setLocalThemeError] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -193,6 +198,11 @@ export function LLMSettingsPage({
     void loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    setConnectionTest(null);
+    setConnectionTestError("");
+  }, [apiKey, clearAPIKey, model, options, selectedProviderId]);
+
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving || !selectedDescriptor || !selectedProviderId) return;
@@ -214,9 +224,33 @@ export function LLMSettingsPage({
       adoptProvider(selectedProviderId, next);
       setSaved(true);
     } catch (reason) {
-      setError(extractErrorMessage(reason, t("settings.saveError")));
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestConnection() {
+    if (testingConnection || !storedProvider?.configured) return;
+    setTestingConnection(true);
+    setConnectionTest(null);
+    setConnectionTestError("");
+    try {
+      const result = await testProviderConnection(storedProvider.providerId);
+      if (result.ok) {
+        setConnectionTest("success");
+      } else {
+        setConnectionTest("error");
+        setConnectionTestError(localizeBackendError(result.error || t("settings.testConnectionFailed"), t));
+      }
+    } catch (reason) {
+      setConnectionTest("error");
+      setConnectionTestError(localizeBackendError(
+        extractErrorMessage(reason, t("settings.testConnectionFailed")),
+        t,
+      ));
+    } finally {
+      setTestingConnection(false);
     }
   }
 
@@ -286,12 +320,14 @@ export function LLMSettingsPage({
   } as const;
 
   const hasCredential = storedProvider?.hasApiKey ?? false;
-  const requiresAPIKey = selectedDescriptor ? selectedDescriptor.authKind !== "none" : true;
+  const isCustomInstance = selectedDescriptor?.id === OPENAI_COMPATIBLE_TEMPLATE_ID && isOpenAICompatibleInstance(selectedProviderId);
+  const requiresAPIKey = selectedDescriptor
+    ? selectedDescriptor.authKind !== "none" && !(isCustomInstance && options.requires_api_key === false)
+    : true;
   const willHaveCredential = !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
   const canSave = !loading && !saving && model.trim() !== "" && (willHaveCredential || clearAPIKey);
   const zdrOption = selectedDescriptor?.optionSchema.find((option) => option.key === "zdr");
   const zdrEnabled = zdrOption ? Boolean(options[zdrOption.key]) : false;
-  const isCustomInstance = selectedDescriptor?.id === OPENAI_COMPATIBLE_TEMPLATE_ID && isOpenAICompatibleInstance(selectedProviderId);
   const providerLabel = isCustomInstance
     ? (storedProvider?.displayLabel || displayLabel || selectedProviderId.slice(OPENAI_COMPATIBLE_PREFIX.length))
     : (selectedDescriptor?.displayName ?? "—");
@@ -530,6 +566,16 @@ export function LLMSettingsPage({
             {saved && (
               <p className="settings-saved" role="status"><Check size={14} /> {t("settings.saved")}</p>
             )}
+            {connectionTest === "success" && (
+              <p className="settings-saved" role="status">
+                <Check size={14} /> {t("settings.testConnectionSucceeded", { provider: providerLabel })}
+              </p>
+            )}
+            {connectionTest === "error" && (
+              <div className="settings-error" role="alert">
+                <span>{connectionTestError}</span>
+              </div>
+            )}
 
             <fieldset className="settings-fieldset" disabled={loading || saving || !selectedDescriptor}>
               <legend>{t("settings.model")}</legend>
@@ -547,7 +593,7 @@ export function LLMSettingsPage({
                   spellCheck={false}
                   required
                 />
-                <small>{t("settings.modelIdHelp")}</small>
+                <small>{t("settings.modelIdHelp", { provider: providerLabel })}</small>
               </div>
             </fieldset>
 
@@ -707,6 +753,14 @@ export function LLMSettingsPage({
             )}
 
             <footer className="settings-page-actions">
+              <button
+                className="settings-secondary"
+                type="button"
+                onClick={() => void handleTestConnection()}
+                disabled={saving || testingConnection || !storedProvider?.configured}
+              >
+                {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
+              </button>
               <button className="settings-secondary" type="button" onClick={onBack} disabled={saving}>
                 {t("settings.back")}
               </button>

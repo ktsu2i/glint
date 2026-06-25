@@ -24,6 +24,7 @@ import {
   SaveAppearanceSettings,
   SaveLanguageSettings,
   SetActiveProvider,
+  TestProviderConnection,
   UpsertProviderSettings,
 } from "../../../wailsjs/go/settings/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
@@ -147,6 +148,12 @@ export type UpsertProviderRequest = {
   activate?: boolean;
 };
 
+export type TestProviderConnectionResult = {
+  providerId: string;
+  ok: boolean;
+  error?: string;
+};
+
 export type ThemePreference = "light" | "dark" | "system";
 
 export type AppearanceSettings = {
@@ -253,6 +260,10 @@ export async function deleteProviderSettings(providerId: string): Promise<LLMCon
 
 export async function setActiveProvider(providerId: string): Promise<LLMConfig> {
   return (await SetActiveProvider(providerId)) as LLMConfig;
+}
+
+export async function testProviderConnection(providerId: string): Promise<TestProviderConnectionResult> {
+  return (await TestProviderConnection(providerId)) as TestProviderConnectionResult;
 }
 
 export async function getAppearanceSettings(): Promise<AppearanceSettings> {

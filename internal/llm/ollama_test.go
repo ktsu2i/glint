@@ -67,3 +67,17 @@ func TestOllamaGatewayUsesDefaultBaseURLWhenEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:11434/v1/chat/completions", gateway.client.endpoint)
 }
+
+func TestOllamaGatewayTestsConnectionWithOnePredictedToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload ollamaRequest
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		assert.Equal(t, float64(1), payload.Options["num_predict"])
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+	gateway, err := newOllamaGateway(OllamaConfig{Model: "llama3", BaseURL: server.URL}, server.Client())
+	require.NoError(t, err)
+	require.NoError(t, gateway.TestConnection(context.Background()))
+}

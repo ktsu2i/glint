@@ -97,6 +97,22 @@ func TestOpenAICompatibleGatewayUsesDisplayNameInErrorMessage(t *testing.T) {
 	assert.Contains(t, err.Error(), "GroqのAPI key")
 }
 
+func TestOpenAICompatibleGatewayTestsConnectionWithOneToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload openAICompatibleRequest
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		assert.Equal(t, 1, payload.MaxTokens)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+	gateway, err := newOpenAICompatibleGateway(OpenAICompatibleConfig{
+		Model: "model", BaseURL: server.URL, RequiresAPIKey: false,
+	}, server.Client())
+	require.NoError(t, err)
+	require.NoError(t, gateway.TestConnection(context.Background()))
+}
+
 func TestIsOpenAICompatibleID(t *testing.T) {
 	assert.True(t, IsOpenAICompatibleID(ProviderID("openai_compatible:groq")))
 	assert.False(t, IsOpenAICompatibleID(ProviderID("openai_compatible")))

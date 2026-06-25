@@ -2,7 +2,10 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/kaito/glint/internal/llm"
@@ -189,8 +192,10 @@ func TestMigrationCopiesLegacyOpenRouterIntoNewSchema(t *testing.T) {
 	assert.True(t, config.Providers[0].IsActive)
 	assert.Equal(t, "openrouter", config.ActiveProviderID)
 	assert.Equal(t, "legacy-key", secretStore.values[openRouterAccount()])
-	assert.Equal(t, "legacy-key", secretStore.values[secretKey(credentialService, legacyOpenRouterKeyEntry)], "legacy key should remain for fallback")
+	_, legacyExists := secretStore.values[secretKey(credentialService, legacyOpenRouterKeyEntry)]
+	assert.False(t, legacyExists)
 	assert.Equal(t, "1", settingStore.values[llmMigrationDoneKey])
+	assert.Equal(t, "1", settingStore.values[llmKeyCleanupDoneKey])
 }
 
 func TestMigrationIsIdempotent(t *testing.T) {
@@ -210,6 +215,22 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	config, err := manager.GetLLMConfig(context.Background())
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
+}
+
+func TestMigrationCleansLegacyKeyForPreviouslyMigratedInstall(t *testing.T) {
+	manager, settingStore, secretStore := newTestManager()
+	settingStore.values[llmMigrationDoneKey] = "1"
+	settingStore.values[llmProvidersKey] = `{"openrouter":{"model":"provider/model","options":{"zdr":true}}}`
+	settingStore.values[llmActiveProviderKey] = "openrouter"
+	secretStore.values[secretKey(credentialService, legacyOpenRouterKeyEntry)] = "legacy-key"
+
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, "legacy-key", secretStore.values[openRouterAccount()])
+	_, legacyExists := secretStore.values[secretKey(credentialService, legacyOpenRouterKeyEntry)]
+	assert.False(t, legacyExists)
+	assert.Equal(t, "1", settingStore.values[llmKeyCleanupDoneKey])
 }
 
 func TestManagerSurfacesCredentialFailures(t *testing.T) {
@@ -297,6 +318,73 @@ func TestUpsertOpenAICompatibleStoresSlugInstance(t *testing.T) {
 	require.NoError(t, err)
 	_, ok := gateway.(*llm.OpenAICompatibleGateway)
 	assert.True(t, ok)
+}
+
+func TestOpenAICompatibleCanBeConfiguredWithoutAPIKey(t *testing.T) {
+	manager, _, _ := newTestManager()
+	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID:   "openai_compatible:local",
+		DisplayLabel: "Local",
+		Model:        "local-model",
+		Options: map[string]any{
+			"base_url":         "http://localhost:8080/v1",
+			"requires_api_key": false,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.True(t, config.Providers[0].Configured)
+
+	_, err = manager.Gateway(context.Background())
+	require.NoError(t, err)
+}
+
+func TestProviderConnectionUsesSavedProviderWithMinimalOutput(t *testing.T) {
+	var maxTokens float64
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		maxTokens, _ = payload["max_completion_tokens"].(float64)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Model:      "gpt-5",
+		Options:    map[string]any{"base_url": server.URL},
+		APIKey:     "sk-test",
+	})
+	require.NoError(t, err)
+
+	result, err := manager.TestProviderConnection(context.Background(), "openai")
+	require.NoError(t, err)
+	assert.True(t, result.OK)
+	assert.Empty(t, result.Error)
+	assert.Equal(t, float64(1), maxTokens)
+}
+
+func TestProviderConnectionReturnsProviderError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Model:      "gpt-5",
+		Options:    map[string]any{"base_url": server.URL},
+		APIKey:     "bad-key",
+	})
+	require.NoError(t, err)
+
+	result, err := manager.TestProviderConnection(context.Background(), "openai")
+	require.NoError(t, err)
+	assert.False(t, result.OK)
+	assert.Contains(t, result.Error, "OpenAI API key")
 }
 
 type failingSecretStore struct{}

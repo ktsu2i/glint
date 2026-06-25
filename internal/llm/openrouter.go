@@ -24,10 +24,11 @@ type OpenRouterGateway struct {
 }
 
 type openRouterRequest struct {
-	Model    string                   `json:"model"`
-	Messages []ChatCompletionMessage  `json:"messages"`
-	Stream   bool                     `json:"stream"`
-	Provider openRouterProviderPolicy `json:"provider"`
+	Model     string                   `json:"model"`
+	Messages  []ChatCompletionMessage  `json:"messages"`
+	Stream    bool                     `json:"stream"`
+	MaxTokens int                      `json:"max_tokens,omitempty"`
+	Provider  openRouterProviderPolicy `json:"provider"`
 }
 
 type openRouterProviderPolicy struct {
@@ -88,4 +89,20 @@ func (gateway *OpenRouterGateway) Complete(ctx context.Context, request ChatRequ
 		Provider: openRouterProviderPolicy{ZDR: gateway.zdr},
 	}
 	return gateway.client.Stream(ctx, request.RequestID, body)
+}
+
+func (gateway *OpenRouterGateway) TestConnection(ctx context.Context) error {
+	stream, err := gateway.client.Stream(ctx, "connection-test", openRouterRequest{
+		Model: gateway.model,
+		Messages: []ChatCompletionMessage{
+			{Role: "user", Content: "Reply with OK."},
+		},
+		Stream:    true,
+		MaxTokens: 1,
+		Provider:  openRouterProviderPolicy{ZDR: gateway.zdr},
+	})
+	if err != nil {
+		return err
+	}
+	return awaitConnectionTest(ctx, stream)
 }

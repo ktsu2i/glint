@@ -164,6 +164,22 @@ func TestAnthropicGatewayValidatesConfiguration(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestAnthropicGatewayTestsConnectionWithOneToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload anthropicRequest
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		assert.Equal(t, 1, payload.MaxTokens)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("event: message_stop\ndata: {}\n\n"))
+	}))
+	t.Cleanup(server.Close)
+	gateway, err := newAnthropicGateway(AnthropicConfig{
+		APIKey: "sk", Model: "claude", BaseURL: server.URL,
+	}, server.Client())
+	require.NoError(t, err)
+	require.NoError(t, gateway.TestConnection(context.Background()))
+}
+
 func TestAnthropicGatewayUsesCustomVersion(t *testing.T) {
 	var received string
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

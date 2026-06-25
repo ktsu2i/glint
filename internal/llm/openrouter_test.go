@@ -108,6 +108,23 @@ func TestOpenRouterGatewayValidatesConfiguration(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestOpenRouterGatewayTestsConnectionWithOneToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload openRouterRequest
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		assert.Equal(t, 1, payload.MaxTokens)
+		assert.True(t, payload.Provider.ZDR)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+	gateway, err := newOpenRouterGateway(OpenRouterConfig{
+		APIKey: "key", Model: "provider/model", ZDR: true, Endpoint: server.URL,
+	}, server.Client())
+	require.NoError(t, err)
+	require.NoError(t, gateway.TestConnection(context.Background()))
+}
+
 func TestOpenRouterGatewayRedactsSecretsBeforeSending(t *testing.T) {
 	var sent openRouterRequest
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

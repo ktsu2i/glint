@@ -23,9 +23,10 @@ type OpenAIGateway struct {
 }
 
 type openAIRequest struct {
-	Model    string                  `json:"model"`
-	Messages []ChatCompletionMessage `json:"messages"`
-	Stream   bool                    `json:"stream"`
+	Model               string                  `json:"model"`
+	Messages            []ChatCompletionMessage `json:"messages"`
+	Stream              bool                    `json:"stream"`
+	MaxCompletionTokens int                     `json:"max_completion_tokens,omitempty"`
 }
 
 func NewOpenAIGateway(config OpenAIConfig) (*OpenAIGateway, error) {
@@ -84,4 +85,19 @@ func (gateway *OpenAIGateway) Complete(ctx context.Context, request ChatRequest)
 		Stream: true,
 	}
 	return gateway.client.Stream(ctx, request.RequestID, body)
+}
+
+func (gateway *OpenAIGateway) TestConnection(ctx context.Context) error {
+	stream, err := gateway.client.Stream(ctx, "connection-test", openAIRequest{
+		Model: gateway.model,
+		Messages: []ChatCompletionMessage{
+			{Role: "user", Content: "Reply with OK."},
+		},
+		Stream:              true,
+		MaxCompletionTokens: 1,
+	})
+	if err != nil {
+		return err
+	}
+	return awaitConnectionTest(ctx, stream)
 }

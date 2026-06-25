@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
   getLLMConfig: vi.fn(),
+  testProviderConnection: vi.fn(),
   upsertProviderSettings: vi.fn(),
 }));
 
 vi.mock("../../shared/api/backend", () => ({
   getLLMConfig: backend.getLLMConfig,
+  testProviderConnection: backend.testProviderConnection,
   upsertProviderSettings: backend.upsertProviderSettings,
 }));
 
@@ -55,6 +57,7 @@ function configuredConfig(overrides: { hasApiKey?: boolean; configured?: boolean
 beforeEach(() => {
   vi.clearAllMocks();
   backend.getLLMConfig.mockResolvedValue(configuredConfig());
+  backend.testProviderConnection.mockResolvedValue({ providerId: "openrouter", ok: true });
   backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ model: "provider/next" }));
 });
 
@@ -154,5 +157,90 @@ describe("LLMSettingsPage", () => {
     backend.getLLMConfig.mockResolvedValue(configuredConfig());
     fireEvent.click(screen.getByRole("button", { name: "再読み込み" }));
     expect(await screen.findByDisplayValue("provider/original")).toBeTruthy();
+  });
+
+  it("tests the saved provider connection and shows success", async () => {
+    render(<LLMSettingsPage onBack={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
+
+    await waitFor(() => expect(backend.testProviderConnection).toHaveBeenCalledWith("openrouter"));
+    expect(await screen.findByRole("status")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("OpenRouterへの接続に成功しました。"),
+    );
+  });
+
+  it("localizes provider-specific connection errors", async () => {
+    backend.testProviderConnection.mockResolvedValue({
+      providerId: "openrouter",
+      ok: false,
+      error: "OpenAI API keyを確認してください。",
+    });
+    render(<LLMSettingsPage onBack={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "OpenAIのAPI keyを確認してください。",
+    );
+  });
+
+  it("allows an OpenAI-compatible endpoint that does not require an API key", async () => {
+    const customConfig = {
+      activeProviderId: "openai_compatible:local",
+      providers: [{
+        providerId: "openai_compatible:local",
+        displayLabel: "Local",
+        model: "local-model",
+        options: {
+          base_url: "http://localhost:8080/v1",
+          requires_api_key: false,
+          headers: {},
+        },
+        hasApiKey: false,
+        configured: true,
+        isActive: true,
+      }],
+      catalog: [{
+        id: "openai_compatible",
+        displayName: "OpenAI-compatible",
+        authKind: "bearer" as const,
+        optionSchema: [
+          { key: "base_url", label: "Base URL", type: "url" as const, required: true },
+          {
+            key: "requires_api_key",
+            label: "API keyが必要",
+            type: "bool" as const,
+            required: false,
+            default: true,
+          },
+          { key: "headers", label: "Custom headers", type: "headers" as const, required: false },
+        ],
+        capabilities: { streaming: true, tools: false, images: false },
+      }],
+    };
+    backend.getLLMConfig.mockResolvedValue(customConfig);
+    backend.upsertProviderSettings.mockResolvedValue(customConfig);
+    render(<LLMSettingsPage onBack={vi.fn()} />);
+
+    expect(await screen.findByDisplayValue("local-model")).toBeTruthy();
+    expect(screen.queryByLabelText("API key")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
+
+    await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
+      providerId: "openai_compatible:local",
+      displayLabel: "Local",
+      model: "local-model",
+      options: {
+        base_url: "http://localhost:8080/v1",
+        requires_api_key: false,
+        headers: {},
+      },
+      apiKey: "",
+      clearApiKey: false,
+      activate: true,
+    }));
   });
 });

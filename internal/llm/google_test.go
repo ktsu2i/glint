@@ -174,6 +174,23 @@ func TestGoogleGatewayValidatesConfiguration(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestGoogleGatewayTestsConnectionWithOneToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload googleRequest
+		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
+		require.NotNil(t, payload.GenerationConfig)
+		assert.Equal(t, 1, payload.GenerationConfig.MaxOutputTokens)
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: {\"candidates\":[{\"finishReason\":\"STOP\"}]}\n\n"))
+	}))
+	t.Cleanup(server.Close)
+	gateway, err := newGoogleGateway(GoogleConfig{
+		APIKey: "sk", Model: "gemini", BaseURL: server.URL,
+	}, server.Client())
+	require.NoError(t, err)
+	require.NoError(t, gateway.TestConnection(context.Background()))
+}
+
 func TestGoogleGatewayRedactsSecretsBeforeSending(t *testing.T) {
 	var sent googleRequest
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

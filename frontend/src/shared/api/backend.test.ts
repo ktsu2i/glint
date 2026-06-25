@@ -22,6 +22,7 @@ const bindings = vi.hoisted(() => ({
   upsertProviderSettings: vi.fn(),
   deleteProviderSettings: vi.fn(),
   setActiveProvider: vi.fn(),
+  testProviderConnection: vi.fn(),
   startChat: vi.fn(),
   eventsOn: vi.fn(),
   eventsOff: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock("../../../wailsjs/go/settings/Service", () => ({
   UpsertProviderSettings: bindings.upsertProviderSettings,
   DeleteProviderSettings: bindings.deleteProviderSettings,
   SetActiveProvider: bindings.setActiveProvider,
+  TestProviderConnection: bindings.testProviderConnection,
 }));
 
 vi.mock("../../../wailsjs/runtime/runtime", () => ({
@@ -86,6 +88,7 @@ import {
   searchLibrary,
   setActiveProvider,
   startChat,
+  testProviderConnection,
   upsertProviderSettings,
 } from "./backend";
 
@@ -134,6 +137,7 @@ describe("backend facade", () => {
     bindings.upsertProviderSettings.mockResolvedValue(config);
     bindings.deleteProviderSettings.mockResolvedValue(config);
     bindings.setActiveProvider.mockResolvedValue(config);
+    bindings.testProviderConnection.mockResolvedValue({ providerId: "openrouter", ok: true });
 
     await expect(getLLMConfig()).resolves.toEqual(config);
     await expect(upsertProviderSettings(upsertRequest)).resolves.toEqual(config);
@@ -142,6 +146,11 @@ describe("backend facade", () => {
     expect(bindings.deleteProviderSettings).toHaveBeenCalledWith("openrouter");
     await expect(setActiveProvider("openrouter")).resolves.toEqual(config);
     expect(bindings.setActiveProvider).toHaveBeenCalledWith("openrouter");
+    await expect(testProviderConnection("openrouter")).resolves.toEqual({
+      providerId: "openrouter",
+      ok: true,
+    });
+    expect(bindings.testProviderConnection).toHaveBeenCalledWith("openrouter");
   });
 
   it("delegates appearance settings through a typed theme contract", async () => {

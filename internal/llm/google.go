@@ -39,8 +39,13 @@ type GoogleGateway struct {
 }
 
 type googleRequest struct {
-	Contents          []googleContent `json:"contents"`
-	SystemInstruction *googleContent  `json:"systemInstruction,omitempty"`
+	Contents          []googleContent         `json:"contents"`
+	SystemInstruction *googleContent          `json:"systemInstruction,omitempty"`
+	GenerationConfig  *googleGenerationConfig `json:"generationConfig,omitempty"`
+}
+
+type googleGenerationConfig struct {
+	MaxOutputTokens int `json:"maxOutputTokens,omitempty"`
 }
 
 type googleContent struct {
@@ -112,7 +117,23 @@ func (gateway *GoogleGateway) Complete(ctx context.Context, request ChatRequest)
 			Parts: []googlePart{{Text: systemPrompt}},
 		},
 	}
+	return gateway.stream(ctx, request.RequestID, body)
+}
 
+func (gateway *GoogleGateway) TestConnection(ctx context.Context) error {
+	stream, err := gateway.stream(ctx, "connection-test", googleRequest{
+		Contents: []googleContent{
+			{Role: "user", Parts: []googlePart{{Text: "Reply with OK."}}},
+		},
+		GenerationConfig: &googleGenerationConfig{MaxOutputTokens: 1},
+	})
+	if err != nil {
+		return err
+	}
+	return awaitConnectionTest(ctx, stream)
+}
+
+func (gateway *GoogleGateway) stream(ctx context.Context, requestID string, body googleRequest) (<-chan AnswerDelta, error) {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("encode Google request: %w", err)
@@ -137,7 +158,7 @@ func (gateway *GoogleGateway) Complete(ctx context.Context, request ChatRequest)
 	}
 
 	stream := make(chan AnswerDelta)
-	go gateway.readStream(ctx, request.RequestID, response.Body, stream)
+	go gateway.readStream(ctx, requestID, response.Body, stream)
 	return stream, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kaito/glint/internal/llm"
 	keyring "github.com/zalando/go-keyring"
@@ -22,6 +23,7 @@ const (
 	llmActiveProviderKey = "llm.active_provider"
 	llmProvidersKey      = "llm.providers"
 	llmMigrationDoneKey  = "llm.migration_v2_done"
+	llmKeyCleanupDoneKey = "llm.migration_v3_done"
 )
 
 var ErrSecretNotFound = errors.New("credential not found")
@@ -88,6 +90,12 @@ type UpsertProviderRequest struct {
 	Activate     bool           `json:"activate,omitempty"`
 }
 
+type TestProviderConnectionResult struct {
+	ProviderID string `json:"providerId"`
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
+}
+
 type storedProvider struct {
 	DisplayLabel string         `json:"displayLabel,omitempty"`
 	Model        string         `json:"model"`
@@ -95,10 +103,10 @@ type storedProvider struct {
 }
 
 type Manager struct {
-	store     SettingStore
-	secrets   SecretStore
-	registry  *llm.Registry
-	migrated  bool
+	store    SettingStore
+	secrets  SecretStore
+	registry *llm.Registry
+	migrated bool
 }
 
 func NewManager(store SettingStore, secrets SecretStore) *Manager {
@@ -141,7 +149,7 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 	if providerID == string(llm.ProviderOpenAICompatible) {
 		return LLMConfig{}, errors.New("openai_compatibleには `openai_compatible:<slug>` 形式のproviderIdを指定してください。")
 	}
-	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(providerID))
+	_, ok := manager.registry.Descriptor(llm.ProviderID(providerID))
 	if !ok {
 		return LLMConfig{}, fmt.Errorf("未知のproviderです: %s", providerID)
 	}
@@ -174,16 +182,14 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 		return LLMConfig{}, err
 	}
 
-	if descriptor.RequiresAPIKey() {
-		account := apiKeyAccount(providerID)
-		if request.ClearAPIKey {
-			if err := manager.secrets.Delete(credentialService, account); err != nil {
-				return LLMConfig{}, fmt.Errorf("delete %s API key: %w", providerID, err)
-			}
-		} else if apiKey := strings.TrimSpace(request.APIKey); apiKey != "" {
-			if err := manager.secrets.Set(credentialService, account, apiKey); err != nil {
-				return LLMConfig{}, fmt.Errorf("save %s API key: %w", providerID, err)
-			}
+	account := apiKeyAccount(providerID)
+	if request.ClearAPIKey {
+		if err := manager.secrets.Delete(credentialService, account); err != nil {
+			return LLMConfig{}, fmt.Errorf("delete %s API key: %w", providerID, err)
+		}
+	} else if apiKey := strings.TrimSpace(request.APIKey); apiKey != "" {
+		if err := manager.secrets.Set(credentialService, account, apiKey); err != nil {
+			return LLMConfig{}, fmt.Errorf("save %s API key: %w", providerID, err)
 		}
 	}
 
@@ -274,6 +280,45 @@ func (manager *Manager) Gateway(ctx context.Context) (llm.Gateway, error) {
 	if active == "" {
 		return nil, errors.New("LLM providerが選択されていません。")
 	}
+	return manager.gatewayForProvider(ctx, active)
+}
+
+func (manager *Manager) TestProviderConnection(ctx context.Context, providerID string) (TestProviderConnectionResult, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return TestProviderConnectionResult{}, err
+	}
+	providerID = strings.TrimSpace(providerID)
+	result := TestProviderConnectionResult{ProviderID: providerID}
+	if providerID == "" {
+		result.Error = "providerIdを指定してください。"
+		return result, nil
+	}
+	gateway, err := manager.gatewayForProvider(ctx, providerID)
+	if err != nil {
+		result.Error = err.Error()
+		return result, nil
+	}
+	tester, ok := gateway.(llm.ConnectionTester)
+	if !ok {
+		result.Error = "このproviderは接続テストに対応していません。"
+		return result, nil
+	}
+	testContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := tester.TestConnection(testContext); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			result.Error = "provider接続テストがタイムアウトしました。"
+		} else {
+			result.Error = err.Error()
+		}
+		return result, nil
+	}
+	result.OK = true
+	return result, nil
+}
+
+func (manager *Manager) gatewayForProvider(ctx context.Context, providerID string) (llm.Gateway, error) {
+	active := strings.TrimSpace(providerID)
 	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(active))
 	if !ok {
 		return nil, fmt.Errorf("未知のproviderです: %s", active)
@@ -296,7 +341,7 @@ func (manager *Manager) Gateway(ctx context.Context) (llm.Gateway, error) {
 		return nil, err
 	}
 	deps := llm.Deps{}
-	if descriptor.RequiresAPIKey() {
+	if providerRequiresAPIKey(descriptor, cfg) {
 		apiKey, err := manager.secrets.Get(credentialService, apiKeyAccount(active))
 		if errors.Is(err, ErrSecretNotFound) {
 			return nil, fmt.Errorf("%sのAPI keyを設定してください。", descriptor.DisplayName)
@@ -323,8 +368,14 @@ func (manager *Manager) buildConfig(active string, stored map[string]storedProvi
 		if !ok {
 			continue
 		}
+		cfg := llm.ProviderConfig{
+			ProviderID:   llm.ProviderID(id),
+			DisplayLabel: entry.DisplayLabel,
+			Model:        entry.Model,
+			Options:      entry.Options,
+		}
 		hasKey := false
-		if descriptor.RequiresAPIKey() {
+		if providerRequiresAPIKey(descriptor, cfg) {
 			_, err := manager.secrets.Get(credentialService, apiKeyAccount(id))
 			if err == nil {
 				hasKey = true
@@ -332,14 +383,9 @@ func (manager *Manager) buildConfig(active string, stored map[string]storedProvi
 				return LLMConfig{}, fmt.Errorf("read %s API key from credential store: %w", id, err)
 			}
 		}
-		cfg := llm.ProviderConfig{
-			ProviderID:   llm.ProviderID(id),
-			DisplayLabel: entry.DisplayLabel,
-			Model:        entry.Model,
-			Options:      entry.Options,
-		}
 		validationErr := manager.registry.Validate(cfg)
-		configured := validationErr == nil && (!descriptor.RequiresAPIKey() || hasKey)
+		requiresAPIKey := providerRequiresAPIKey(descriptor, cfg)
+		configured := validationErr == nil && (!requiresAPIKey || hasKey)
 		providers = append(providers, ProviderSettings{
 			ProviderID:   id,
 			DisplayLabel: entry.DisplayLabel,
@@ -402,4 +448,21 @@ func normalizedOptions(options map[string]any) map[string]any {
 
 func apiKeyAccount(providerID string) string {
 	return "llm." + providerID + ".api_key"
+}
+
+func providerRequiresAPIKey(descriptor llm.ProviderDescriptor, cfg llm.ProviderConfig) bool {
+	if llm.IsOpenAICompatibleID(cfg.ProviderID) {
+		value, exists := cfg.Options["requires_api_key"]
+		if !exists {
+			return true
+		}
+		switch typed := value.(type) {
+		case bool:
+			return typed
+		case string:
+			normalized := strings.ToLower(strings.TrimSpace(typed))
+			return normalized != "false" && normalized != "0" && normalized != "no"
+		}
+	}
+	return descriptor.RequiresAPIKey()
 }
