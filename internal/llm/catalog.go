@@ -10,12 +10,13 @@ import (
 // ProviderID は registry 上の安定キー。設定の名前空間と credential entry 名の両方に使う。
 type ProviderID string
 
-// F3 までに対応する built-in provider id。
+// F4 までに対応する built-in provider id。
 const (
-	ProviderOpenRouter        ProviderID = "openrouter"
-	ProviderOpenAI            ProviderID = "openai"
-	ProviderOllama            ProviderID = "ollama"
-	ProviderOpenAICompatible  ProviderID = "openai_compatible" // template id。実体は :slug 付き id で扱う。
+	ProviderOpenRouter       ProviderID = "openrouter"
+	ProviderOpenAI           ProviderID = "openai"
+	ProviderAnthropic        ProviderID = "anthropic"
+	ProviderOllama           ProviderID = "ollama"
+	ProviderOpenAICompatible ProviderID = "openai_compatible" // template id。実体は :slug 付き id で扱う。
 )
 
 // AuthKind は frontend が credential 入力 UI を組み立てるためのヒント。
@@ -101,6 +102,7 @@ func NewRegistry() *Registry {
 func (r *Registry) registerBuiltins() {
 	r.register(openRouterDescriptor(), openRouterFactory, validateOpenRouter)
 	r.register(openAIDescriptor(), openAIFactory, validateOpenAI)
+	r.register(anthropicDescriptor(), anthropicFactory, validateAnthropic)
 	r.register(ollamaDescriptor(), ollamaFactory, validateOllama)
 	r.register(openAICompatibleDescriptor(), openAICompatibleFactory, validateOpenAICompatible)
 }
@@ -247,6 +249,50 @@ func openAIFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 func validateOpenAI(cfg ProviderConfig) error {
 	if strings.TrimSpace(cfg.Model) == "" {
 		return errors.New("OpenAIのmodelを入力してください。")
+	}
+	return nil
+}
+
+func anthropicDescriptor() ProviderDescriptor {
+	return ProviderDescriptor{
+		ID:             ProviderAnthropic,
+		DisplayName:    "Anthropic Claude",
+		AuthKind:       AuthKindXApiKey,
+		DefaultBaseURL: AnthropicDefaultEndpoint,
+		OptionSchema: []ProviderOption{
+			{
+				Key:      "anthropic_version",
+				Label:    "Anthropic version",
+				Type:     ProviderOptionString,
+				Required: false,
+				Default:  AnthropicDefaultVersion,
+				HelpText: "`anthropic-version` ヘッダーの値です。通常はデフォルトのままで構いません。",
+			},
+			{
+				Key:      "base_url",
+				Label:    "Base URL",
+				Type:     ProviderOptionURL,
+				Required: false,
+				HelpText: "プロキシなど別のendpointを使う場合に上書きします。空欄ならAnthropic公式のendpointを使います。",
+			},
+		},
+		Capabilities: ProviderCapabilities{Streaming: true},
+		Notes:        "modelには `claude-opus-4-7` のようなAnthropic公式のmodel idを指定してください。",
+	}
+}
+
+func anthropicFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
+	return NewAnthropicGateway(AnthropicConfig{
+		APIKey:           deps.APIKey,
+		Model:            cfg.Model,
+		BaseURL:          optionString(cfg.Options, "base_url", ""),
+		AnthropicVersion: optionString(cfg.Options, "anthropic_version", ""),
+	})
+}
+
+func validateAnthropic(cfg ProviderConfig) error {
+	if strings.TrimSpace(cfg.Model) == "" {
+		return errors.New("Anthropicのmodelを入力してください。")
 	}
 	return nil
 }

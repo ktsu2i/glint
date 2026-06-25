@@ -14,7 +14,7 @@ func TestRegistryDescribesBuiltins(t *testing.T) {
 	for _, descriptor := range descriptors {
 		ids = append(ids, descriptor.ID)
 	}
-	assert.ElementsMatch(t, []ProviderID{ProviderOllama, ProviderOpenAI, ProviderOpenAICompatible, ProviderOpenRouter}, ids)
+	assert.ElementsMatch(t, []ProviderID{ProviderAnthropic, ProviderOllama, ProviderOpenAI, ProviderOpenAICompatible, ProviderOpenRouter}, ids)
 
 	descriptor, ok := registry.Descriptor(ProviderOpenRouter)
 	require.True(t, ok)
@@ -92,6 +92,43 @@ func TestRegistryBuildDispatchesToOpenAIFactory(t *testing.T) {
 	openAI, ok := gateway.(*OpenAIGateway)
 	require.True(t, ok)
 	assert.Equal(t, "gpt-5", openAI.model)
+}
+
+func TestRegistryBuildDispatchesToAnthropicFactory(t *testing.T) {
+	registry := NewRegistry()
+	gateway, err := registry.Build(
+		ProviderConfig{
+			ProviderID: ProviderAnthropic,
+			Model:      "claude-opus-4-7",
+			Options:    map[string]any{"anthropic_version": "2024-10-22"},
+		},
+		Deps{APIKey: "secret"},
+	)
+	require.NoError(t, err)
+	anthropic, ok := gateway.(*AnthropicGateway)
+	require.True(t, ok)
+	assert.Equal(t, "claude-opus-4-7", anthropic.model)
+	assert.Equal(t, "2024-10-22", anthropic.anthropicVersion)
+}
+
+func TestRegistryValidatesAnthropicModel(t *testing.T) {
+	registry := NewRegistry()
+	assert.ErrorContains(t,
+		registry.Validate(ProviderConfig{ProviderID: ProviderAnthropic}),
+		"model",
+	)
+	assert.NoError(t,
+		registry.Validate(ProviderConfig{ProviderID: ProviderAnthropic, Model: "claude-opus-4-7"}),
+	)
+}
+
+func TestAnthropicDescriptorExposesXApiKeyAuth(t *testing.T) {
+	registry := NewRegistry()
+	descriptor, ok := registry.Descriptor(ProviderAnthropic)
+	require.True(t, ok)
+	assert.Equal(t, AuthKindXApiKey, descriptor.AuthKind)
+	assert.True(t, descriptor.RequiresAPIKey())
+	assert.Equal(t, AnthropicDefaultEndpoint, descriptor.DefaultBaseURL)
 }
 
 func TestRegistryBuildDispatchesToOllamaFactory(t *testing.T) {
