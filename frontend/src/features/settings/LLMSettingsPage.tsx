@@ -71,6 +71,42 @@ function mergeOptions(
   return { ...defaults, ...(stored ?? {}) };
 }
 
+const OPENAI_COMPATIBLE_TEMPLATE_ID = "openai_compatible";
+const OPENAI_COMPATIBLE_PREFIX = "openai_compatible:";
+const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+function isOpenAICompatibleInstance(providerId: string): boolean {
+  return providerId.startsWith(OPENAI_COMPATIBLE_PREFIX) && providerId.length > OPENAI_COMPATIBLE_PREFIX.length;
+}
+
+function resolveDescriptor(config: LLMConfig, providerId: string): ProviderDescriptor | null {
+  if (isOpenAICompatibleInstance(providerId)) {
+    return config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null;
+  }
+  return config.catalog.find((descriptor) => descriptor.id === providerId) ?? null;
+}
+
+function headersToText(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, val]) => `${key}: ${typeof val === "string" ? val : ""}`)
+    .join("\n");
+}
+
+function parseHeadersText(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const separator = line.indexOf(":");
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (key) out[key] = value;
+  }
+  return out;
+}
+
 export function LLMSettingsPage({
   onBack,
   theme = "system",
@@ -90,6 +126,7 @@ export function LLMSettingsPage({
 
   const [config, setConfig] = useState<LLMConfig | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+  const [displayLabel, setDisplayLabel] = useState("");
   const [model, setModel] = useState("");
   const [options, setOptions] = useState<Record<string, unknown>>({});
   const [apiKey, setAPIKey] = useState("");
@@ -102,10 +139,14 @@ export function LLMSettingsPage({
   const [localThemeError, setLocalThemeError] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [isAddingCustom, setIsAddingCustom] = useState(false);
+  const [newCustomSlug, setNewCustomSlug] = useState("");
+  const [newCustomLabel, setNewCustomLabel] = useState("");
+  const [newCustomError, setNewCustomError] = useState("");
 
   const selectedDescriptor: ProviderDescriptor | null = useMemo(() => {
     if (!config) return null;
-    return config.catalog.find((descriptor) => descriptor.id === selectedProviderId) ?? null;
+    return resolveDescriptor(config, selectedProviderId);
   }, [config, selectedProviderId]);
 
   const storedProvider: ProviderSettings | null = useMemo(() => {
@@ -115,15 +156,20 @@ export function LLMSettingsPage({
 
   const adoptProvider = useCallback(
     (providerId: string, nextConfig: LLMConfig) => {
-      const descriptor = nextConfig.catalog.find((descriptor) => descriptor.id === providerId);
+      const descriptor = resolveDescriptor(nextConfig, providerId);
       if (!descriptor) return;
       const stored = nextConfig.providers.find((provider) => provider.providerId === providerId);
-      setSelectedProviderId(descriptor.id);
+      setSelectedProviderId(providerId);
+      setDisplayLabel(stored?.displayLabel ?? "");
       setModel(stored?.model ?? "");
       setOptions(mergeOptions(descriptor, stored?.options));
       setAPIKey("");
       setShowAPIKey(false);
       setClearAPIKey(false);
+      setIsAddingCustom(false);
+      setNewCustomSlug("");
+      setNewCustomLabel("");
+      setNewCustomError("");
     },
     [],
   );
@@ -149,27 +195,63 @@ export function LLMSettingsPage({
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || !selectedDescriptor) return;
+    if (saving || !selectedDescriptor || !selectedProviderId) return;
     setSaving(true);
     setError("");
     setSaved(false);
     try {
+      const trimmedLabel = displayLabel.trim();
       const next = await upsertProviderSettings({
-        providerId: selectedDescriptor.id,
+        providerId: selectedProviderId,
         model: model.trim(),
         options,
         apiKey: apiKey.trim(),
         clearApiKey: clearAPIKey,
         activate: true,
+        ...(trimmedLabel ? { displayLabel: trimmedLabel } : {}),
       });
       setConfig(next);
-      adoptProvider(selectedDescriptor.id, next);
+      adoptProvider(selectedProviderId, next);
       setSaved(true);
     } catch (reason) {
       setError(extractErrorMessage(reason, t("settings.saveError")));
     } finally {
       setSaving(false);
     }
+  }
+
+  function startCustomProviderFlow() {
+    setIsAddingCustom(true);
+    setNewCustomSlug("");
+    setNewCustomLabel("");
+    setNewCustomError("");
+  }
+
+  function confirmCustomProvider() {
+    const slug = newCustomSlug.trim().toLowerCase();
+    if (!SLUG_PATTERN.test(slug)) {
+      setNewCustomError(t("settings.customProviderInvalidSlug"));
+      return;
+    }
+    if (!config) return;
+    const providerId = `${OPENAI_COMPATIBLE_PREFIX}${slug}`;
+    if (config.providers.some((provider) => provider.providerId === providerId)) {
+      adoptProvider(providerId, config);
+      return;
+    }
+    const template = config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID);
+    if (!template) return;
+    setSelectedProviderId(providerId);
+    setDisplayLabel(newCustomLabel.trim() || slug);
+    setModel("");
+    setOptions(defaultOptionsFor(template));
+    setAPIKey("");
+    setShowAPIKey(false);
+    setClearAPIKey(false);
+    setIsAddingCustom(false);
+    setNewCustomSlug("");
+    setNewCustomLabel("");
+    setNewCustomError("");
   }
 
   async function handleThemeChange(next: ThemePreference) {
@@ -209,6 +291,27 @@ export function LLMSettingsPage({
   const canSave = !loading && !saving && model.trim() !== "" && (willHaveCredential || clearAPIKey);
   const zdrOption = selectedDescriptor?.optionSchema.find((option) => option.key === "zdr");
   const zdrEnabled = zdrOption ? Boolean(options[zdrOption.key]) : false;
+  const isCustomInstance = selectedDescriptor?.id === OPENAI_COMPATIBLE_TEMPLATE_ID && isOpenAICompatibleInstance(selectedProviderId);
+  const providerLabel = isCustomInstance
+    ? (storedProvider?.displayLabel || displayLabel || selectedProviderId.slice(OPENAI_COMPATIBLE_PREFIX.length))
+    : (selectedDescriptor?.displayName ?? "—");
+  const generalOptionSchema = (selectedDescriptor?.optionSchema ?? []).filter((option) => option.key !== "zdr");
+  const pickerItems: Array<{ id: string; label: string }> = useMemo(() => {
+    if (!config) return [];
+    const builtIns = config.catalog
+      .filter((descriptor) => descriptor.id !== OPENAI_COMPATIBLE_TEMPLATE_ID)
+      .map((descriptor) => ({ id: descriptor.id, label: descriptor.displayName }));
+    const customs = config.providers
+      .filter((provider) => isOpenAICompatibleInstance(provider.providerId))
+      .map((provider) => ({
+        id: provider.providerId,
+        label: provider.displayLabel || provider.providerId.slice(OPENAI_COMPATIBLE_PREFIX.length),
+      }));
+    const stagedCustom = isCustomInstance && !storedProvider
+      ? [{ id: selectedProviderId, label: displayLabel || selectedProviderId.slice(OPENAI_COMPATIBLE_PREFIX.length) }]
+      : [];
+    return [...builtIns, ...customs, ...stagedCustom];
+  }, [config, displayLabel, isCustomInstance, selectedProviderId, storedProvider]);
 
   return (
     <section className="settings-page" aria-labelledby="settings-title">
@@ -327,38 +430,88 @@ export function LLMSettingsPage({
             <div className="settings-section-heading">
               <div>
                 <span className="settings-kicker">{t("settings.remoteRoute")}</span>
-                <h2>{selectedDescriptor ? t("settings.providerConnection", { provider: selectedDescriptor.displayName }) : t("settings.openRouterConnection")}</h2>
+                <h2>{selectedDescriptor ? t("settings.providerConnection", { provider: providerLabel }) : t("settings.openRouterConnection")}</h2>
               </div>
-              <span className="provider-badge">{selectedDescriptor?.displayName ?? "—"}</span>
+              <span className="provider-badge">{providerLabel}</span>
             </div>
 
-            {config && config.catalog.length > 1 && (
+            {config && (
               <div className="provider-selector" role="radiogroup" aria-label={t("settings.providerPickerLabel")}>
-                {config.catalog.map((descriptor) => (
+                {pickerItems.map((item) => (
                   <button
-                    key={descriptor.id}
+                    key={item.id}
                     type="button"
                     role="radio"
-                    aria-checked={descriptor.id === selectedProviderId}
-                    className={descriptor.id === selectedProviderId ? "provider-pill is-selected" : "provider-pill"}
+                    aria-checked={item.id === selectedProviderId}
+                    className={item.id === selectedProviderId ? "provider-pill is-selected" : "provider-pill"}
                     onClick={() => {
-                      if (descriptor.id === selectedProviderId) return;
-                      adoptProvider(descriptor.id, config);
+                      if (item.id === selectedProviderId) return;
+                      adoptProvider(item.id, config);
                       setSaved(false);
                       setError("");
                     }}
                   >
-                    {descriptor.displayName}
+                    {item.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className="provider-pill"
+                  onClick={() => startCustomProviderFlow()}
+                >
+                  + {t("settings.addCustomProvider")}
+                </button>
               </div>
+            )}
+
+            {isAddingCustom && (
+              <fieldset className="settings-fieldset" aria-label={t("settings.customProviderTitle")}>
+                <legend>{t("settings.customProviderTitle")}</legend>
+                <div className="settings-field">
+                  <label htmlFor="custom-provider-slug">{t("settings.customProviderSlug")}</label>
+                  <input
+                    id="custom-provider-slug"
+                    value={newCustomSlug}
+                    onChange={(event) => {
+                      setNewCustomSlug(event.target.value);
+                      setNewCustomError("");
+                    }}
+                    placeholder="groq"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <small>{t("settings.customProviderSlugHelp")}</small>
+                </div>
+                <div className="settings-field">
+                  <label htmlFor="custom-provider-label">{t("settings.customProviderLabel")}</label>
+                  <input
+                    id="custom-provider-label"
+                    value={newCustomLabel}
+                    onChange={(event) => setNewCustomLabel(event.target.value)}
+                    placeholder="Groq"
+                    autoComplete="off"
+                  />
+                  <small>{t("settings.customProviderLabelHelp")}</small>
+                </div>
+                {newCustomError && (
+                  <p className="settings-error" role="alert">{newCustomError}</p>
+                )}
+                <div className="settings-page-actions">
+                  <button className="settings-secondary" type="button" onClick={() => setIsAddingCustom(false)}>
+                    {t("settings.customProviderCancel")}
+                  </button>
+                  <button className="settings-primary" type="button" onClick={confirmCustomProvider}>
+                    {t("settings.customProviderCreate")}
+                  </button>
+                </div>
+              </fieldset>
             )}
 
             {zdrOption && (
               <div className="route-ledger" aria-label={t("settings.sendingRoute")}>
                 <span><LockKey size={13} /> Glint</span>
                 <ArrowRight size={12} />
-                <span>{selectedDescriptor?.displayName ?? "—"}</span>
+                <span>{providerLabel}</span>
                 <ArrowRight size={12} />
                 <span className={zdrEnabled ? "route-guard is-active" : "route-guard"}>
                   {zdrEnabled ? t("settings.zdrEndpoint") : t("settings.providerRoute")}
@@ -454,6 +607,76 @@ export function LLMSettingsPage({
                     </button>
                   )}
                 </div>
+              </fieldset>
+            )}
+
+            {generalOptionSchema.length > 0 && (
+              <fieldset className="settings-fieldset" disabled={loading || saving}>
+                <legend>{t("settings.providerOptions")}</legend>
+                {generalOptionSchema.map((option) => {
+                  const value = options[option.key];
+                  const fieldId = `provider-option-${option.key}`;
+                  if (option.type === "bool") {
+                    return (
+                      <div className="privacy-setting" key={option.key}>
+                        <div>
+                          <span>{option.label}</span>
+                          {option.helpText && <p>{option.helpText}</p>}
+                        </div>
+                        <Switch.Root
+                          className="context-switch"
+                          checked={Boolean(value)}
+                          onCheckedChange={(checked) => {
+                            setOptions((current) => ({ ...current, [option.key]: checked }));
+                            setSaved(false);
+                          }}
+                          aria-label={option.label}
+                        >
+                          <Switch.Thumb className="context-switch-thumb" />
+                        </Switch.Root>
+                      </div>
+                    );
+                  }
+                  if (option.type === "headers") {
+                    return (
+                      <div className="settings-field" key={option.key}>
+                        <label htmlFor={fieldId}>{option.label}</label>
+                        <textarea
+                          id={fieldId}
+                          rows={3}
+                          value={headersToText(value)}
+                          onChange={(event) => {
+                            const parsed = parseHeadersText(event.target.value);
+                            setOptions((current) => ({ ...current, [option.key]: parsed }));
+                            setSaved(false);
+                          }}
+                          placeholder="X-Org-Id: tenant-42"
+                          spellCheck={false}
+                        />
+                        {option.helpText && <small>{option.helpText}</small>}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="settings-field" key={option.key}>
+                      <label htmlFor={fieldId}>{option.label}</label>
+                      <input
+                        id={fieldId}
+                        type={option.type === "url" ? "url" : "text"}
+                        value={typeof value === "string" ? value : ""}
+                        onChange={(event) => {
+                          setOptions((current) => ({ ...current, [option.key]: event.target.value }));
+                          setSaved(false);
+                        }}
+                        placeholder={typeof option.default === "string" ? option.default : ""}
+                        autoComplete="off"
+                        spellCheck={false}
+                        required={option.required}
+                      />
+                      {option.helpText && <small>{option.helpText}</small>}
+                    </div>
+                  );
+                })}
               </fieldset>
             )}
 

@@ -138,6 +138,9 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 	if providerID == "" {
 		return LLMConfig{}, errors.New("providerIdを指定してください。")
 	}
+	if providerID == string(llm.ProviderOpenAICompatible) {
+		return LLMConfig{}, errors.New("openai_compatibleには `openai_compatible:<slug>` 形式のproviderIdを指定してください。")
+	}
 	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(providerID))
 	if !ok {
 		return LLMConfig{}, fmt.Errorf("未知のproviderです: %s", providerID)
@@ -149,7 +152,7 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 	cleanedModel := strings.TrimSpace(request.Model)
 	cleanedLabel := strings.TrimSpace(request.DisplayLabel)
 	cfg := llm.ProviderConfig{
-		ProviderID:   descriptor.ID,
+		ProviderID:   llm.ProviderID(providerID),
 		DisplayLabel: cleanedLabel,
 		Model:        cleanedModel,
 		Options:      normalizedOptions(request.Options),
@@ -284,7 +287,7 @@ func (manager *Manager) Gateway(ctx context.Context) (llm.Gateway, error) {
 		return nil, fmt.Errorf("%sの設定が見つかりません。", descriptor.DisplayName)
 	}
 	cfg := llm.ProviderConfig{
-		ProviderID:   descriptor.ID,
+		ProviderID:   llm.ProviderID(active),
 		DisplayLabel: entry.DisplayLabel,
 		Model:        entry.Model,
 		Options:      entry.Options,
@@ -330,7 +333,7 @@ func (manager *Manager) buildConfig(active string, stored map[string]storedProvi
 			}
 		}
 		cfg := llm.ProviderConfig{
-			ProviderID:   descriptor.ID,
+			ProviderID:   llm.ProviderID(id),
 			DisplayLabel: entry.DisplayLabel,
 			Model:        entry.Model,
 			Options:      entry.Options,

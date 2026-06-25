@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kaito/glint/internal/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +58,14 @@ func TestGetLLMConfigReturnsEmptyButCatalogOnFreshInstall(t *testing.T) {
 	assert.Equal(t, "", config.ActiveProviderID)
 	assert.Empty(t, config.Providers)
 	require.NotEmpty(t, config.Catalog)
-	assert.Equal(t, "openrouter", string(config.Catalog[0].ID))
+	ids := make([]string, 0, len(config.Catalog))
+	for _, descriptor := range config.Catalog {
+		ids = append(ids, string(descriptor.ID))
+	}
+	assert.Contains(t, ids, "openrouter")
+	assert.Contains(t, ids, "openai")
+	assert.Contains(t, ids, "ollama")
+	assert.Contains(t, ids, "openai_compatible")
 }
 
 func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
@@ -213,6 +221,82 @@ func TestManagerSurfacesCredentialFailures(t *testing.T) {
 	manager.secrets = failingSecretStore{}
 	_, err = manager.GetLLMConfig(context.Background())
 	assert.Error(t, err)
+}
+
+func TestUpsertOllamaDoesNotRequireAPIKey(t *testing.T) {
+	manager, _, _ := newTestManager()
+	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "ollama",
+		Model:      "llama3",
+		Options:    map[string]any{"base_url": "http://localhost:11434/v1"},
+	})
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, "ollama", config.Providers[0].ProviderID)
+	assert.False(t, config.Providers[0].HasAPIKey)
+	assert.True(t, config.Providers[0].Configured)
+	assert.True(t, config.Providers[0].IsActive)
+
+	gateway, err := manager.Gateway(context.Background())
+	require.NoError(t, err)
+	_, ok := gateway.(*llm.OllamaGateway)
+	assert.True(t, ok)
+}
+
+func TestUpsertOpenAIPersistsOrganization(t *testing.T) {
+	manager, settingStore, secretStore := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Model:      "gpt-5",
+		Options:    map[string]any{"organization": "org_abc"},
+		APIKey:     "sk-secret",
+	})
+	require.NoError(t, err)
+
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, "openai", config.Providers[0].ProviderID)
+	assert.Equal(t, "org_abc", config.Providers[0].Options["organization"])
+	assert.True(t, config.Providers[0].HasAPIKey)
+	assert.NotContains(t, settingStore.values[llmProvidersKey], "sk-secret")
+	assert.Equal(t, "sk-secret", secretStore.values[secretKey(credentialService, "llm.openai.api_key")])
+}
+
+func TestUpsertOpenAICompatibleRequiresSlug(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai_compatible",
+		Model:      "llama-3.3-70b",
+		Options:    map[string]any{"base_url": "https://api.groq.com/openai/v1"},
+		APIKey:     "secret",
+	})
+	assert.ErrorContains(t, err, "openai_compatible:")
+}
+
+func TestUpsertOpenAICompatibleStoresSlugInstance(t *testing.T) {
+	manager, _, secretStore := newTestManager()
+	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID:   "openai_compatible:groq",
+		DisplayLabel: "Groq",
+		Model:        "llama-3.3-70b-versatile",
+		Options: map[string]any{
+			"base_url":         "https://api.groq.com/openai/v1",
+			"requires_api_key": true,
+		},
+		APIKey: "secret",
+	})
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, "openai_compatible:groq", config.Providers[0].ProviderID)
+	assert.Equal(t, "Groq", config.Providers[0].DisplayLabel)
+	assert.True(t, config.Providers[0].HasAPIKey)
+	assert.Equal(t, "secret", secretStore.values[secretKey(credentialService, "llm.openai_compatible:groq.api_key")])
+
+	gateway, err := manager.Gateway(context.Background())
+	require.NoError(t, err)
+	_, ok := gateway.(*llm.OpenAICompatibleGateway)
+	assert.True(t, ok)
 }
 
 type failingSecretStore struct{}

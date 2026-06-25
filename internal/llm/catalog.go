@@ -10,9 +10,12 @@ import (
 // ProviderID は registry 上の安定キー。設定の名前空間と credential entry 名の両方に使う。
 type ProviderID string
 
-// 第1フェーズで対応する built-in provider id。
+// F3 までに対応する built-in provider id。
 const (
-	ProviderOpenRouter ProviderID = "openrouter"
+	ProviderOpenRouter        ProviderID = "openrouter"
+	ProviderOpenAI            ProviderID = "openai"
+	ProviderOllama            ProviderID = "ollama"
+	ProviderOpenAICompatible  ProviderID = "openai_compatible" // template id。実体は :slug 付き id で扱う。
 )
 
 // AuthKind は frontend が credential 入力 UI を組み立てるためのヒント。
@@ -97,6 +100,9 @@ func NewRegistry() *Registry {
 
 func (r *Registry) registerBuiltins() {
 	r.register(openRouterDescriptor(), openRouterFactory, validateOpenRouter)
+	r.register(openAIDescriptor(), openAIFactory, validateOpenAI)
+	r.register(ollamaDescriptor(), ollamaFactory, validateOllama)
+	r.register(openAICompatibleDescriptor(), openAICompatibleFactory, validateOpenAICompatible)
 }
 
 func (r *Registry) register(descriptor ProviderDescriptor, factory gatewayFactory, validate func(ProviderConfig) error) {
@@ -114,6 +120,13 @@ func (r *Registry) Descriptors() []ProviderDescriptor {
 }
 
 func (r *Registry) Descriptor(id ProviderID) (ProviderDescriptor, bool) {
+	if IsOpenAICompatibleID(id) {
+		entry, ok := r.entries[ProviderOpenAICompatible]
+		if !ok {
+			return ProviderDescriptor{}, false
+		}
+		return entry.descriptor, true
+	}
 	entry, ok := r.entries[id]
 	if !ok {
 		return ProviderDescriptor{}, false
@@ -123,7 +136,7 @@ func (r *Registry) Descriptor(id ProviderID) (ProviderDescriptor, bool) {
 
 // Validate は provider 固有のフィールド検証を行う。
 func (r *Registry) Validate(cfg ProviderConfig) error {
-	entry, ok := r.entries[cfg.ProviderID]
+	entry, ok := r.lookupEntry(cfg.ProviderID)
 	if !ok {
 		return fmt.Errorf("unknown LLM provider %q", cfg.ProviderID)
 	}
@@ -135,11 +148,20 @@ func (r *Registry) Validate(cfg ProviderConfig) error {
 
 // Build は active provider の Gateway を組み立てる。
 func (r *Registry) Build(cfg ProviderConfig, deps Deps) (Gateway, error) {
-	entry, ok := r.entries[cfg.ProviderID]
+	entry, ok := r.lookupEntry(cfg.ProviderID)
 	if !ok {
 		return nil, fmt.Errorf("unknown LLM provider %q", cfg.ProviderID)
 	}
 	return entry.factory(cfg, deps)
+}
+
+func (r *Registry) lookupEntry(id ProviderID) (providerEntry, bool) {
+	if IsOpenAICompatibleID(id) {
+		entry, ok := r.entries[ProviderOpenAICompatible]
+		return entry, ok
+	}
+	entry, ok := r.entries[id]
+	return entry, ok
 }
 
 // RequiresAPIKey は AuthKindNone 以外なら true。
@@ -184,6 +206,192 @@ func validateOpenRouter(cfg ProviderConfig) error {
 		return errors.New("modelは provider/model 形式で入力してください。")
 	}
 	return nil
+}
+
+func openAIDescriptor() ProviderDescriptor {
+	return ProviderDescriptor{
+		ID:             ProviderOpenAI,
+		DisplayName:    "OpenAI",
+		AuthKind:       AuthKindBearer,
+		DefaultBaseURL: OpenAIDefaultEndpoint,
+		OptionSchema: []ProviderOption{
+			{
+				Key:      "organization",
+				Label:    "Organization ID",
+				Type:     ProviderOptionString,
+				Required: false,
+				HelpText: "OpenAI organizationを指定する場合のみ入力してください。",
+			},
+			{
+				Key:      "base_url",
+				Label:    "Base URL",
+				Type:     ProviderOptionURL,
+				Required: false,
+				HelpText: "Azure経由などの代替endpointを使う場合に上書きします。空欄ならOpenAI公式のendpointを使います。",
+			},
+		},
+		Capabilities: ProviderCapabilities{Streaming: true},
+		Notes:        "modelには `gpt-5` のようなOpenAI公式のmodel idを指定してください。",
+	}
+}
+
+func openAIFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
+	return NewOpenAIGateway(OpenAIConfig{
+		APIKey:       deps.APIKey,
+		Model:        cfg.Model,
+		Organization: optionString(cfg.Options, "organization", ""),
+		BaseURL:      optionString(cfg.Options, "base_url", ""),
+	})
+}
+
+func validateOpenAI(cfg ProviderConfig) error {
+	if strings.TrimSpace(cfg.Model) == "" {
+		return errors.New("OpenAIのmodelを入力してください。")
+	}
+	return nil
+}
+
+func ollamaDescriptor() ProviderDescriptor {
+	return ProviderDescriptor{
+		ID:             ProviderOllama,
+		DisplayName:    "Ollama (local)",
+		AuthKind:       AuthKindNone,
+		DefaultBaseURL: OllamaDefaultBaseURL,
+		OptionSchema: []ProviderOption{
+			{
+				Key:      "base_url",
+				Label:    "Base URL",
+				Type:     ProviderOptionURL,
+				Required: false,
+				Default:  OllamaDefaultBaseURL,
+				HelpText: "Ollamaのbase URLです。デフォルトは http://localhost:11434/v1 です。",
+			},
+			{
+				Key:      "keep_alive",
+				Label:    "Keep alive",
+				Type:     ProviderOptionString,
+				Required: false,
+				HelpText: "modelをメモリに保持する時間（例: `5m`）。空欄ならOllamaのデフォルトに従います。",
+			},
+		},
+		Capabilities: ProviderCapabilities{Streaming: true},
+		Notes:        "ローカルのOllamaサーバが起動している必要があります。modelは事前に `ollama pull <model>` で取得してください。",
+	}
+}
+
+func ollamaFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
+	_ = deps
+	return NewOllamaGateway(OllamaConfig{
+		Model:     cfg.Model,
+		BaseURL:   optionString(cfg.Options, "base_url", ""),
+		KeepAlive: optionString(cfg.Options, "keep_alive", ""),
+	})
+}
+
+func validateOllama(cfg ProviderConfig) error {
+	if strings.TrimSpace(cfg.Model) == "" {
+		return errors.New("Ollamaのmodelを入力してください。")
+	}
+	return nil
+}
+
+func openAICompatibleDescriptor() ProviderDescriptor {
+	return ProviderDescriptor{
+		ID:          ProviderOpenAICompatible,
+		DisplayName: "OpenAI-compatible",
+		AuthKind:    AuthKindBearer,
+		OptionSchema: []ProviderOption{
+			{
+				Key:      "base_url",
+				Label:    "Base URL",
+				Type:     ProviderOptionURL,
+				Required: true,
+				HelpText: "OpenAI互換endpointのbase URL（例: https://api.groq.com/openai/v1）。",
+			},
+			{
+				Key:      "requires_api_key",
+				Label:    "API keyが必要",
+				Type:     ProviderOptionBool,
+				Required: false,
+				Default:  true,
+				HelpText: "endpointが認証不要な場合のみoffにしてください。",
+			},
+			{
+				Key:      "headers",
+				Label:    "Custom headers",
+				Type:     ProviderOptionHeaders,
+				Required: false,
+				HelpText: "追加で送信したいHTTP headerを指定できます。",
+			},
+		},
+		Capabilities: ProviderCapabilities{Streaming: true},
+		Notes:        "送信先URLとリクエスト内容に対する責任はユーザーにあります。社内・third-party endpointを設定する際は規約とプライバシーを確認してください。",
+	}
+}
+
+func openAICompatibleFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
+	displayName := strings.TrimSpace(cfg.DisplayLabel)
+	if displayName == "" {
+		if slug := OpenAICompatibleSlug(cfg.ProviderID); slug != "" {
+			displayName = slug
+		}
+	}
+	return NewOpenAICompatibleGateway(OpenAICompatibleConfig{
+		APIKey:         deps.APIKey,
+		Model:          cfg.Model,
+		BaseURL:        optionString(cfg.Options, "base_url", ""),
+		Headers:        optionHeaders(cfg.Options, "headers"),
+		RequiresAPIKey: optionBool(cfg.Options, "requires_api_key", true),
+		DisplayName:    displayName,
+	})
+}
+
+func validateOpenAICompatible(cfg ProviderConfig) error {
+	if !IsOpenAICompatibleID(cfg.ProviderID) {
+		return errors.New("openai_compatibleには `openai_compatible:<slug>` 形式のproviderIdを指定してください。")
+	}
+	if strings.TrimSpace(cfg.Model) == "" {
+		return errors.New("modelを入力してください。")
+	}
+	if strings.TrimSpace(optionString(cfg.Options, "base_url", "")) == "" {
+		return errors.New("base URLを入力してください。")
+	}
+	return nil
+}
+
+func optionString(options map[string]any, key string, fallback string) string {
+	if options == nil {
+		return fallback
+	}
+	value, ok := options[key]
+	if !ok {
+		return fallback
+	}
+	if str, ok := value.(string); ok {
+		return strings.TrimSpace(str)
+	}
+	return fallback
+}
+
+func optionHeaders(options map[string]any, key string) map[string]string {
+	if options == nil {
+		return nil
+	}
+	value, ok := options[key]
+	if !ok {
+		return nil
+	}
+	raw, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for headerKey, headerValue := range raw {
+		if str, ok := headerValue.(string); ok {
+			out[headerKey] = str
+		}
+	}
+	return out
 }
 
 func optionBool(options map[string]any, key string, fallback bool) bool {

@@ -7,18 +7,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRegistryDescribesOpenRouter(t *testing.T) {
+func TestRegistryDescribesBuiltins(t *testing.T) {
 	registry := NewRegistry()
 	descriptors := registry.Descriptors()
-	require.Len(t, descriptors, 1)
-	assert.Equal(t, ProviderOpenRouter, descriptors[0].ID)
-	assert.Equal(t, AuthKindBearer, descriptors[0].AuthKind)
+	ids := make([]ProviderID, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		ids = append(ids, descriptor.ID)
+	}
+	assert.ElementsMatch(t, []ProviderID{ProviderOllama, ProviderOpenAI, ProviderOpenAICompatible, ProviderOpenRouter}, ids)
 
 	descriptor, ok := registry.Descriptor(ProviderOpenRouter)
 	require.True(t, ok)
 	require.NotEmpty(t, descriptor.OptionSchema)
 	assert.Equal(t, "zdr", descriptor.OptionSchema[0].Key)
 	assert.True(t, descriptor.RequiresAPIKey())
+
+	ollama, ok := registry.Descriptor(ProviderOllama)
+	require.True(t, ok)
+	assert.False(t, ollama.RequiresAPIKey())
+	assert.Equal(t, OllamaDefaultBaseURL, ollama.DefaultBaseURL)
+
+	openAI, ok := registry.Descriptor(ProviderOpenAI)
+	require.True(t, ok)
+	assert.True(t, openAI.RequiresAPIKey())
+	assert.Equal(t, OpenAIDefaultEndpoint, openAI.DefaultBaseURL)
+}
+
+func TestRegistryResolvesOpenAICompatibleSlugToTemplate(t *testing.T) {
+	registry := NewRegistry()
+	descriptor, ok := registry.Descriptor(ProviderID("openai_compatible:groq"))
+	require.True(t, ok)
+	assert.Equal(t, ProviderOpenAICompatible, descriptor.ID)
 }
 
 func TestRegistryValidatesOpenRouterModel(t *testing.T) {
@@ -57,6 +76,76 @@ func TestRegistryRejectsUnknownProvider(t *testing.T) {
 	registry := NewRegistry()
 	_, err := registry.Build(ProviderConfig{ProviderID: "no-such-provider", Model: "x"}, Deps{})
 	assert.ErrorContains(t, err, "unknown")
+}
+
+func TestRegistryBuildDispatchesToOpenAIFactory(t *testing.T) {
+	registry := NewRegistry()
+	gateway, err := registry.Build(
+		ProviderConfig{
+			ProviderID: ProviderOpenAI,
+			Model:      "gpt-5",
+			Options:    map[string]any{"organization": "org_abc"},
+		},
+		Deps{APIKey: "secret"},
+	)
+	require.NoError(t, err)
+	openAI, ok := gateway.(*OpenAIGateway)
+	require.True(t, ok)
+	assert.Equal(t, "gpt-5", openAI.model)
+}
+
+func TestRegistryBuildDispatchesToOllamaFactory(t *testing.T) {
+	registry := NewRegistry()
+	gateway, err := registry.Build(
+		ProviderConfig{
+			ProviderID: ProviderOllama,
+			Model:      "llama3",
+		},
+		Deps{},
+	)
+	require.NoError(t, err)
+	ollama, ok := gateway.(*OllamaGateway)
+	require.True(t, ok)
+	assert.Equal(t, "llama3", ollama.model)
+}
+
+func TestRegistryBuildDispatchesToOpenAICompatibleFactory(t *testing.T) {
+	registry := NewRegistry()
+	gateway, err := registry.Build(
+		ProviderConfig{
+			ProviderID:   ProviderID("openai_compatible:groq"),
+			DisplayLabel: "Groq",
+			Model:        "llama-3.3-70b-versatile",
+			Options: map[string]any{
+				"base_url":         "https://api.groq.com/openai/v1",
+				"requires_api_key": true,
+			},
+		},
+		Deps{APIKey: "secret"},
+	)
+	require.NoError(t, err)
+	compat, ok := gateway.(*OpenAICompatibleGateway)
+	require.True(t, ok)
+	assert.Equal(t, "llama-3.3-70b-versatile", compat.model)
+}
+
+func TestRegistryValidatesOpenAICompatibleRequiresSlug(t *testing.T) {
+	registry := NewRegistry()
+	err := registry.Validate(ProviderConfig{
+		ProviderID: ProviderOpenAICompatible,
+		Model:      "x",
+		Options:    map[string]any{"base_url": "https://example.com/v1"},
+	})
+	assert.ErrorContains(t, err, "openai_compatible:")
+}
+
+func TestRegistryValidatesOpenAICompatibleRequiresBaseURL(t *testing.T) {
+	registry := NewRegistry()
+	err := registry.Validate(ProviderConfig{
+		ProviderID: ProviderID("openai_compatible:groq"),
+		Model:      "model",
+	})
+	assert.ErrorContains(t, err, "base URL")
 }
 
 func TestOptionBoolFallback(t *testing.T) {
