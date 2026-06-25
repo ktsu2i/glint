@@ -14,7 +14,7 @@ func TestRegistryDescribesBuiltins(t *testing.T) {
 	for _, descriptor := range descriptors {
 		ids = append(ids, descriptor.ID)
 	}
-	assert.ElementsMatch(t, []ProviderID{ProviderAnthropic, ProviderOllama, ProviderOpenAI, ProviderOpenAICompatible, ProviderOpenRouter}, ids)
+	assert.ElementsMatch(t, []ProviderID{ProviderAnthropic, ProviderGoogle, ProviderOllama, ProviderOpenAI, ProviderOpenAICompatible, ProviderOpenRouter}, ids)
 
 	descriptor, ok := registry.Descriptor(ProviderOpenRouter)
 	require.True(t, ok)
@@ -129,6 +129,51 @@ func TestAnthropicDescriptorExposesXApiKeyAuth(t *testing.T) {
 	assert.Equal(t, AuthKindXApiKey, descriptor.AuthKind)
 	assert.True(t, descriptor.RequiresAPIKey())
 	assert.Equal(t, AnthropicDefaultEndpoint, descriptor.DefaultBaseURL)
+}
+
+func TestRegistryBuildDispatchesToGoogleFactory(t *testing.T) {
+	registry := NewRegistry()
+	gateway, err := registry.Build(
+		ProviderConfig{
+			ProviderID: ProviderGoogle,
+			Model:      "gemini-2.5-pro",
+			Options:    map[string]any{"auth_mode": GoogleAuthModeQuery},
+		},
+		Deps{APIKey: "secret"},
+	)
+	require.NoError(t, err)
+	google, ok := gateway.(*GoogleGateway)
+	require.True(t, ok)
+	assert.Equal(t, "gemini-2.5-pro", google.model)
+	assert.Equal(t, GoogleAuthModeQuery, google.authMode)
+}
+
+func TestRegistryValidatesGoogleModel(t *testing.T) {
+	registry := NewRegistry()
+	assert.ErrorContains(t,
+		registry.Validate(ProviderConfig{ProviderID: ProviderGoogle}),
+		"model",
+	)
+	assert.ErrorContains(t,
+		registry.Validate(ProviderConfig{
+			ProviderID: ProviderGoogle,
+			Model:      "gemini-pro",
+			Options:    map[string]any{"auth_mode": "bogus"},
+		}),
+		"auth_mode",
+	)
+	assert.NoError(t,
+		registry.Validate(ProviderConfig{ProviderID: ProviderGoogle, Model: "gemini-pro"}),
+	)
+}
+
+func TestGoogleDescriptorExposesXApiKeyAuth(t *testing.T) {
+	registry := NewRegistry()
+	descriptor, ok := registry.Descriptor(ProviderGoogle)
+	require.True(t, ok)
+	assert.Equal(t, AuthKindXApiKey, descriptor.AuthKind)
+	assert.True(t, descriptor.RequiresAPIKey())
+	assert.Equal(t, GoogleDefaultBaseURL, descriptor.DefaultBaseURL)
 }
 
 func TestRegistryBuildDispatchesToOllamaFactory(t *testing.T) {

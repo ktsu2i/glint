@@ -15,6 +15,7 @@ const (
 	ProviderOpenRouter       ProviderID = "openrouter"
 	ProviderOpenAI           ProviderID = "openai"
 	ProviderAnthropic        ProviderID = "anthropic"
+	ProviderGoogle           ProviderID = "google"
 	ProviderOllama           ProviderID = "ollama"
 	ProviderOpenAICompatible ProviderID = "openai_compatible" // template id。実体は :slug 付き id で扱う。
 )
@@ -103,6 +104,7 @@ func (r *Registry) registerBuiltins() {
 	r.register(openRouterDescriptor(), openRouterFactory, validateOpenRouter)
 	r.register(openAIDescriptor(), openAIFactory, validateOpenAI)
 	r.register(anthropicDescriptor(), anthropicFactory, validateAnthropic)
+	r.register(googleDescriptor(), googleFactory, validateGoogle)
 	r.register(ollamaDescriptor(), ollamaFactory, validateOllama)
 	r.register(openAICompatibleDescriptor(), openAICompatibleFactory, validateOpenAICompatible)
 }
@@ -293,6 +295,63 @@ func anthropicFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 func validateAnthropic(cfg ProviderConfig) error {
 	if strings.TrimSpace(cfg.Model) == "" {
 		return errors.New("Anthropicのmodelを入力してください。")
+	}
+	return nil
+}
+
+func googleDescriptor() ProviderDescriptor {
+	return ProviderDescriptor{
+		ID:             ProviderGoogle,
+		DisplayName:    "Google Gemini",
+		AuthKind:       AuthKindXApiKey,
+		DefaultBaseURL: GoogleDefaultBaseURL,
+		OptionSchema: []ProviderOption{
+			{
+				Key:      "auth_mode",
+				Label:    "API key送信方式",
+				Type:     ProviderOptionString,
+				Required: false,
+				Default:  GoogleAuthModeHeader,
+				HelpText: "`header`（`x-goog-api-key`）または `query`（`?key=`）。通常は `header` のままで構いません。",
+			},
+			{
+				Key:      "api_version",
+				Label:    "API version",
+				Type:     ProviderOptionString,
+				Required: false,
+				Default:  GoogleDefaultAPIVersion,
+				HelpText: "`v1beta` や `v1` などのAPI versionです。",
+			},
+			{
+				Key:      "base_url",
+				Label:    "Base URL",
+				Type:     ProviderOptionURL,
+				Required: false,
+				HelpText: "プロキシなど別のendpointを使う場合に上書きします。空欄ならGoogle公式のendpointを使います。",
+			},
+		},
+		Capabilities: ProviderCapabilities{Streaming: true},
+		Notes:        "modelには `gemini-2.5-pro` のようなGoogle公式のmodel idを指定してください。Generative Language APIの有効化が必要です。",
+	}
+}
+
+func googleFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
+	return NewGoogleGateway(GoogleConfig{
+		APIKey:     deps.APIKey,
+		Model:      cfg.Model,
+		BaseURL:    optionString(cfg.Options, "base_url", ""),
+		APIVersion: optionString(cfg.Options, "api_version", ""),
+		AuthMode:   optionString(cfg.Options, "auth_mode", ""),
+	})
+}
+
+func validateGoogle(cfg ProviderConfig) error {
+	if strings.TrimSpace(cfg.Model) == "" {
+		return errors.New("Googleのmodelを入力してください。")
+	}
+	mode := strings.ToLower(strings.TrimSpace(optionString(cfg.Options, "auth_mode", "")))
+	if mode != "" && mode != GoogleAuthModeHeader && mode != GoogleAuthModeQuery {
+		return errors.New("auth_modeは `header` または `query` を指定してください。")
 	}
 	return nil
 }
