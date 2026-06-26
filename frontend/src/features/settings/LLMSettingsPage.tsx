@@ -2,19 +2,22 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Switch } from "@base-ui/react/switch";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowRight,
+  CaretDown,
   Check,
   Eye,
   EyeSlash,
   Key,
-  LockKey,
   Monitor,
   Moon,
+  Plus,
   ShieldCheck,
   Sun,
   Translate,
+  Trash,
+  X,
 } from "@phosphor-icons/react";
 import {
+  deleteProviderSettings,
   getLLMConfig,
   setActiveProvider,
   testProviderConnection,
@@ -23,9 +26,11 @@ import {
   type ProviderDescriptor,
   type ProviderSettings,
   type ThemePreference,
+  type UpsertProviderRequest,
 } from "../../shared/api/backend";
 import { useLanguageSettings } from "../../shared/i18n/i18n";
 import { localizeBackendError } from "../../shared/i18n/error";
+import { ProviderIcon } from "../chat/ProviderIcon";
 
 type LLMSettingsPageProps = {
   onBack: () => void;
@@ -110,6 +115,198 @@ function parseHeadersText(text: string): Record<string, string> {
   return out;
 }
 
+type ProviderRowDescriptor = {
+  rowId: string;
+  providerId: string;
+  descriptor: ProviderDescriptor;
+  stored: ProviderSettings | null;
+  displayName: string;
+  isCustom: boolean;
+  isStaged: boolean;
+  endpointHint: string;
+};
+
+function providerDisplayName(
+  providerId: string,
+  descriptor: ProviderDescriptor,
+  stored: ProviderSettings | null,
+  fallbackLabel = "",
+): string {
+  if (isOpenAICompatibleInstance(providerId)) {
+    const label = stored?.displayLabel || fallbackLabel || providerId.slice(OPENAI_COMPATIBLE_PREFIX.length);
+    return label || providerId;
+  }
+  return descriptor.displayName;
+}
+
+function endpointHintFor(providerId: string, stored: ProviderSettings | null): string {
+  if (!stored?.options) return "";
+  const baseUrl = stored.options["base_url"];
+  if (providerId === "ollama" || isOpenAICompatibleInstance(providerId)) {
+    if (typeof baseUrl === "string" && baseUrl.trim() !== "") return baseUrl;
+  }
+  return "";
+}
+
+// rows are sorted: configured built-ins (catalog order) -> configured customs ->
+// unconfigured built-ins (catalog order). Custom (openai_compatible:*) providers
+// only ever appear when explicitly added, so they have no unconfigured group.
+function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowDescriptor[] {
+  const builtIns = config.catalog.filter((descriptor) => descriptor.id !== OPENAI_COMPATIBLE_TEMPLATE_ID);
+  const template = config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null;
+  const configured: ProviderRowDescriptor[] = [];
+  const unconfigured: ProviderRowDescriptor[] = [];
+
+  for (const descriptor of builtIns) {
+    const stored = config.providers.find((provider) => provider.providerId === descriptor.id) ?? null;
+    const row: ProviderRowDescriptor = {
+      rowId: descriptor.id,
+      providerId: descriptor.id,
+      descriptor,
+      stored,
+      displayName: providerDisplayName(descriptor.id, descriptor, stored),
+      isCustom: false,
+      isStaged: false,
+      endpointHint: endpointHintFor(descriptor.id, stored),
+    };
+    if (stored?.configured) configured.push(row);
+    else unconfigured.push(row);
+  }
+
+  const customs: ProviderRowDescriptor[] = [];
+  if (template) {
+    const customProviders = config.providers
+      .filter((provider) => isOpenAICompatibleInstance(provider.providerId))
+      .slice()
+      .sort((a, b) => (a.displayLabel || a.providerId).localeCompare(b.displayLabel || b.providerId));
+    for (const stored of customProviders) {
+      customs.push({
+        rowId: stored.providerId,
+        providerId: stored.providerId,
+        descriptor: template,
+        stored,
+        displayName: providerDisplayName(stored.providerId, template, stored),
+        isCustom: true,
+        isStaged: false,
+        endpointHint: endpointHintFor(stored.providerId, stored),
+      });
+    }
+  }
+
+  const stagedRow: ProviderRowDescriptor[] = [];
+  if (
+    staged
+    && template
+    && !config.providers.some((provider) => provider.providerId === staged.providerId)
+  ) {
+    stagedRow.push({
+      rowId: staged.providerId,
+      providerId: staged.providerId,
+      descriptor: template,
+      stored: null,
+      displayName: staged.displayLabel || staged.providerId.slice(OPENAI_COMPATIBLE_PREFIX.length),
+      isCustom: true,
+      isStaged: true,
+      endpointHint: "",
+    });
+  }
+
+  return [...configured, ...customs, ...unconfigured, ...stagedRow];
+}
+
+type StagedCustom = {
+  providerId: string;
+  displayLabel: string;
+};
+
+type InlineApiKeyFormProps = {
+  providerLabel: string;
+  hasApiKey: boolean;
+  isPending: boolean;
+  isSaved: boolean;
+  onSaveKey: (apiKey: string) => Promise<void>;
+  onClearKey: () => Promise<void>;
+};
+
+function InlineApiKeyForm({
+  providerLabel,
+  hasApiKey,
+  isPending,
+  isSaved,
+  onSaveKey,
+  onClearKey,
+}: InlineApiKeyFormProps) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState("");
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    if (isSaved) setValue("");
+  }, [isSaved]);
+
+  const ariaLabel = t("settings.inlineApiKeyAria", { provider: providerLabel });
+  const placeholder = hasApiKey ? "••••••••••••••••" : t("settings.inlineApiKeyPlaceholder");
+  const canSave = value.trim() !== "" && !isPending;
+
+  function handleSave() {
+    if (!canSave) return;
+    void onSaveKey(value.trim());
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSave();
+    }
+  }
+
+  // Inline credential editor is intentionally NOT a <form> element: this row
+  // sits inside the page-wide settings form, and nested forms are invalid HTML.
+  return (
+    <div className="provider-row-inline">
+      <div className="provider-row-inline-input">
+        <input
+          aria-label={ariaLabel}
+          type={show ? "text" : "password"}
+          value={value}
+          placeholder={placeholder}
+          autoComplete="new-password"
+          spellCheck={false}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <button
+          type="button"
+          className="provider-row-inline-eye"
+          aria-label={show ? t("settings.hideApiKey") : t("settings.showApiKey")}
+          onClick={() => setShow((current) => !current)}
+          disabled={value === ""}
+        >
+          {show ? <EyeSlash size={12} /> : <Eye size={12} />}
+        </button>
+      </div>
+      <button
+        type="button"
+        className="provider-row-inline-save"
+        disabled={!canSave}
+        onClick={handleSave}
+      >
+        {isPending ? t("settings.inlineApiKeySaving") : t("settings.inlineApiKeySave")}
+      </button>
+      {hasApiKey && (
+        <button
+          type="button"
+          className="provider-row-inline-reset"
+          onClick={() => void onClearKey()}
+          disabled={isPending}
+        >
+          {t("settings.removeApiKey")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function LLMSettingsPage({
   onBack,
   theme = "system",
@@ -128,7 +325,8 @@ export function LLMSettingsPage({
   translationRef.current = t;
 
   const [config, setConfig] = useState<LLMConfig | null>(null);
-  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+  const [managedProviderId, setManagedProviderId] = useState<string>("");
+  const [staged, setStaged] = useState<StagedCustom | null>(null);
   const [displayLabel, setDisplayLabel] = useState("");
   const [model, setModel] = useState("");
   const [options, setOptions] = useState<Record<string, unknown>>({});
@@ -144,6 +342,10 @@ export function LLMSettingsPage({
   const [connectionTestError, setConnectionTestError] = useState("");
   const [activatingProvider, setActivatingProvider] = useState(false);
   const [activated, setActivated] = useState(false);
+  const [inlineSavingId, setInlineSavingId] = useState<string>("");
+  const [inlineSavedId, setInlineSavedId] = useState<string>("");
+  const [removingId, setRemovingId] = useState<string>("");
+  const [removedLabel, setRemovedLabel] = useState("");
   const [localThemeError, setLocalThemeError] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -152,35 +354,48 @@ export function LLMSettingsPage({
   const [newCustomLabel, setNewCustomLabel] = useState("");
   const [newCustomError, setNewCustomError] = useState("");
 
-  const selectedDescriptor: ProviderDescriptor | null = useMemo(() => {
-    if (!config) return null;
-    return resolveDescriptor(config, selectedProviderId);
-  }, [config, selectedProviderId]);
+  const rows = useMemo<ProviderRowDescriptor[]>(() => {
+    if (!config) return [];
+    return buildRows(config, staged);
+  }, [config, staged]);
 
-  const storedProvider: ProviderSettings | null = useMemo(() => {
-    if (!config) return null;
-    return config.providers.find((provider) => provider.providerId === selectedProviderId) ?? null;
-  }, [config, selectedProviderId]);
+  const managedRow = useMemo<ProviderRowDescriptor | null>(() => {
+    if (!managedProviderId) return null;
+    return rows.find((row) => row.rowId === managedProviderId) ?? null;
+  }, [managedProviderId, rows]);
 
-  const adoptProvider = useCallback(
-    (providerId: string, nextConfig: LLMConfig) => {
-      const descriptor = resolveDescriptor(nextConfig, providerId);
-      if (!descriptor) return;
-      const stored = nextConfig.providers.find((provider) => provider.providerId === providerId);
-      setSelectedProviderId(providerId);
-      setDisplayLabel(stored?.displayLabel ?? "");
-      setModel(stored?.model ?? "");
-      setOptions(mergeOptions(descriptor, stored?.options));
-      setAPIKey("");
-      setShowAPIKey(false);
-      setClearAPIKey(false);
-      setIsAddingCustom(false);
-      setNewCustomSlug("");
-      setNewCustomLabel("");
-      setNewCustomError("");
-    },
-    [],
-  );
+  const managedDescriptor = managedRow?.descriptor ?? null;
+  const managedStored = managedRow?.stored ?? null;
+  const managedIsCustom = managedRow?.isCustom ?? false;
+
+  const openManagePanel = useCallback((rowId: string, descriptor: ProviderDescriptor, stored: ProviderSettings | null, label = "") => {
+    setManagedProviderId(rowId);
+    setDisplayLabel(stored?.displayLabel ?? label);
+    setModel(stored?.model ?? "");
+    setOptions(mergeOptions(descriptor, stored?.options));
+    setAPIKey("");
+    setShowAPIKey(false);
+    setClearAPIKey(false);
+    setSaved(false);
+    setActivated(false);
+    setConnectionTest(null);
+    setConnectionTestError("");
+  }, []);
+
+  const closeManagePanel = useCallback((discardStaged = false) => {
+    setManagedProviderId("");
+    setDisplayLabel("");
+    setModel("");
+    setOptions({});
+    setAPIKey("");
+    setShowAPIKey(false);
+    setClearAPIKey(false);
+    setSaved(false);
+    setActivated(false);
+    setConnectionTest(null);
+    setConnectionTestError("");
+    if (discardStaged) setStaged(null);
+  }, []);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -188,19 +403,27 @@ export function LLMSettingsPage({
     try {
       const loaded = await getLLMConfig();
       setConfig(loaded);
-      // active provider があれば最優先、なければ最初の configured provider を編集対象にする。
-      // どちらも無い場合は catalog にフォールバックせず neutral 状態のままにする
-      // （OpenRouter が暗黙に選ばれないようにするため）。
-      const preferred = loaded.activeProviderId || loaded.providers[0]?.providerId || "";
+      // F9: do not auto-expand any row when nothing is configured. The active
+      // provider's Manage panel opens by default so existing tests / users can
+      // edit model + options without an extra click.
+      const preferred = loaded.activeProviderId
+        || loaded.providers.find((provider) => provider.configured)?.providerId
+        || "";
       if (preferred) {
-        adoptProvider(preferred, loaded);
+        const descriptor = resolveDescriptor(loaded, preferred);
+        if (descriptor) {
+          const stored = loaded.providers.find((provider) => provider.providerId === preferred) ?? null;
+          openManagePanel(preferred, descriptor, stored);
+        }
+      } else {
+        closeManagePanel();
       }
     } catch (reason) {
       setError(extractErrorMessage(reason, translationRef.current("settings.loadError")));
     } finally {
       setLoading(false);
     }
-  }, [adoptProvider]);
+  }, [closeManagePanel, openManagePanel]);
 
   useEffect(() => {
     void loadSettings();
@@ -210,18 +433,30 @@ export function LLMSettingsPage({
     setConnectionTest(null);
     setConnectionTestError("");
     setActivated(false);
-  }, [apiKey, clearAPIKey, model, options, selectedProviderId]);
+  }, [apiKey, clearAPIKey, model, options, managedProviderId]);
+
+  useEffect(() => {
+    if (!inlineSavedId) return;
+    const timer = window.setTimeout(() => setInlineSavedId(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [inlineSavedId]);
+
+  useEffect(() => {
+    if (!removedLabel) return;
+    const timer = window.setTimeout(() => setRemovedLabel(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [removedLabel]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || !selectedDescriptor || !selectedProviderId) return;
+    if (saving || !managedDescriptor || !managedProviderId) return;
     setSaving(true);
     setError("");
     setSaved(false);
     try {
       const trimmedLabel = displayLabel.trim();
       const next = await upsertProviderSettings({
-        providerId: selectedProviderId,
+        providerId: managedProviderId,
         model: model.trim(),
         options,
         apiKey: apiKey.trim(),
@@ -232,7 +467,10 @@ export function LLMSettingsPage({
         ...(trimmedLabel ? { displayLabel: trimmedLabel } : {}),
       });
       setConfig(next);
-      adoptProvider(selectedProviderId, next);
+      // Staged custom is now persisted; drop the placeholder marker.
+      setStaged(null);
+      const refreshedStored = next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
+      openManagePanel(managedProviderId, managedDescriptor, refreshedStored);
       setSaved(true);
     } catch (reason) {
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
@@ -242,14 +480,18 @@ export function LLMSettingsPage({
   }
 
   async function handleActivate() {
-    if (activatingProvider || !storedProvider?.configured) return;
+    if (activatingProvider || !managedStored?.configured) return;
     setActivatingProvider(true);
     setActivated(false);
     setError("");
     try {
-      const next = await setActiveProvider(selectedProviderId);
+      const next = await setActiveProvider(managedProviderId);
       setConfig(next);
-      adoptProvider(selectedProviderId, next);
+      const descriptor = resolveDescriptor(next, managedProviderId);
+      if (descriptor) {
+        const refreshedStored = next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
+        openManagePanel(managedProviderId, descriptor, refreshedStored);
+      }
       setActivated(true);
     } catch (reason) {
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.activateError")), t));
@@ -259,12 +501,12 @@ export function LLMSettingsPage({
   }
 
   async function handleTestConnection() {
-    if (testingConnection || !storedProvider?.configured) return;
+    if (testingConnection || !managedStored?.configured) return;
     setTestingConnection(true);
     setConnectionTest(null);
     setConnectionTestError("");
     try {
-      const result = await testProviderConnection(storedProvider.providerId);
+      const result = await testProviderConnection(managedStored.providerId);
       if (result.ok) {
         setConnectionTest("success");
       } else {
@@ -282,8 +524,99 @@ export function LLMSettingsPage({
     }
   }
 
+  async function handleInlineSaveKey(row: ProviderRowDescriptor, nextKey: string) {
+    if (!row.stored && !row.isStaged) {
+      // Inline form is only enabled for built-in rows; nothing to save against
+      // an entirely unknown provider.
+    }
+    setInlineSavingId(row.rowId);
+    setError("");
+    setRemovedLabel("");
+    setInlineSavedId("");
+    try {
+      const request: UpsertProviderRequest = {
+        providerId: row.providerId,
+        model: row.stored?.model ?? "",
+        options: row.stored?.options ?? defaultOptionsFor(row.descriptor),
+        apiKey: nextKey,
+        clearApiKey: false,
+        activate: false,
+      };
+      if (row.stored?.displayLabel) request.displayLabel = row.stored.displayLabel;
+      const next = await upsertProviderSettings(request);
+      setConfig(next);
+      setInlineSavedId(row.rowId);
+      if (managedProviderId === row.rowId) {
+        const refreshedStored = next.providers.find((provider) => provider.providerId === row.rowId) ?? null;
+        openManagePanel(row.rowId, row.descriptor, refreshedStored);
+      }
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
+    } finally {
+      setInlineSavingId("");
+    }
+  }
+
+  async function handleInlineClearKey(row: ProviderRowDescriptor) {
+    setInlineSavingId(row.rowId);
+    setError("");
+    setRemovedLabel("");
+    setInlineSavedId("");
+    try {
+      const request: UpsertProviderRequest = {
+        providerId: row.providerId,
+        model: row.stored?.model ?? "",
+        options: row.stored?.options ?? defaultOptionsFor(row.descriptor),
+        apiKey: "",
+        clearApiKey: true,
+        activate: false,
+      };
+      if (row.stored?.displayLabel) request.displayLabel = row.stored.displayLabel;
+      const next = await upsertProviderSettings(request);
+      setConfig(next);
+      setInlineSavedId(row.rowId);
+      if (managedProviderId === row.rowId) {
+        const refreshedStored = next.providers.find((provider) => provider.providerId === row.rowId) ?? null;
+        openManagePanel(row.rowId, row.descriptor, refreshedStored);
+      }
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
+    } finally {
+      setInlineSavingId("");
+    }
+  }
+
+  async function handleRemoveCustom(row: ProviderRowDescriptor) {
+    if (!row.isCustom) return;
+    if (!window.confirm(t("settings.providerRemoveConfirm", { provider: row.displayName }))) return;
+    setRemovingId(row.rowId);
+    setError("");
+    try {
+      if (row.isStaged) {
+        setStaged((current) => (current?.providerId === row.rowId ? null : current));
+        if (managedProviderId === row.rowId) closeManagePanel();
+      } else {
+        const next = await deleteProviderSettings(row.providerId);
+        setConfig(next);
+        if (managedProviderId === row.rowId) closeManagePanel();
+      }
+      setRemovedLabel(row.displayName);
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
+    } finally {
+      setRemovingId("");
+    }
+  }
+
   function startCustomProviderFlow() {
     setIsAddingCustom(true);
+    setNewCustomSlug("");
+    setNewCustomLabel("");
+    setNewCustomError("");
+  }
+
+  function cancelCustomProviderFlow() {
+    setIsAddingCustom(false);
     setNewCustomSlug("");
     setNewCustomLabel("");
     setNewCustomError("");
@@ -297,19 +630,21 @@ export function LLMSettingsPage({
     }
     if (!config) return;
     const providerId = `${OPENAI_COMPATIBLE_PREFIX}${slug}`;
-    if (config.providers.some((provider) => provider.providerId === providerId)) {
-      adoptProvider(providerId, config);
+    const existing = config.providers.find((provider) => provider.providerId === providerId);
+    if (existing) {
+      const descriptor = resolveDescriptor(config, providerId);
+      if (descriptor) openManagePanel(providerId, descriptor, existing);
+      setIsAddingCustom(false);
+      setNewCustomSlug("");
+      setNewCustomLabel("");
+      setNewCustomError("");
       return;
     }
     const template = config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID);
     if (!template) return;
-    setSelectedProviderId(providerId);
-    setDisplayLabel(newCustomLabel.trim() || slug);
-    setModel("");
-    setOptions(defaultOptionsFor(template));
-    setAPIKey("");
-    setShowAPIKey(false);
-    setClearAPIKey(false);
+    const label = newCustomLabel.trim() || slug;
+    setStaged({ providerId, displayLabel: label });
+    openManagePanel(providerId, template, null, label);
     setIsAddingCustom(false);
     setNewCustomSlug("");
     setNewCustomLabel("");
@@ -347,35 +682,23 @@ export function LLMSettingsPage({
     system: [t("settings.themeSystem"), t("settings.themeSystemDescription")],
   } as const;
 
-  const hasCredential = storedProvider?.hasApiKey ?? false;
-  const isCustomInstance = selectedDescriptor?.id === OPENAI_COMPATIBLE_TEMPLATE_ID && isOpenAICompatibleInstance(selectedProviderId);
-  const requiresAPIKey = selectedDescriptor
-    ? selectedDescriptor.authKind !== "none" && !(isCustomInstance && options.requires_api_key === false)
+  const hasCredential = managedStored?.hasApiKey ?? false;
+  const isCustomInstance = managedIsCustom;
+  const requiresAPIKey = managedDescriptor
+    ? managedDescriptor.authKind !== "none"
+      && !(isCustomInstance && options.requires_api_key === false)
     : true;
   const willHaveCredential = !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
   const canSave = !loading && !saving && model.trim() !== "" && (willHaveCredential || clearAPIKey);
-  const zdrOption = selectedDescriptor?.optionSchema.find((option) => option.key === "zdr");
+  const zdrOption = managedDescriptor?.optionSchema.find((option) => option.key === "zdr");
   const zdrEnabled = zdrOption ? Boolean(options[zdrOption.key]) : false;
-  const providerLabel = isCustomInstance
-    ? (storedProvider?.displayLabel || displayLabel || selectedProviderId.slice(OPENAI_COMPATIBLE_PREFIX.length))
-    : (selectedDescriptor?.displayName ?? "—");
-  const generalOptionSchema = (selectedDescriptor?.optionSchema ?? []).filter((option) => option.key !== "zdr");
-  const pickerItems: Array<{ id: string; label: string }> = useMemo(() => {
-    if (!config) return [];
-    const builtIns = config.catalog
-      .filter((descriptor) => descriptor.id !== OPENAI_COMPATIBLE_TEMPLATE_ID)
-      .map((descriptor) => ({ id: descriptor.id, label: descriptor.displayName }));
-    const customs = config.providers
-      .filter((provider) => isOpenAICompatibleInstance(provider.providerId))
-      .map((provider) => ({
-        id: provider.providerId,
-        label: provider.displayLabel || provider.providerId.slice(OPENAI_COMPATIBLE_PREFIX.length),
-      }));
-    const stagedCustom = isCustomInstance && !storedProvider
-      ? [{ id: selectedProviderId, label: displayLabel || selectedProviderId.slice(OPENAI_COMPATIBLE_PREFIX.length) }]
-      : [];
-    return [...builtIns, ...customs, ...stagedCustom];
-  }, [config, displayLabel, isCustomInstance, selectedProviderId, storedProvider]);
+  const managedLabel = managedRow?.displayName ?? "—";
+  const generalOptionSchema = (managedDescriptor?.optionSchema ?? []).filter((option) => option.key !== "zdr");
+  const activeRow = useMemo<ProviderRowDescriptor | null>(() => {
+    if (!config?.activeProviderId) return null;
+    return rows.find((row) => row.providerId === config.activeProviderId) ?? null;
+  }, [config, rows]);
+  const headerConfigured = Boolean(activeRow?.stored?.configured);
 
   return (
     <section className="settings-page" aria-labelledby="settings-title">
@@ -386,11 +709,11 @@ export function LLMSettingsPage({
             <h1 id="settings-title">{t("settings.title")}</h1>
             <p>{t("settings.description")}</p>
           </div>
-          <div className={storedProvider?.configured ? "settings-connection is-ready" : "settings-connection"}>
+          <div className={headerConfigured ? "settings-connection is-ready" : "settings-connection"}>
             <span className="settings-connection-dot" />
             <div>
               <small>{t("settings.connection")}</small>
-              <strong>{loading ? t("settings.checking") : storedProvider?.configured ? t("settings.available") : t("settings.notConfigured")}</strong>
+              <strong>{loading ? t("settings.checking") : headerConfigured ? t("settings.available") : t("settings.notConfigured")}</strong>
             </div>
           </div>
         </header>
@@ -402,7 +725,7 @@ export function LLMSettingsPage({
               <span aria-hidden="true" />
               {t("settings.appearance")}
             </button>
-            <button type="button">{t("settings.modelConnection")}</button>
+            <button type="button">{t("settings.modelConnections")}</button>
             <p>{t("settings.credentialNote")}</p>
           </nav>
 
@@ -493,95 +816,12 @@ export function LLMSettingsPage({
 
             <div className="settings-section-heading">
               <div>
-                <span className="settings-kicker">{t("settings.remoteRoute")}</span>
-                <h2>{selectedDescriptor ? t("settings.providerConnection", { provider: providerLabel }) : t("settings.modelConnection")}</h2>
+                <span className="settings-kicker">{t("settings.modelConnection")}</span>
+                <h2>{t("settings.modelConnections")}</h2>
               </div>
-              <span className="provider-badge">{providerLabel}</span>
+              <span className="provider-badge">{rows.length}</span>
             </div>
-
-            {config && (
-              <div className="provider-selector" role="radiogroup" aria-label={t("settings.providerPickerLabel")}>
-                {pickerItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={item.id === selectedProviderId}
-                    className={item.id === selectedProviderId ? "provider-pill is-selected" : "provider-pill"}
-                    onClick={() => {
-                      if (item.id === selectedProviderId) return;
-                      adoptProvider(item.id, config);
-                      setSaved(false);
-                      setError("");
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="provider-pill"
-                  onClick={() => startCustomProviderFlow()}
-                >
-                  + {t("settings.addCustomProvider")}
-                </button>
-              </div>
-            )}
-
-            {isAddingCustom && (
-              <fieldset className="settings-fieldset" aria-label={t("settings.customProviderTitle")}>
-                <legend>{t("settings.customProviderTitle")}</legend>
-                <div className="settings-field">
-                  <label htmlFor="custom-provider-slug">{t("settings.customProviderSlug")}</label>
-                  <input
-                    id="custom-provider-slug"
-                    value={newCustomSlug}
-                    onChange={(event) => {
-                      setNewCustomSlug(event.target.value);
-                      setNewCustomError("");
-                    }}
-                    placeholder="groq"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <small>{t("settings.customProviderSlugHelp")}</small>
-                </div>
-                <div className="settings-field">
-                  <label htmlFor="custom-provider-label">{t("settings.customProviderLabel")}</label>
-                  <input
-                    id="custom-provider-label"
-                    value={newCustomLabel}
-                    onChange={(event) => setNewCustomLabel(event.target.value)}
-                    placeholder="Groq"
-                    autoComplete="off"
-                  />
-                  <small>{t("settings.customProviderLabelHelp")}</small>
-                </div>
-                {newCustomError && (
-                  <p className="settings-error" role="alert">{newCustomError}</p>
-                )}
-                <div className="settings-page-actions">
-                  <button className="settings-secondary" type="button" onClick={() => setIsAddingCustom(false)}>
-                    {t("settings.customProviderCancel")}
-                  </button>
-                  <button className="settings-primary" type="button" onClick={confirmCustomProvider}>
-                    {t("settings.customProviderCreate")}
-                  </button>
-                </div>
-              </fieldset>
-            )}
-
-            {zdrOption && (
-              <div className="route-ledger" aria-label={t("settings.sendingRoute")}>
-                <span><LockKey size={13} /> Glint</span>
-                <ArrowRight size={12} />
-                <span>{providerLabel}</span>
-                <ArrowRight size={12} />
-                <span className={zdrEnabled ? "route-guard is-active" : "route-guard"}>
-                  {zdrEnabled ? t("settings.zdrEndpoint") : t("settings.providerRoute")}
-                </span>
-              </div>
-            )}
+            <p className="appearance-description">{t("settings.modelConnectionsDescription")}</p>
 
             {error && (
               <div className="settings-error" role="alert">
@@ -591,231 +831,452 @@ export function LLMSettingsPage({
                 )}
               </div>
             )}
-            {saved && (
-              <p className="settings-saved" role="status"><Check size={14} /> {t("settings.saved")}</p>
-            )}
-            {activated && (
+            {removedLabel && (
               <p className="settings-saved" role="status">
-                <Check size={14} /> {t("settings.providerActivated", { provider: providerLabel })}
+                <Check size={14} /> {t("settings.providerRemoved", { provider: removedLabel })}
               </p>
             )}
-            {connectionTest === "success" && (
-              <p className="settings-saved" role="status">
-                <Check size={14} /> {t("settings.testConnectionSucceeded", { provider: providerLabel })}
-              </p>
-            )}
-            {connectionTest === "error" && (
-              <div className="settings-error" role="alert">
-                <span>{connectionTestError}</span>
-              </div>
-            )}
 
-            <fieldset className="settings-fieldset" disabled={loading || saving || !selectedDescriptor}>
-              <legend>{t("settings.model")}</legend>
-              <div className="settings-field">
-                <label htmlFor="provider-model">{t("settings.modelId")}</label>
-                <input
-                  id="provider-model"
-                  value={model}
-                  onChange={(event) => {
-                    setModel(event.target.value);
-                    setSaved(false);
-                  }}
-                  placeholder={t("settings.modelPlaceholder")}
-                  autoComplete="off"
-                  spellCheck={false}
-                  required
-                />
-                <small>{t("settings.modelIdHelp", { provider: providerLabel })}</small>
-              </div>
-            </fieldset>
-
-            {requiresAPIKey && (
-              <fieldset className="settings-fieldset" disabled={loading || saving}>
-                <legend>{t("settings.credential")}</legend>
-                <div className="settings-field">
-                  <span className="settings-field-label">
-                    <label htmlFor="provider-api-key">{t("settings.apiKey")}</label>
-                    {hasCredential && !clearAPIKey && (
-                      <em><Key size={11} /> {t("settings.keyStored")}</em>
-                    )}
-                  </span>
-                  <div className="credential-input">
-                    <input
-                      id="provider-api-key"
-                      className={hasCredential && !apiKey ? "has-saved-credential" : ""}
-                      type={showAPIKey ? "text" : "password"}
-                      value={apiKey}
-                      onChange={(event) => {
-                        setAPIKey(event.target.value);
-                        if (event.target.value) setClearAPIKey(false);
-                        setSaved(false);
-                      }}
-                      placeholder={clearAPIKey ? t("settings.keyScheduledForRemoval") : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
-                      autoComplete="new-password"
-                      disabled={clearAPIKey}
-                      required={!hasCredential}
-                    />
-                    <button
-                      type="button"
-                      className="credential-visibility"
-                      onClick={() => setShowAPIKey((current) => !current)}
-                      disabled={clearAPIKey || apiKey === ""}
-                      aria-label={showAPIKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
-                    >
-                      {showAPIKey ? <EyeSlash size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                  <small>
-                    {hasCredential && !apiKey && !clearAPIKey
-                      ? t("settings.savedKeyHelp")
-                      : t("settings.newKeyHelp")}
-                  </small>
-                  {hasCredential && (
-                    <button
-                      type="button"
-                      className={clearAPIKey ? "credential-action is-pending" : "credential-action"}
-                      onClick={() => {
-                        setClearAPIKey((current) => !current);
-                        setAPIKey("");
-                        setShowAPIKey(false);
-                        setSaved(false);
-                      }}
-                    >
-                      {clearAPIKey ? t("settings.keepApiKey") : t("settings.removeApiKey")}
-                    </button>
-                  )}
-                </div>
-              </fieldset>
-            )}
-
-            {generalOptionSchema.length > 0 && (
-              <fieldset className="settings-fieldset" disabled={loading || saving}>
-                <legend>{t("settings.providerOptions")}</legend>
-                {generalOptionSchema.map((option) => {
-                  const value = options[option.key];
-                  const fieldId = `provider-option-${option.key}`;
-                  if (option.type === "bool") {
-                    return (
-                      <div className="privacy-setting" key={option.key}>
-                        <div>
-                          <span>{option.label}</span>
-                          {option.helpText && <p>{option.helpText}</p>}
-                        </div>
-                        <Switch.Root
-                          className="context-switch"
-                          checked={Boolean(value)}
-                          onCheckedChange={(checked) => {
-                            setOptions((current) => ({ ...current, [option.key]: checked }));
-                            setSaved(false);
-                          }}
-                          aria-label={option.label}
-                        >
-                          <Switch.Thumb className="context-switch-thumb" />
-                        </Switch.Root>
-                      </div>
-                    );
-                  }
-                  if (option.type === "headers") {
-                    return (
-                      <div className="settings-field" key={option.key}>
-                        <label htmlFor={fieldId}>{option.label}</label>
-                        <textarea
-                          id={fieldId}
-                          rows={3}
-                          value={headersToText(value)}
-                          onChange={(event) => {
-                            const parsed = parseHeadersText(event.target.value);
-                            setOptions((current) => ({ ...current, [option.key]: parsed }));
-                            setSaved(false);
-                          }}
-                          placeholder="X-Org-Id: tenant-42"
-                          spellCheck={false}
-                        />
-                        {option.helpText && <small>{option.helpText}</small>}
-                      </div>
-                    );
+            {config && (
+              <ul className="provider-list" aria-label={t("settings.providerListAria")}>
+                {rows.map((row) => {
+                  const isManaged = managedProviderId === row.rowId;
+                  const inlineEligible = !row.isCustom
+                    && row.descriptor.authKind !== "none";
+                  const isActive = row.stored?.isActive ?? false;
+                  let statusLabel: string;
+                  let statusKind: "configured" | "missing" | "endpoint" | "active";
+                  if (isActive) {
+                    statusLabel = t("settings.statusActive");
+                    statusKind = "active";
+                  } else if (row.stored?.configured) {
+                    statusLabel = t("settings.statusConfigured");
+                    statusKind = "configured";
+                  } else if (row.endpointHint) {
+                    statusLabel = t("settings.providerEndpointLabel", { url: row.endpointHint });
+                    statusKind = "endpoint";
+                  } else {
+                    statusLabel = t("settings.statusApiKeyMissing");
+                    statusKind = "missing";
                   }
                   return (
-                    <div className="settings-field" key={option.key}>
-                      <label htmlFor={fieldId}>{option.label}</label>
-                      <input
-                        id={fieldId}
-                        type={option.type === "url" ? "url" : "text"}
-                        value={typeof value === "string" ? value : ""}
-                        onChange={(event) => {
-                          setOptions((current) => ({ ...current, [option.key]: event.target.value }));
-                          setSaved(false);
-                        }}
-                        placeholder={typeof option.default === "string" ? option.default : ""}
-                        autoComplete="off"
-                        spellCheck={false}
-                        required={option.required}
-                      />
-                      {option.helpText && <small>{option.helpText}</small>}
-                    </div>
+                    <li
+                      key={row.rowId}
+                      className={isManaged ? "provider-row is-expanded" : "provider-row"}
+                      data-provider-id={row.rowId}
+                      data-status={statusKind}
+                    >
+                      <div className="provider-row-summary">
+                        <div className="provider-row-identity">
+                          <ProviderIcon providerId={row.providerId} displayLabel={row.displayName} size={14} />
+                          <span className="provider-row-name">{row.displayName}</span>
+                        </div>
+                        <span
+                          className={`provider-row-status is-${statusKind}`}
+                          role="status"
+                          aria-label={statusLabel}
+                        >
+                          {(statusKind === "configured" || statusKind === "active") && <Check size={11} />}
+                          <span>{statusLabel}</span>
+                        </span>
+                        <div className="provider-row-action">
+                          {inlineEligible && !isManaged && (
+                            <InlineApiKeyForm
+                              providerLabel={row.displayName}
+                              hasApiKey={row.stored?.hasApiKey ?? false}
+                              isPending={inlineSavingId === row.rowId}
+                              isSaved={inlineSavedId === row.rowId}
+                              onSaveKey={(key) => handleInlineSaveKey(row, key)}
+                              onClearKey={() => handleInlineClearKey(row)}
+                            />
+                          )}
+                          {row.isCustom && (
+                            <button
+                              type="button"
+                              className="provider-row-remove"
+                              aria-label={t("settings.providerRemove")}
+                              onClick={() => void handleRemoveCustom(row)}
+                              disabled={removingId === row.rowId}
+                            >
+                              <Trash size={12} />
+                              {removingId === row.rowId ? t("settings.providerRemoving") : t("settings.providerRemove")}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={isManaged ? "provider-row-manage is-open" : "provider-row-manage"}
+                            aria-expanded={isManaged}
+                            aria-controls={`provider-row-${row.rowId}-detail`}
+                            onClick={() => {
+                              if (isManaged) {
+                                closeManagePanel(row.isStaged);
+                                return;
+                              }
+                              openManagePanel(
+                                row.rowId,
+                                row.descriptor,
+                                row.stored,
+                                row.isStaged ? row.displayName : "",
+                              );
+                            }}
+                          >
+                            {isManaged
+                              ? t("settings.closeManageProvider")
+                              : t("settings.manageProvider")}
+                            <CaretDown
+                              size={10}
+                              weight="bold"
+                              className="provider-row-manage-caret"
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </div>
+                      </div>
+                      {inlineSavedId === row.rowId && (
+                        <p className="provider-row-inline-status" role="status">
+                          <Check size={11} /> {t("settings.inlineApiKeySaved")}
+                        </p>
+                      )}
+                      {isManaged && managedDescriptor && (
+                        <div
+                          id={`provider-row-${row.rowId}-detail`}
+                          className="provider-row-detail"
+                        >
+                          {saved && (
+                            <p className="settings-saved" role="status">
+                              <Check size={14} /> {t("settings.saved")}
+                            </p>
+                          )}
+                          {activated && (
+                            <p className="settings-saved" role="status">
+                              <Check size={14} /> {t("settings.providerActivated", { provider: managedLabel })}
+                            </p>
+                          )}
+                          {connectionTest === "success" && (
+                            <p className="settings-saved" role="status">
+                              <Check size={14} /> {t("settings.testConnectionSucceeded", { provider: managedLabel })}
+                            </p>
+                          )}
+                          {connectionTest === "error" && (
+                            <div className="settings-error" role="alert">
+                              <span>{connectionTestError}</span>
+                            </div>
+                          )}
+
+                          {isCustomInstance && (
+                            <fieldset className="settings-fieldset" disabled={loading || saving}>
+                              <legend>{t("settings.customProviderLabel")}</legend>
+                              <div className="settings-field">
+                                <label htmlFor={`provider-label-${row.rowId}`}>{t("settings.customProviderLabel")}</label>
+                                <input
+                                  id={`provider-label-${row.rowId}`}
+                                  value={displayLabel}
+                                  onChange={(event) => {
+                                    setDisplayLabel(event.target.value);
+                                    setSaved(false);
+                                  }}
+                                  placeholder={row.providerId.slice(OPENAI_COMPATIBLE_PREFIX.length)}
+                                  autoComplete="off"
+                                />
+                                <small>{t("settings.customProviderLabelHelp")}</small>
+                              </div>
+                            </fieldset>
+                          )}
+
+                          {/* Model ID stays here until F10 (model catalog) replaces it
+                              with a selector inside the chat composer. See ph9 in
+                              docs/llm-provider-design.md. */}
+                          <fieldset className="settings-fieldset" disabled={loading || saving || !managedDescriptor}>
+                            <legend>{t("settings.model")}</legend>
+                            <div className="settings-field">
+                              <label htmlFor={`provider-model-${row.rowId}`}>{t("settings.modelId")}</label>
+                              <input
+                                id={`provider-model-${row.rowId}`}
+                                value={model}
+                                onChange={(event) => {
+                                  setModel(event.target.value);
+                                  setSaved(false);
+                                }}
+                                placeholder={t("settings.modelPlaceholder")}
+                                autoComplete="off"
+                                spellCheck={false}
+                                required
+                              />
+                              <small>
+                                {t("settings.modelIdHelp", { provider: managedLabel })}
+                                <br />
+                                <em>{t("settings.modelIdNoteTransitional")}</em>
+                              </small>
+                            </div>
+                          </fieldset>
+
+                          {requiresAPIKey && (
+                            <fieldset className="settings-fieldset" disabled={loading || saving}>
+                              <legend>{t("settings.credential")}</legend>
+                              <div className="settings-field">
+                                <span className="settings-field-label">
+                                  <label htmlFor={`provider-api-key-${row.rowId}`}>{t("settings.apiKey")}</label>
+                                  {hasCredential && !clearAPIKey && (
+                                    <em><Key size={11} /> {t("settings.keyStored")}</em>
+                                  )}
+                                </span>
+                                <div className="credential-input">
+                                  <input
+                                    id={`provider-api-key-${row.rowId}`}
+                                    className={hasCredential && !apiKey ? "has-saved-credential" : ""}
+                                    type={showAPIKey ? "text" : "password"}
+                                    value={apiKey}
+                                    onChange={(event) => {
+                                      setAPIKey(event.target.value);
+                                      if (event.target.value) setClearAPIKey(false);
+                                      setSaved(false);
+                                    }}
+                                    placeholder={clearAPIKey ? t("settings.keyScheduledForRemoval") : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
+                                    autoComplete="new-password"
+                                    disabled={clearAPIKey}
+                                    required={!hasCredential}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="credential-visibility"
+                                    onClick={() => setShowAPIKey((current) => !current)}
+                                    disabled={clearAPIKey || apiKey === ""}
+                                    aria-label={showAPIKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
+                                  >
+                                    {showAPIKey ? <EyeSlash size={16} /> : <Eye size={16} />}
+                                  </button>
+                                </div>
+                                <small>
+                                  {hasCredential && !apiKey && !clearAPIKey
+                                    ? t("settings.savedKeyHelp")
+                                    : t("settings.newKeyHelp")}
+                                </small>
+                                {hasCredential && (
+                                  <button
+                                    type="button"
+                                    className={clearAPIKey ? "credential-action is-pending" : "credential-action"}
+                                    onClick={() => {
+                                      setClearAPIKey((current) => !current);
+                                      setAPIKey("");
+                                      setShowAPIKey(false);
+                                      setSaved(false);
+                                    }}
+                                  >
+                                    {clearAPIKey ? t("settings.keepApiKey") : t("settings.removeApiKey")}
+                                  </button>
+                                )}
+                              </div>
+                            </fieldset>
+                          )}
+
+                          {generalOptionSchema.length > 0 && (
+                            <fieldset className="settings-fieldset" disabled={loading || saving}>
+                              <legend>{t("settings.providerOptions")}</legend>
+                              {generalOptionSchema.map((option) => {
+                                const value = options[option.key];
+                                const fieldId = `provider-option-${row.rowId}-${option.key}`;
+                                if (option.type === "bool") {
+                                  return (
+                                    <div className="privacy-setting" key={option.key}>
+                                      <div>
+                                        <span>{option.label}</span>
+                                        {option.helpText && <p>{option.helpText}</p>}
+                                      </div>
+                                      <Switch.Root
+                                        className="context-switch"
+                                        checked={Boolean(value)}
+                                        onCheckedChange={(checked) => {
+                                          setOptions((current) => ({ ...current, [option.key]: checked }));
+                                          setSaved(false);
+                                        }}
+                                        aria-label={option.label}
+                                      >
+                                        <Switch.Thumb className="context-switch-thumb" />
+                                      </Switch.Root>
+                                    </div>
+                                  );
+                                }
+                                if (option.type === "headers") {
+                                  return (
+                                    <div className="settings-field" key={option.key}>
+                                      <label htmlFor={fieldId}>{option.label}</label>
+                                      <textarea
+                                        id={fieldId}
+                                        rows={3}
+                                        value={headersToText(value)}
+                                        onChange={(event) => {
+                                          const parsed = parseHeadersText(event.target.value);
+                                          setOptions((current) => ({ ...current, [option.key]: parsed }));
+                                          setSaved(false);
+                                        }}
+                                        placeholder="X-Org-Id: tenant-42"
+                                        spellCheck={false}
+                                      />
+                                      {option.helpText && <small>{option.helpText}</small>}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="settings-field" key={option.key}>
+                                    <label htmlFor={fieldId}>{option.label}</label>
+                                    <input
+                                      id={fieldId}
+                                      type={option.type === "url" ? "url" : "text"}
+                                      value={typeof value === "string" ? value : ""}
+                                      onChange={(event) => {
+                                        setOptions((current) => ({ ...current, [option.key]: event.target.value }));
+                                        setSaved(false);
+                                      }}
+                                      placeholder={typeof option.default === "string" ? option.default : ""}
+                                      autoComplete="off"
+                                      spellCheck={false}
+                                      required={option.required}
+                                    />
+                                    {option.helpText && <small>{option.helpText}</small>}
+                                  </div>
+                                );
+                              })}
+                            </fieldset>
+                          )}
+
+                          {zdrOption && (
+                            <fieldset className="settings-fieldset" disabled={loading || saving}>
+                              <legend>{t("settings.privacy")}</legend>
+                              <div className="privacy-setting">
+                                <div>
+                                  <span><ShieldCheck size={16} /> {t("settings.zeroDataRetention")}</span>
+                                  <p>{zdrOption.helpText ?? t("settings.zdrDescription")}</p>
+                                </div>
+                                <Switch.Root
+                                  className="context-switch"
+                                  checked={zdrEnabled}
+                                  onCheckedChange={(checked) => {
+                                    setOptions((current) => ({ ...current, [zdrOption.key]: checked }));
+                                    setSaved(false);
+                                  }}
+                                  aria-label={t("settings.requireZdr")}
+                                >
+                                  <Switch.Thumb className="context-switch-thumb" />
+                                </Switch.Root>
+                              </div>
+                              <p className="remote-data-note">
+                                {t("settings.remoteDataNote")}
+                              </p>
+                            </fieldset>
+                          )}
+
+                          <div className="provider-row-detail-actions">
+                            <button
+                              className="settings-secondary"
+                              type="button"
+                              onClick={() => void handleTestConnection()}
+                              disabled={saving || testingConnection || !managedStored?.configured}
+                            >
+                              {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
+                            </button>
+                            <button
+                              className="settings-secondary"
+                              type="button"
+                              onClick={() => void handleActivate()}
+                              disabled={
+                                saving
+                                || activatingProvider
+                                || !managedStored?.configured
+                                || managedStored?.isActive
+                              }
+                            >
+                              {managedStored?.isActive
+                                ? t("settings.providerIsActive")
+                                : activatingProvider
+                                  ? t("settings.activatingProvider")
+                                  : t("settings.activateProvider")}
+                            </button>
+                            <button className="settings-primary" type="submit" disabled={!canSave}>
+                              {saving ? t("settings.saving") : t("settings.save")}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
                   );
                 })}
-              </fieldset>
+              </ul>
             )}
 
-            {zdrOption && (
-              <fieldset className="settings-fieldset" disabled={loading || saving}>
-                <legend>{t("settings.privacy")}</legend>
-                <div className="privacy-setting">
-                  <div>
-                    <span><ShieldCheck size={16} /> {t("settings.zeroDataRetention")}</span>
-                    <p>{zdrOption.helpText ?? t("settings.zdrDescription")}</p>
+            {config && (
+              <button
+                type="button"
+                className="provider-add-compatible"
+                onClick={() => startCustomProviderFlow()}
+              >
+                <Plus size={12} weight="bold" /> {t("settings.addCompatibleProvider")}
+              </button>
+            )}
+
+            {isAddingCustom && (
+              <div className="provider-custom-modal-backdrop" role="presentation">
+                <div
+                  className="provider-custom-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={t("settings.customProviderDialogAria")}
+                >
+                  <div className="provider-custom-modal-header">
+                    <h3>{t("settings.customProviderTitle")}</h3>
+                    <button
+                      type="button"
+                      className="provider-custom-modal-close"
+                      aria-label={t("settings.customProviderCancel")}
+                      onClick={() => cancelCustomProviderFlow()}
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
-                  <Switch.Root
-                    className="context-switch"
-                    checked={zdrEnabled}
-                    onCheckedChange={(checked) => {
-                      setOptions((current) => ({ ...current, [zdrOption.key]: checked }));
-                      setSaved(false);
-                    }}
-                    aria-label={t("settings.requireZdr")}
-                  >
-                    <Switch.Thumb className="context-switch-thumb" />
-                  </Switch.Root>
+                  <div className="settings-field">
+                    <label htmlFor="custom-provider-slug">{t("settings.customProviderSlug")}</label>
+                    <input
+                      id="custom-provider-slug"
+                      value={newCustomSlug}
+                      onChange={(event) => {
+                        setNewCustomSlug(event.target.value);
+                        setNewCustomError("");
+                      }}
+                      placeholder="groq"
+                      autoComplete="off"
+                      spellCheck={false}
+                      autoFocus
+                    />
+                    <small>{t("settings.customProviderSlugHelp")}</small>
+                  </div>
+                  <div className="settings-field">
+                    <label htmlFor="custom-provider-label">{t("settings.customProviderLabel")}</label>
+                    <input
+                      id="custom-provider-label"
+                      value={newCustomLabel}
+                      onChange={(event) => setNewCustomLabel(event.target.value)}
+                      placeholder="Groq"
+                      autoComplete="off"
+                    />
+                    <small>{t("settings.customProviderLabelHelp")}</small>
+                  </div>
+                  {newCustomError && (
+                    <p className="settings-error" role="alert">{newCustomError}</p>
+                  )}
+                  <div className="provider-custom-modal-actions">
+                    <button className="settings-secondary" type="button" onClick={() => cancelCustomProviderFlow()}>
+                      {t("settings.customProviderCancel")}
+                    </button>
+                    <button className="settings-primary" type="button" onClick={confirmCustomProvider}>
+                      {t("settings.customProviderCreate")}
+                    </button>
+                  </div>
                 </div>
-                <p className="remote-data-note">
-                  {t("settings.remoteDataNote")}
-                </p>
-              </fieldset>
+              </div>
             )}
 
             <footer className="settings-page-actions">
-              <button
-                className="settings-secondary"
-                type="button"
-                onClick={() => void handleTestConnection()}
-                disabled={saving || testingConnection || !storedProvider?.configured}
-              >
-                {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
-              </button>
-              <button
-                className="settings-secondary"
-                type="button"
-                onClick={() => void handleActivate()}
-                disabled={
-                  saving
-                  || activatingProvider
-                  || !storedProvider?.configured
-                  || storedProvider?.isActive
-                }
-              >
-                {storedProvider?.isActive
-                  ? t("settings.providerIsActive")
-                  : activatingProvider
-                    ? t("settings.activatingProvider")
-                    : t("settings.activateProvider")}
-              </button>
               <button className="settings-secondary" type="button" onClick={onBack} disabled={saving}>
                 {t("settings.back")}
-              </button>
-              <button className="settings-primary" type="submit" disabled={!canSave}>
-                {saving ? t("settings.saving") : t("settings.save")}
               </button>
             </footer>
           </form>
