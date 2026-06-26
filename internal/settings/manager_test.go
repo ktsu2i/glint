@@ -78,6 +78,7 @@ func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
 		Model:      " provider/model ",
 		Options:    map[string]any{"zdr": true},
 		APIKey:     " secret-value ",
+		Activate:   true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
@@ -93,6 +94,62 @@ func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
 
 	_, err = manager.Gateway(context.Background())
 	require.NoError(t, err)
+}
+
+func TestUpsertWithoutActivateLeavesActiveProviderUntouched(t *testing.T) {
+	manager, settingStore, _ := newTestManager()
+	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openrouter",
+		Model:      "provider/model",
+		Options:    map[string]any{"zdr": true},
+		APIKey:     "secret-value",
+	})
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	provider := config.Providers[0]
+	assert.True(t, provider.Configured)
+	assert.True(t, provider.HasAPIKey)
+	assert.False(t, provider.IsActive, "providerは保存されてもactivateを指定しない限りactiveにならない")
+	assert.Equal(t, "", config.ActiveProviderID)
+	assert.Equal(t, "", settingStore.values[llmActiveProviderKey])
+
+	// Save again without Activate; active still untouched.
+	config, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openrouter",
+		Model:      "provider/updated",
+		Options:    map[string]any{"zdr": false},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "", config.ActiveProviderID)
+	assert.False(t, config.Providers[0].IsActive)
+}
+
+func TestUpsertWithoutActivateDoesNotOverwriteExistingActive(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openrouter",
+		Model:      "provider/first",
+		APIKey:     "secret",
+		Activate:   true,
+	})
+	require.NoError(t, err)
+
+	// A second provider is saved without Activate; the first one stays active.
+	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Model:      "gpt-5",
+		APIKey:     "openai-secret",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "openrouter", config.ActiveProviderID)
+	for _, provider := range config.Providers {
+		switch provider.ProviderID {
+		case "openrouter":
+			assert.True(t, provider.IsActive)
+		case "openai":
+			assert.False(t, provider.IsActive)
+		}
+	}
 }
 
 func TestUpsertWithoutAPIKeyKeepsExistingCredential(t *testing.T) {
@@ -115,7 +172,7 @@ func TestUpsertWithoutAPIKeyKeepsExistingCredential(t *testing.T) {
 func TestUpsertClearAPIKeyRemovesCredentialButKeepsConfig(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/first", APIKey: "secret",
+		ProviderID: "openrouter", Model: "provider/first", APIKey: "secret", Activate: true,
 	})
 	require.NoError(t, err)
 
@@ -250,6 +307,7 @@ func TestUpsertOllamaDoesNotRequireAPIKey(t *testing.T) {
 		ProviderID: "ollama",
 		Model:      "llama3",
 		Options:    map[string]any{"base_url": "http://localhost:11434/v1"},
+		Activate:   true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
@@ -305,7 +363,8 @@ func TestUpsertOpenAICompatibleStoresSlugInstance(t *testing.T) {
 			"base_url":         "https://api.groq.com/openai/v1",
 			"requires_api_key": true,
 		},
-		APIKey: "secret",
+		APIKey:   "secret",
+		Activate: true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
@@ -330,6 +389,7 @@ func TestOpenAICompatibleCanBeConfiguredWithoutAPIKey(t *testing.T) {
 			"base_url":         "http://localhost:8080/v1",
 			"requires_api_key": false,
 		},
+		Activate: true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)

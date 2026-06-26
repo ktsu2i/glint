@@ -63,6 +63,32 @@ beforeEach(() => {
 });
 
 describe("ChatSidebar", () => {
+  it("shows the active provider and model in the composer footer", async () => {
+    render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
+
+    const label = await screen.findByText(/現在のmodel: OpenRouter \/ provider\/model/);
+    expect(label).toBeTruthy();
+  });
+
+  it("falls back to a generic 'configure a model' label when no provider is active", async () => {
+    backend.getLLMConfig.mockResolvedValue({
+      activeProviderId: "",
+      providers: [],
+      catalog: [{
+        id: "openrouter",
+        displayName: "OpenRouter",
+        authKind: "bearer",
+        optionSchema: [],
+        capabilities: { streaming: true, tools: false, images: false },
+      }],
+    });
+    render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
+
+    expect(await screen.findByText("質問するモデルを設定してください")).toBeTruthy();
+  });
+
   it("hides the context chip when there is no selection, ignores empty submissions, and unsubscribes", async () => {
     const { container, unmount } = render(
       <ChatSidebar context={{ bookName: "", pageNumber: 0 }} />,

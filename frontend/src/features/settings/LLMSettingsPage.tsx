@@ -16,6 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   getLLMConfig,
+  setActiveProvider,
   testProviderConnection,
   upsertProviderSettings,
   type LLMConfig,
@@ -141,6 +142,8 @@ export function LLMSettingsPage({
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTest, setConnectionTest] = useState<"success" | "error" | null>(null);
   const [connectionTestError, setConnectionTestError] = useState("");
+  const [activatingProvider, setActivatingProvider] = useState(false);
+  const [activated, setActivated] = useState(false);
   const [localThemeError, setLocalThemeError] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -185,8 +188,13 @@ export function LLMSettingsPage({
     try {
       const loaded = await getLLMConfig();
       setConfig(loaded);
-      const preferred = loaded.activeProviderId || loaded.providers[0]?.providerId || loaded.catalog[0]?.id || "";
-      adoptProvider(preferred, loaded);
+      // active provider があれば最優先、なければ最初の configured provider を編集対象にする。
+      // どちらも無い場合は catalog にフォールバックせず neutral 状態のままにする
+      // （OpenRouter が暗黙に選ばれないようにするため）。
+      const preferred = loaded.activeProviderId || loaded.providers[0]?.providerId || "";
+      if (preferred) {
+        adoptProvider(preferred, loaded);
+      }
     } catch (reason) {
       setError(extractErrorMessage(reason, translationRef.current("settings.loadError")));
     } finally {
@@ -201,6 +209,7 @@ export function LLMSettingsPage({
   useEffect(() => {
     setConnectionTest(null);
     setConnectionTestError("");
+    setActivated(false);
   }, [apiKey, clearAPIKey, model, options, selectedProviderId]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -217,7 +226,9 @@ export function LLMSettingsPage({
         options,
         apiKey: apiKey.trim(),
         clearApiKey: clearAPIKey,
-        activate: true,
+        // F7: provider 設定の保存と「現在 chat で使う model」を分離する。
+        // active 切替は「現在のmodelとして使う」ボタン (handleActivate) からだけ行う。
+        activate: false,
         ...(trimmedLabel ? { displayLabel: trimmedLabel } : {}),
       });
       setConfig(next);
@@ -227,6 +238,23 @@ export function LLMSettingsPage({
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleActivate() {
+    if (activatingProvider || !storedProvider?.configured) return;
+    setActivatingProvider(true);
+    setActivated(false);
+    setError("");
+    try {
+      const next = await setActiveProvider(selectedProviderId);
+      setConfig(next);
+      adoptProvider(selectedProviderId, next);
+      setActivated(true);
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.activateError")), t));
+    } finally {
+      setActivatingProvider(false);
     }
   }
 
@@ -466,7 +494,7 @@ export function LLMSettingsPage({
             <div className="settings-section-heading">
               <div>
                 <span className="settings-kicker">{t("settings.remoteRoute")}</span>
-                <h2>{selectedDescriptor ? t("settings.providerConnection", { provider: providerLabel }) : t("settings.openRouterConnection")}</h2>
+                <h2>{selectedDescriptor ? t("settings.providerConnection", { provider: providerLabel }) : t("settings.modelConnection")}</h2>
               </div>
               <span className="provider-badge">{providerLabel}</span>
             </div>
@@ -565,6 +593,11 @@ export function LLMSettingsPage({
             )}
             {saved && (
               <p className="settings-saved" role="status"><Check size={14} /> {t("settings.saved")}</p>
+            )}
+            {activated && (
+              <p className="settings-saved" role="status">
+                <Check size={14} /> {t("settings.providerActivated", { provider: providerLabel })}
+              </p>
             )}
             {connectionTest === "success" && (
               <p className="settings-saved" role="status">
@@ -760,6 +793,23 @@ export function LLMSettingsPage({
                 disabled={saving || testingConnection || !storedProvider?.configured}
               >
                 {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
+              </button>
+              <button
+                className="settings-secondary"
+                type="button"
+                onClick={() => void handleActivate()}
+                disabled={
+                  saving
+                  || activatingProvider
+                  || !storedProvider?.configured
+                  || storedProvider?.isActive
+                }
+              >
+                {storedProvider?.isActive
+                  ? t("settings.providerIsActive")
+                  : activatingProvider
+                    ? t("settings.activatingProvider")
+                    : t("settings.activateProvider")}
               </button>
               <button className="settings-secondary" type="button" onClick={onBack} disabled={saving}>
                 {t("settings.back")}

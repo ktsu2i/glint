@@ -44,6 +44,15 @@ type ChatSidebarProps = {
   onClearSelection?: () => void;
 };
 
+function displayNameForProvider(config: LLMConfig | null, providerId: string): string {
+  if (!config) return providerId;
+  const descriptor = config.catalog.find((entry) => entry.id === providerId);
+  if (descriptor) return descriptor.displayName;
+  // openai_compatible:<slug> like custom instances are not in catalog by id;
+  // fall back to the raw id so users still see *something* meaningful.
+  return providerId;
+}
+
 export function ChatSidebar({ context, selection = null, onClearSelection }: ChatSidebarProps) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([
@@ -65,6 +74,10 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
   const activeProvider: ProviderSettings | null =
     llmConfig?.providers.find((provider) => provider.providerId === llmConfig.activeProviderId) ?? null;
   const providerConfigured = activeProvider?.configured ?? false;
+  const activeProviderLabel = activeProvider
+    ? (activeProvider.displayLabel || displayNameForProvider(llmConfig, activeProvider.providerId))
+    : "";
+  const activeModelLabel = activeProvider?.model ?? "";
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -297,7 +310,21 @@ export function ChatSidebar({ context, selection = null, onClearSelection }: Cha
           }}
         />
         <div className="composer-footer">
-          <span>{providerConfigured ? composerLabel : t("chat.openRouterRequired")}</span>
+          <div className="composer-footer-status">
+            {activeProvider ? (
+              <span
+                className={providerConfigured ? "composer-active-model" : "composer-active-model is-not-ready"}
+                title={`${activeProvider.providerId} / ${activeModelLabel}`}
+              >
+                {providerConfigured
+                  ? t("chat.activeModel", { provider: activeProviderLabel, model: activeModelLabel })
+                  : t("chat.activeModelNotReady")}
+              </span>
+            ) : (
+              <span className="composer-active-model is-not-ready">{t("chat.modelConnectionRequired")}</span>
+            )}
+            <span className="composer-context-label">{providerConfigured ? composerLabel : ""}</span>
+          </div>
           {sending ? (
             <button type="button" className="chat-cancel" onClick={() => void handleCancel()}>
               <span>{t("chat.cancel")}</span>

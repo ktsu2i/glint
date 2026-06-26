@@ -3070,7 +3070,38 @@ button.page-count:disabled {
   padding: 6px 7px 7px 11px;
 }
 
-.composer-footer > span {
+.composer-footer > span,
+.composer-footer-status {
+  color: var(--faint);
+  font-family: var(--utility-font);
+  font-size: 8px;
+}
+
+.composer-footer-status {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.composer-active-model {
+  color: var(--muted);
+  font-family: var(--utility-font);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-active-model.is-not-ready {
+  color: var(--faint);
+}
+
+.composer-context-label {
   color: var(--faint);
   font-family: var(--utility-font);
   font-size: 8px;

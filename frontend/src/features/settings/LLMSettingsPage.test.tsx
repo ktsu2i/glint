@@ -6,12 +6,14 @@ const backend = vi.hoisted(() => ({
   getLLMConfig: vi.fn(),
   testProviderConnection: vi.fn(),
   upsertProviderSettings: vi.fn(),
+  setActiveProvider: vi.fn(),
 }));
 
 vi.mock("../../shared/api/backend", () => ({
   getLLMConfig: backend.getLLMConfig,
   testProviderConnection: backend.testProviderConnection,
   upsertProviderSettings: backend.upsertProviderSettings,
+  setActiveProvider: backend.setActiveProvider,
 }));
 
 import { LLMSettingsPage } from "./LLMSettingsPage";
@@ -59,6 +61,7 @@ beforeEach(() => {
   backend.getLLMConfig.mockResolvedValue(configuredConfig());
   backend.testProviderConnection.mockResolvedValue({ providerId: "openrouter", ok: true });
   backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ model: "provider/next" }));
+  backend.setActiveProvider.mockResolvedValue(configuredConfig());
 });
 
 describe("LLMSettingsPage", () => {
@@ -97,7 +100,7 @@ describe("LLMSettingsPage", () => {
       options: { zdr: true },
       apiKey: "",
       clearApiKey: false,
-      activate: true,
+      activate: false,
     }));
     expect(await screen.findByRole("status")).toHaveProperty(
       "textContent",
@@ -122,7 +125,7 @@ describe("LLMSettingsPage", () => {
       options: { zdr: false },
       apiKey: "new-secret",
       clearApiKey: false,
-      activate: true,
+      activate: false,
     }));
   });
 
@@ -139,7 +142,7 @@ describe("LLMSettingsPage", () => {
       options: { zdr: true },
       apiKey: "",
       clearApiKey: true,
-      activate: true,
+      activate: false,
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "戻る" }));
@@ -185,6 +188,50 @@ describe("LLMSettingsPage", () => {
       "textContent",
       "OpenAIのAPI keyを確認してください。",
     );
+  });
+
+  it("does not preselect a catalog provider when nothing is configured", async () => {
+    backend.getLLMConfig.mockResolvedValue({
+      activeProviderId: "",
+      providers: [],
+      catalog: [openRouterDescriptor],
+    });
+    render(<LLMSettingsPage onBack={vi.fn()} />);
+
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalled());
+    // The OpenRouter pill is rendered in the picker but must NOT be marked as the
+    // editing target on first mount — choosing the catalog's first entry as the
+    // editing target was the old behavior we are removing in F7.
+    const openRouterPill = await screen.findByRole("radio", { name: "OpenRouter" });
+    expect(openRouterPill.getAttribute("aria-checked")).toBe("false");
+    // Save and Activate stay disabled because nothing is selected for editing.
+    expect(screen.getByRole("button", { name: "設定を保存" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "現在のmodelとして使う" })).toHaveProperty("disabled", true);
+  });
+
+  it("activates a configured provider through a dedicated action without touching save", async () => {
+    backend.getLLMConfig.mockResolvedValue({
+      activeProviderId: "",
+      providers: [{
+        providerId: "openrouter",
+        model: "provider/original",
+        options: { zdr: true },
+        hasApiKey: true,
+        configured: true,
+        isActive: false,
+      }],
+      catalog: [openRouterDescriptor],
+    });
+    backend.setActiveProvider.mockResolvedValue(configuredConfig());
+    render(<LLMSettingsPage onBack={vi.fn()} />);
+
+    const activateButton = await screen.findByRole("button", { name: "現在のmodelとして使う" });
+    fireEvent.click(activateButton);
+
+    await waitFor(() => expect(backend.setActiveProvider).toHaveBeenCalledWith("openrouter"));
+    // upsertProviderSettings must NOT be triggered by the activate action; it stays
+    // separated from saving credentials/model.
+    expect(backend.upsertProviderSettings).not.toHaveBeenCalled();
   });
 
   it("allows an OpenAI-compatible endpoint that does not require an API key", async () => {
@@ -240,7 +287,7 @@ describe("LLMSettingsPage", () => {
       },
       apiKey: "",
       clearApiKey: false,
-      activate: true,
+      activate: false,
     }));
   });
 });

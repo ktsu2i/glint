@@ -197,7 +197,7 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 	if err != nil {
 		return LLMConfig{}, err
 	}
-	if request.Activate || active == "" {
+	if request.Activate {
 		if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, providerID); err != nil {
 			return LLMConfig{}, err
 		}
