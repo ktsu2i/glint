@@ -20,10 +20,15 @@ const (
 	legacyLLMSettingKey      = "llm.openrouter"
 	legacyOpenRouterKeyEntry = "openrouter-api-key"
 
-	llmActiveProviderKey = "llm.active_provider"
-	llmProvidersKey      = "llm.providers"
-	llmMigrationDoneKey  = "llm.migration_v2_done"
-	llmKeyCleanupDoneKey = "llm.migration_v3_done"
+	llmActiveProviderKey  = "llm.active_provider"
+	llmProvidersKey       = "llm.providers"
+	llmRecentProvidersKey = "llm.recent_providers"
+	llmMigrationDoneKey   = "llm.migration_v2_done"
+	llmKeyCleanupDoneKey  = "llm.migration_v3_done"
+
+	// recentProvidersLimit は LRU で保持する provider id の最大件数。Zed の
+	// `RECENT` セクション相当で、第1フェーズでは3件あれば足りる。
+	recentProvidersLimit = 3
 )
 
 var ErrSecretNotFound = errors.New("credential not found")
@@ -74,9 +79,10 @@ type ProviderSettings struct {
 
 // LLMConfig は GetLLMConfig が返す top-level shape。
 type LLMConfig struct {
-	ActiveProviderID string                   `json:"activeProviderId"`
-	Providers        []ProviderSettings       `json:"providers"`
-	Catalog          []llm.ProviderDescriptor `json:"catalog"`
+	ActiveProviderID  string                   `json:"activeProviderId"`
+	Providers         []ProviderSettings       `json:"providers"`
+	Catalog           []llm.ProviderDescriptor `json:"catalog"`
+	RecentProviderIDs []string                 `json:"recentProviderIds"`
 }
 
 // UpsertProviderRequest は frontend が provider 設定を upsert する時の入力。
@@ -132,7 +138,7 @@ func (manager *Manager) GetLLMConfig(ctx context.Context) (LLMConfig, error) {
 	if err != nil {
 		return LLMConfig{}, err
 	}
-	return manager.buildConfig(active, stored)
+	return manager.buildConfig(ctx, active, stored)
 }
 
 // UpsertProviderSettings validates, persists, and optionally activates a
@@ -203,7 +209,7 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 		}
 		active = providerID
 	}
-	return manager.buildConfig(active, stored)
+	return manager.buildConfig(ctx, active, stored)
 }
 
 // DeleteProviderSettings removes the persisted config + credential for the
@@ -242,11 +248,12 @@ func (manager *Manager) DeleteProviderSettings(ctx context.Context, providerID s
 		}
 		active = ""
 	}
-	return manager.buildConfig(active, stored)
+	return manager.buildConfig(ctx, active, stored)
 }
 
 // SetActiveProvider switches the currently active provider. The target must
-// already exist in the stored config.
+// already exist in the stored config. Successful activations are recorded as
+// the most-recent provider in an LRU window so the composer can surface them.
 func (manager *Manager) SetActiveProvider(ctx context.Context, providerID string) (LLMConfig, error) {
 	if err := manager.ensureMigration(ctx); err != nil {
 		return LLMConfig{}, err
@@ -264,7 +271,12 @@ func (manager *Manager) SetActiveProvider(ctx context.Context, providerID string
 	if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, providerID); err != nil {
 		return LLMConfig{}, err
 	}
-	return manager.buildConfig(providerID, stored)
+	if providerID != "" {
+		if err := manager.touchRecentProvider(ctx, providerID); err != nil {
+			return LLMConfig{}, err
+		}
+	}
+	return manager.buildConfig(ctx, providerID, stored)
 }
 
 // Gateway resolves the active provider's config (and credential) each call so
@@ -354,7 +366,7 @@ func (manager *Manager) gatewayForProvider(ctx context.Context, providerID strin
 	return manager.registry.Build(cfg, deps)
 }
 
-func (manager *Manager) buildConfig(active string, stored map[string]storedProvider) (LLMConfig, error) {
+func (manager *Manager) buildConfig(ctx context.Context, active string, stored map[string]storedProvider) (LLMConfig, error) {
 	descriptors := manager.registry.Descriptors()
 	providers := make([]ProviderSettings, 0, len(stored))
 	ids := make([]string, 0, len(stored))
@@ -362,6 +374,11 @@ func (manager *Manager) buildConfig(active string, stored map[string]storedProvi
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	recent, err := manager.loadRecentProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	recent = pruneRecentProviders(recent, stored)
 	for _, id := range ids {
 		entry := stored[id]
 		descriptor, ok := manager.registry.Descriptor(llm.ProviderID(id))
@@ -397,9 +414,10 @@ func (manager *Manager) buildConfig(active string, stored map[string]storedProvi
 		})
 	}
 	return LLMConfig{
-		ActiveProviderID: active,
-		Providers:        providers,
-		Catalog:          descriptors,
+		ActiveProviderID:  active,
+		Providers:         providers,
+		Catalog:           descriptors,
+		RecentProviderIDs: recent,
 	}, nil
 }
 
@@ -435,6 +453,74 @@ func (manager *Manager) saveStoredProviders(ctx context.Context, stored map[stri
 		return fmt.Errorf("encode LLM provider settings: %w", err)
 	}
 	return manager.store.SaveSetting(ctx, llmProvidersKey, string(data))
+}
+
+func (manager *Manager) loadRecentProviders(ctx context.Context) ([]string, error) {
+	value, err := manager.store.Setting(ctx, llmRecentProvidersKey)
+	if err != nil {
+		return nil, err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	var recent []string
+	if err := json.Unmarshal([]byte(value), &recent); err != nil {
+		return nil, fmt.Errorf("decode LLM recent providers: %w", err)
+	}
+	return recent, nil
+}
+
+func (manager *Manager) saveRecentProviders(ctx context.Context, recent []string) error {
+	data, err := json.Marshal(recent)
+	if err != nil {
+		return fmt.Errorf("encode LLM recent providers: %w", err)
+	}
+	return manager.store.SaveSetting(ctx, llmRecentProvidersKey, string(data))
+}
+
+// touchRecentProvider moves providerID to the front of the LRU list and
+// trims it to recentProvidersLimit. Persisted so the composer can show the
+// same ordering on next launch.
+func (manager *Manager) touchRecentProvider(ctx context.Context, providerID string) error {
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		return nil
+	}
+	current, err := manager.loadRecentProviders(ctx)
+	if err != nil {
+		return err
+	}
+	next := make([]string, 0, len(current)+1)
+	next = append(next, providerID)
+	for _, id := range current {
+		if id == providerID {
+			continue
+		}
+		next = append(next, id)
+		if len(next) == recentProvidersLimit {
+			break
+		}
+	}
+	return manager.saveRecentProviders(ctx, next)
+}
+
+// pruneRecentProviders drops entries that no longer have a stored config so
+// the frontend never references a vanished provider.
+func pruneRecentProviders(recent []string, stored map[string]storedProvider) []string {
+	if len(recent) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(recent))
+	for _, id := range recent {
+		if _, exists := stored[id]; exists {
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func normalizedOptions(options map[string]any) map[string]any {

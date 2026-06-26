@@ -590,6 +590,7 @@ function AppContent() {
                       }}
                       selection={selection}
                       onClearSelection={() => setSelection(null)}
+                      onOpenSettings={openSettings}
                     />
                   </>
                 )}

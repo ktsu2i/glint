@@ -136,6 +136,7 @@ export type LLMConfig = {
   activeProviderId: string;
   providers: ProviderSettings[];
   catalog: ProviderDescriptor[];
+  recentProviderIds: string[];
 };
 
 export type UpsertProviderRequest = {

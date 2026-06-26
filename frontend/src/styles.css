@@ -3086,25 +3086,200 @@ button.page-count:disabled {
   flex: 1 1 auto;
 }
 
-.composer-active-model {
-  color: var(--muted);
+.composer-context-label {
+  color: var(--faint);
+  font-family: var(--utility-font);
+  font-size: 8px;
+}
+
+.model-selector-wrapper {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.composer-footer .model-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 6px;
+  background: transparent;
+  color: var(--faint);
+  border: 0;
+  border-radius: 4px;
   font-family: var(--utility-font);
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.02em;
+  cursor: pointer;
   max-width: 100%;
+  overflow: hidden;
+}
+
+.composer-footer .model-selector:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
+
+.composer-footer .model-selector.is-open {
+  color: var(--signal-deep);
+}
+
+.composer-footer .model-selector:focus-visible {
+  outline: 2px solid var(--signal-deep);
+  outline-offset: 1px;
+}
+
+.model-selector-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.composer-active-model.is-not-ready {
+.composer-footer .model-selector-empty {
   color: var(--faint);
 }
 
-.composer-context-label {
+.model-selector-popover {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  min-width: 240px;
+  max-width: 320px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  z-index: 40;
+}
+
+.model-selector-search {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.model-selector-search input {
+  width: 100%;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--utility-font);
+  font-size: 10px;
+}
+
+.model-selector-search input:focus-visible {
+  outline: none;
+  border-color: var(--signal-deep);
+}
+
+.model-selector-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.model-selector-section {
+  padding: 6px 10px 2px;
   color: var(--faint);
   font-family: var(--utility-font);
   font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model-selector-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.model-selector-option.is-focused,
+.model-selector-option:hover {
+  background: var(--surface-2, rgb(0 0 0 / 4%));
+}
+
+.model-selector-option-label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.model-selector-option-model {
+  font-family: var(--utility-font);
+  font-size: 10px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-selector-option-provider {
+  font-family: var(--utility-font);
+  font-size: 8px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-selector-empty-state {
+  margin: 0;
+  padding: 12px;
+  color: var(--faint);
+  font-family: var(--utility-font);
+  font-size: 9px;
+  text-align: center;
+}
+
+.composer-footer .model-selector-configure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--utility-font);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-radius: 0 0 6px 6px;
+}
+
+.composer-footer .model-selector-configure:hover {
+  background: var(--surface-2, rgb(0 0 0 / 4%));
+  color: var(--ink);
+}
+
+.provider-icon-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-family: var(--utility-font);
+  font-weight: 600;
+  text-transform: uppercase;
+  line-height: 1;
 }
 
 .composer-footer button {

@@ -14,6 +14,7 @@ const backend = vi.hoisted(() => ({
   getLLMConfig: vi.fn(),
   onAnswerDelta: vi.fn(),
   upsertProviderSettings: vi.fn(),
+  setActiveProvider: vi.fn(),
   startChat: vi.fn(),
 }));
 
@@ -22,6 +23,7 @@ vi.mock("../../shared/api/backend", () => ({
   getLLMConfig: backend.getLLMConfig,
   onAnswerDelta: backend.onAnswerDelta,
   upsertProviderSettings: backend.upsertProviderSettings,
+  setActiveProvider: backend.setActiveProvider,
   startChat: backend.startChat,
 }));
 
@@ -56,22 +58,108 @@ beforeEach(() => {
       optionSchema: [],
       capabilities: { streaming: true, tools: false, images: false },
     }],
+    recentProviderIds: [],
   });
+  backend.setActiveProvider.mockImplementation(async (providerId: string) => ({
+    activeProviderId: providerId,
+    providers: [{
+      providerId,
+      model: "provider/model",
+      options: {},
+      hasApiKey: true,
+      configured: true,
+      isActive: true,
+    }],
+    catalog: [{
+      id: "openrouter",
+      displayName: "OpenRouter",
+      authKind: "bearer",
+      optionSchema: [],
+      capabilities: { streaming: true, tools: false, images: false },
+    }],
+    recentProviderIds: [providerId],
+  }));
   backend.startChat.mockResolvedValue(undefined);
   backend.cancelChat.mockResolvedValue(undefined);
   vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "request-1") });
 });
 
 describe("ChatSidebar", () => {
-  it("shows the active provider and model in the composer footer", async () => {
+  it("shows the active model in the composer selector with a provider/model tooltip", async () => {
     render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
-    const label = await screen.findByText(/現在のmodel: OpenRouter \/ provider\/model/);
-    expect(label).toBeTruthy();
+    const selector = await screen.findByRole("button", { expanded: false, name: /provider\/model/ });
+    expect(selector.title).toBe("openrouter / provider/model");
+    expect(selector.textContent).toContain("provider/model");
   });
 
-  it("falls back to a generic 'configure a model' label when no provider is active", async () => {
+  it("switches active provider when the user picks one from the popover and updates the composer footer", async () => {
+    backend.getLLMConfig.mockResolvedValue({
+      activeProviderId: "openrouter",
+      providers: [
+        {
+          providerId: "openrouter",
+          model: "provider/model",
+          options: { zdr: true },
+          hasApiKey: true,
+          configured: true,
+          isActive: true,
+        },
+        {
+          providerId: "anthropic",
+          model: "claude-opus-4-7",
+          hasApiKey: true,
+          configured: true,
+          isActive: false,
+        },
+      ],
+      catalog: [
+        { id: "openrouter", displayName: "OpenRouter", authKind: "bearer", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
+        { id: "anthropic", displayName: "Anthropic", authKind: "x-api-key", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
+      ],
+      recentProviderIds: ["openrouter"],
+    });
+    backend.setActiveProvider.mockResolvedValueOnce({
+      activeProviderId: "anthropic",
+      providers: [
+        {
+          providerId: "openrouter",
+          model: "provider/model",
+          options: { zdr: true },
+          hasApiKey: true,
+          configured: true,
+          isActive: false,
+        },
+        {
+          providerId: "anthropic",
+          model: "claude-opus-4-7",
+          hasApiKey: true,
+          configured: true,
+          isActive: true,
+        },
+      ],
+      catalog: [
+        { id: "openrouter", displayName: "OpenRouter", authKind: "bearer", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
+        { id: "anthropic", displayName: "Anthropic", authKind: "x-api-key", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
+      ],
+      recentProviderIds: ["anthropic", "openrouter"],
+    });
+
+    render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
+    await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
+
+    const selector = await screen.findByRole("button", { name: /provider\/model/ });
+    fireEvent.click(selector);
+    fireEvent.click(await screen.findByRole("option", { name: /claude-opus-4-7/ }));
+
+    await waitFor(() => expect(backend.setActiveProvider).toHaveBeenCalledWith("anthropic"));
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: /claude-opus-4-7/ }).title,
+    ).toBe("anthropic / claude-opus-4-7"));
+  });
+
+  it("renders a 'choose a model' setup CTA when no provider is configured", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",
       providers: [],
@@ -82,11 +170,15 @@ describe("ChatSidebar", () => {
         optionSchema: [],
         capabilities: { streaming: true, tools: false, images: false },
       }],
+      recentProviderIds: [],
     });
-    render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
+    const onOpenSettings = vi.fn();
+    render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} onOpenSettings={onOpenSettings} />);
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
-    expect(await screen.findByText("質問するモデルを設定してください")).toBeTruthy();
+    const cta = await screen.findByRole("button", { name: "modelを選択" });
+    fireEvent.click(cta);
+    expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
   it("hides the context chip when there is no selection, ignores empty submissions, and unsubscribes", async () => {

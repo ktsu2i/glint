@@ -228,11 +228,76 @@ func TestSetActiveProviderRejectsUnknownAndClears(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = manager.SetActiveProvider(context.Background(), "unknown")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err, "unknown is not configured")
 
 	cleared, err := manager.SetActiveProvider(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, "", cleared.ActiveProviderID)
+}
+
+func TestSetActiveProviderTracksRecentProvidersAsLRU(t *testing.T) {
+	manager, settingStore, _ := newTestManager()
+	for _, request := range []UpsertProviderRequest{
+		{ProviderID: "openrouter", Model: "provider/router", APIKey: "k1"},
+		{ProviderID: "openai", Model: "gpt-5", APIKey: "k2"},
+		{ProviderID: "anthropic", Model: "claude-opus-4-7", APIKey: "k3"},
+		{ProviderID: "ollama", Model: "llama3"},
+	} {
+		_, err := manager.UpsertProviderSettings(context.Background(), request)
+		require.NoError(t, err)
+	}
+
+	first, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"openrouter"}, first.RecentProviderIDs)
+
+	second, err := manager.SetActiveProvider(context.Background(), "openai")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"openai", "openrouter"}, second.RecentProviderIDs)
+
+	// Re-activating openrouter promotes it back to the front without growing
+	// the list, proving the LRU updates rather than appends duplicates.
+	third, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"openrouter", "openai"}, third.RecentProviderIDs)
+
+	// Adding two more entries pushes the oldest out so the window stays at 3.
+	_, err = manager.SetActiveProvider(context.Background(), "anthropic")
+	require.NoError(t, err)
+	final, err := manager.SetActiveProvider(context.Background(), "ollama")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ollama", "anthropic", "openrouter"}, final.RecentProviderIDs)
+
+	// SQLite persistence proves the LRU survives a process restart.
+	assert.JSONEq(t, `["ollama","anthropic","openrouter"]`, settingStore.values[llmRecentProvidersKey])
+
+	// A fresh Manager (same store) reproduces the same recent list, as expected
+	// after re-mounting the frontend.
+	reborn := NewManager(settingStore, &memorySecretStore{values: map[string]string{}})
+	reloaded, err := reborn.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ollama", "anthropic", "openrouter"}, reloaded.RecentProviderIDs)
+}
+
+func TestRecentProvidersPruneDroppedEntries(t *testing.T) {
+	manager, _, _ := newTestManager()
+	for _, request := range []UpsertProviderRequest{
+		{ProviderID: "openrouter", Model: "provider/router", APIKey: "k1"},
+		{ProviderID: "openai", Model: "gpt-5", APIKey: "k2"},
+	} {
+		_, err := manager.UpsertProviderSettings(context.Background(), request)
+		require.NoError(t, err)
+	}
+	_, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	require.NoError(t, err)
+	_, err = manager.SetActiveProvider(context.Background(), "openai")
+	require.NoError(t, err)
+
+	// Deleting openrouter must drop it from the recent list so the composer
+	// never tries to switch to a vanished provider.
+	config, err := manager.DeleteProviderSettings(context.Background(), "openrouter")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"openai"}, config.RecentProviderIDs)
 }
 
 func TestMigrationCopiesLegacyOpenRouterIntoNewSchema(t *testing.T) {
