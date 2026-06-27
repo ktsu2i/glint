@@ -23,6 +23,18 @@ import { contextPreview, trimChatContext } from "../../shared/lib/text";
 import { localizeBackendError } from "../../shared/i18n/error";
 import { ModelSelector } from "./ModelSelector";
 
+const OPENAI_COMPATIBLE_PREFIX = "openai_compatible:";
+
+function envVarNameForChat(providerId: string): string {
+  const trimmed = providerId.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith(OPENAI_COMPATIBLE_PREFIX) && trimmed.length > OPENAI_COMPATIBLE_PREFIX.length) {
+    const slug = trimmed.slice(OPENAI_COMPATIBLE_PREFIX.length);
+    return `GLINT_OPENAI_COMPATIBLE_${slug.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+  }
+  return `GLINT_${trimmed.toUpperCase()}_API_KEY`;
+}
+
 type ReadingContext = {
   bookName: string;
   pageNumber: number;
@@ -323,6 +335,15 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
               onSelect={handleSelectModel}
               onOpenSettings={() => onOpenSettings?.()}
             />
+            {activeProvider?.credentialSource === "env" && (
+              <span
+                className="composer-env-badge"
+                role="status"
+                title={t("chat.credentialFromEnv", { env: envVarNameForChat(activeProvider.providerId) })}
+              >
+                env
+              </span>
+            )}
             <span className="composer-context-label">{providerConfigured ? composerLabel : ""}</span>
           </div>
           {sending ? (

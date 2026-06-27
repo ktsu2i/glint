@@ -138,6 +138,8 @@ export type ProviderDescriptor = {
   notes?: string;
 };
 
+export type CredentialSource = "env" | "keyring" | "none";
+
 export type ProviderSettings = {
   providerId: string;
   displayLabel?: string;
@@ -147,6 +149,7 @@ export type ProviderSettings = {
   hasApiKey: boolean;
   configured: boolean;
   isActive: boolean;
+  credentialSource?: CredentialSource;
 };
 
 export type ActiveModelRef = {

@@ -93,6 +93,19 @@ function isOpenAICompatibleInstance(providerId: string): boolean {
   return providerId.startsWith(OPENAI_COMPATIBLE_PREFIX) && providerId.length > OPENAI_COMPATIBLE_PREFIX.length;
 }
 
+// Mirror of internal/settings.envVarNameFor — the UI shows this string so users
+// know which env var is currently overriding the keyring value.
+function envVarNameFor(providerId: string): string {
+  const trimmed = providerId.trim();
+  if (!trimmed) return "";
+  if (isOpenAICompatibleInstance(trimmed)) {
+    const slug = trimmed.slice(OPENAI_COMPATIBLE_PREFIX.length);
+    if (!slug) return "";
+    return `GLINT_OPENAI_COMPATIBLE_${slug.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+  }
+  return `GLINT_${trimmed.toUpperCase()}_API_KEY`;
+}
+
 function resolveDescriptor(config: LLMConfig, providerId: string): ProviderDescriptor | null {
   if (isOpenAICompatibleInstance(providerId)) {
     return config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null;
@@ -905,8 +918,13 @@ export function LLMSettingsPage({
               <ul className="provider-list" aria-label={t("settings.providerListAria")}>
                 {rows.map((row) => {
                   const isManaged = managedProviderId === row.rowId;
+                  const requiresKeyForRow = row.descriptor.authKind !== "none"
+                    && !(row.isCustom && row.stored?.options?.requires_api_key === false);
+                  const usesEnvCredential = row.stored?.credentialSource === "env";
                   const inlineEligible = !row.isCustom
-                    && row.descriptor.authKind !== "none";
+                    && row.descriptor.authKind !== "none"
+                    && !usesEnvCredential;
+                  const envVarName = requiresKeyForRow ? envVarNameFor(row.providerId) : "";
                   const isActive = row.stored?.isActive ?? false;
                   let statusLabel: string;
                   let statusKind: "configured" | "missing" | "endpoint" | "active";
@@ -943,6 +961,15 @@ export function LLMSettingsPage({
                           {(statusKind === "configured" || statusKind === "active") && <Check size={11} />}
                           <span>{statusLabel}</span>
                         </span>
+                        {usesEnvCredential && envVarName && (
+                          <span
+                            className="provider-row-env-badge"
+                            role="status"
+                            title={t("settings.credentialFromEnvHelp", { env: envVarName })}
+                          >
+                            <Key size={10} /> {t("settings.credentialFromEnvBadge")}
+                          </span>
+                        )}
                         <div className="provider-row-action">
                           {inlineEligible && !isManaged && (
                             <InlineApiKeyForm
@@ -1045,6 +1072,12 @@ export function LLMSettingsPage({
                           {requiresAPIKey && (
                             <fieldset className="settings-fieldset" disabled={loading || saving}>
                               <legend>{t("settings.credential")}</legend>
+                              {usesEnvCredential && envVarName && (
+                                <p className="provider-row-env-note" role="status">
+                                  <Key size={12} />{" "}
+                                  {t("settings.credentialFromEnvHelp", { env: envVarName })}
+                                </p>
+                              )}
                               <div className="settings-field">
                                 <span className="settings-field-label">
                                   <label htmlFor={`provider-api-key-${row.rowId}`}>{t("settings.apiKey")}</label>

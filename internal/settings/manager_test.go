@@ -737,3 +737,194 @@ type failingSecretStore struct{}
 func (failingSecretStore) Get(string, string) (string, error) { return "", errors.New("locked") }
 func (failingSecretStore) Set(string, string, string) error   { return errors.New("locked") }
 func (failingSecretStore) Delete(string, string) error        { return errors.New("locked") }
+
+func TestEnvVarNameFor(t *testing.T) {
+	assert.Equal(t, "GLINT_OPENROUTER_API_KEY", envVarNameFor("openrouter"))
+	assert.Equal(t, "GLINT_OPENAI_API_KEY", envVarNameFor("openai"))
+	assert.Equal(t, "GLINT_ANTHROPIC_API_KEY", envVarNameFor("anthropic"))
+	assert.Equal(t, "GLINT_GOOGLE_API_KEY", envVarNameFor("google"))
+	assert.Equal(t, "GLINT_OLLAMA_API_KEY", envVarNameFor("ollama"))
+	// openai_compatible:<slug> normalizes the slug to uppercase + underscores.
+	assert.Equal(t, "GLINT_OPENAI_COMPATIBLE_GROQ_API_KEY", envVarNameFor("openai_compatible:groq"))
+	assert.Equal(t, "GLINT_OPENAI_COMPATIBLE_MY_TENANT_API_KEY", envVarNameFor("openai_compatible:my-tenant"))
+	// Template id without a slug must not produce a usable env var name.
+	assert.Equal(t, "", envVarNameFor("openai_compatible"))
+	assert.Equal(t, "", envVarNameFor(""))
+}
+
+func TestResolveAPIKeyPrefersEnvOverKeyring(t *testing.T) {
+	manager, _, secretStore := newTestManager()
+	secretStore.values[secretKey(credentialService, apiKeyAccount("openai"))] = "keyring-value"
+	manager.lookupEnv = func(name string) (string, bool) {
+		if name == "GLINT_OPENAI_API_KEY" {
+			return "env-value", true
+		}
+		return "", false
+	}
+
+	value, source, err := manager.resolveAPIKey("openai")
+	require.NoError(t, err)
+	assert.Equal(t, "env-value", value)
+	assert.Equal(t, CredentialSourceEnv, source)
+}
+
+func TestResolveAPIKeyFallsBackToKeyringWhenEnvUnset(t *testing.T) {
+	manager, _, secretStore := newTestManager()
+	secretStore.values[secretKey(credentialService, apiKeyAccount("openai"))] = "keyring-value"
+	manager.lookupEnv = func(string) (string, bool) { return "", false }
+
+	value, source, err := manager.resolveAPIKey("openai")
+	require.NoError(t, err)
+	assert.Equal(t, "keyring-value", value)
+	assert.Equal(t, CredentialSourceKeyring, source)
+}
+
+func TestResolveAPIKeyIgnoresBlankEnvValues(t *testing.T) {
+	// A blank env var must not silently win over a real keyring entry.
+	manager, _, secretStore := newTestManager()
+	secretStore.values[secretKey(credentialService, apiKeyAccount("openai"))] = "keyring-value"
+	manager.lookupEnv = func(name string) (string, bool) {
+		if name == "GLINT_OPENAI_API_KEY" {
+			return "   ", true
+		}
+		return "", false
+	}
+
+	value, source, err := manager.resolveAPIKey("openai")
+	require.NoError(t, err)
+	assert.Equal(t, "keyring-value", value)
+	assert.Equal(t, CredentialSourceKeyring, source)
+}
+
+func TestResolveAPIKeyReturnsNoneWhenNothingAvailable(t *testing.T) {
+	manager, _, _ := newTestManager()
+	manager.lookupEnv = func(string) (string, bool) { return "", false }
+
+	value, source, err := manager.resolveAPIKey("openai")
+	require.NoError(t, err)
+	assert.Equal(t, "", value)
+	assert.Equal(t, CredentialSourceNone, source)
+}
+
+func TestGatewayPrefersEnvKeyOverKeyring(t *testing.T) {
+	var seenAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		seenAuth = request.Header.Get("Authorization")
+		writer.Header().Set("Content-Type", "text/event-stream")
+		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Options:    map[string]any{"base_url": server.URL},
+		APIKey:     "keyring-value",
+	})
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
+	require.NoError(t, err)
+
+	manager.lookupEnv = func(name string) (string, bool) {
+		if name == "GLINT_OPENAI_API_KEY" {
+			return "env-value", true
+		}
+		return "", false
+	}
+
+	// TestProviderConnection drives Gateway -> chat request through openai
+	// adapter, so the wire-level Authorization header reflects whichever key
+	// the manager handed to the gateway.
+	result, err := manager.TestProviderConnection(context.Background(), "openai")
+	require.NoError(t, err)
+	assert.True(t, result.OK, "expected env key to satisfy the upstream: %s", result.Error)
+	assert.Equal(t, "Bearer env-value", seenAuth)
+}
+
+func TestProviderSettingsSurfacesCredentialSource(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai", APIKey: "keyring",
+	})
+	require.NoError(t, err)
+
+	// Without an env var the source is keyring.
+	manager.lookupEnv = func(string) (string, bool) { return "", false }
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, CredentialSourceKeyring, config.Providers[0].CredentialSource)
+	assert.True(t, config.Providers[0].HasAPIKey)
+
+	// With an env var override the source switches to env, and the API key
+	// itself is never returned over the Wails boundary (only the source flag).
+	manager.lookupEnv = func(name string) (string, bool) {
+		if name == "GLINT_OPENAI_API_KEY" {
+			return "env-only-secret", true
+		}
+		return "", false
+	}
+	config, err = manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	encoded, err := json.Marshal(config)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "env-only-secret", "secret must never appear in wire payload")
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, CredentialSourceEnv, config.Providers[0].CredentialSource)
+	assert.True(t, config.Providers[0].HasAPIKey)
+	assert.True(t, config.Providers[0].Configured)
+}
+
+func TestEnvVarMakesUnconfiguredProviderConfigured(t *testing.T) {
+	// A provider with no keyring entry still becomes configured when the env
+	// var supplies the credential. This is the dev / CI scenario the design
+	// optimizes for.
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+	})
+	require.NoError(t, err)
+
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.False(t, config.Providers[0].Configured)
+
+	manager.lookupEnv = func(name string) (string, bool) {
+		if name == "GLINT_OPENAI_API_KEY" {
+			return "env-value", true
+		}
+		return "", false
+	}
+	config, err = manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.True(t, config.Providers[0].Configured)
+	assert.True(t, config.Providers[0].HasAPIKey)
+	assert.Equal(t, CredentialSourceEnv, config.Providers[0].CredentialSource)
+}
+
+func TestEnvVarForOpenAICompatibleUsesSlugNamespace(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID:   "openai_compatible:my-tenant",
+		DisplayLabel: "Tenant",
+		Options: map[string]any{
+			"base_url":         "http://localhost:1234/v1",
+			"requires_api_key": true,
+		},
+	})
+	require.NoError(t, err)
+
+	manager.lookupEnv = func(name string) (string, bool) {
+		if name == "GLINT_OPENAI_COMPATIBLE_MY_TENANT_API_KEY" {
+			return "env-value", true
+		}
+		return "", false
+	}
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	require.Len(t, config.Providers, 1)
+	assert.Equal(t, CredentialSourceEnv, config.Providers[0].CredentialSource)
+	assert.True(t, config.Providers[0].HasAPIKey)
+}

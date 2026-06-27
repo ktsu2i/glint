@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -84,17 +85,30 @@ type ActiveModelRef struct {
 	ModelID    string `json:"modelId"`
 }
 
+// CredentialSource は frontend に「現在 chat で使われる API key が
+// どこから来ているか」を伝える。env 由来時はユーザーが Settings で見ている
+// 値（keyring）と違う key が使われている可能性があるため、UI でバッジを
+// 出して混乱を防ぐ。
+type CredentialSource string
+
+const (
+	CredentialSourceNone    CredentialSource = "none"
+	CredentialSourceKeyring CredentialSource = "keyring"
+	CredentialSourceEnv     CredentialSource = "env"
+)
+
 // ProviderSettings は frontend へ返す1 provider 分の状態。secret 自体は含まない。
 // F10 で `Model` (per-provider last-used) と `Models` (registered set) を分けた。
 type ProviderSettings struct {
-	ProviderID   string         `json:"providerId"`
-	DisplayLabel string         `json:"displayLabel,omitempty"`
-	Model        string         `json:"model"`            // 直近に SetActiveModel で選ばれた model id（per-provider memory）
-	Models       []string       `json:"models,omitempty"` // openai_compatible の手動登録 model id
-	Options      map[string]any `json:"options,omitempty"`
-	HasAPIKey    bool           `json:"hasApiKey"`
-	Configured   bool           `json:"configured"`
-	IsActive     bool           `json:"isActive"`
+	ProviderID       string           `json:"providerId"`
+	DisplayLabel     string           `json:"displayLabel,omitempty"`
+	Model            string           `json:"model"`            // 直近に SetActiveModel で選ばれた model id（per-provider memory）
+	Models           []string         `json:"models,omitempty"` // openai_compatible の手動登録 model id
+	Options          map[string]any   `json:"options,omitempty"`
+	HasAPIKey        bool             `json:"hasApiKey"`
+	Configured       bool             `json:"configured"`
+	IsActive         bool             `json:"isActive"`
+	CredentialSource CredentialSource `json:"credentialSource"`
 }
 
 // LLMConfig は GetLLMConfig が返す top-level shape。
@@ -148,19 +162,21 @@ type storedModelCache struct {
 }
 
 type Manager struct {
-	store    SettingStore
-	secrets  SecretStore
-	registry *llm.Registry
-	now      func() time.Time
-	migrated bool
+	store     SettingStore
+	secrets   SecretStore
+	registry  *llm.Registry
+	now       func() time.Time
+	lookupEnv func(string) (string, bool)
+	migrated  bool
 }
 
 func NewManager(store SettingStore, secrets SecretStore) *Manager {
 	return &Manager{
-		store:    store,
-		secrets:  secrets,
-		registry: llm.NewRegistry(),
-		now:      time.Now,
+		store:     store,
+		secrets:   secrets,
+		registry:  llm.NewRegistry(),
+		now:       time.Now,
+		lookupEnv: os.LookupEnv,
 	}
 }
 
@@ -483,7 +499,7 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 	}
 	deps := llm.Deps{}
 	if providerRequiresAPIKey(descriptor, cfg) {
-		apiKey, secretErr := manager.secrets.Get(credentialService, apiKeyAccount(providerID))
+		apiKey, _, secretErr := manager.resolveAPIKey(providerID)
 		if secretErr == nil {
 			deps.APIKey = apiKey
 		}
@@ -655,12 +671,12 @@ func (manager *Manager) gatewayForModel(ctx context.Context, providerID, modelID
 		Model: manager.resolveModelDescriptor(ctx, providerID, modelID),
 	}
 	if providerRequiresAPIKey(descriptor, cfg) {
-		apiKey, err := manager.secrets.Get(credentialService, apiKeyAccount(providerID))
-		if errors.Is(err, ErrSecretNotFound) {
-			return nil, fmt.Errorf("%sのAPI keyを設定してください。", descriptor.DisplayName)
-		}
+		apiKey, source, err := manager.resolveAPIKey(providerID)
 		if err != nil {
 			return nil, fmt.Errorf("read %s API key from credential store: %w", providerID, err)
+		}
+		if source == CredentialSourceNone {
+			return nil, fmt.Errorf("%sのAPI keyを設定してください。", descriptor.DisplayName)
 		}
 		deps.APIKey = apiKey
 	}
@@ -727,12 +743,15 @@ func (manager *Manager) buildConfig(ctx context.Context, active *ActiveModelRef,
 			Options:      entry.Options,
 		}
 		hasKey := false
+		source := CredentialSourceNone
 		if providerRequiresAPIKey(descriptor, cfg) {
-			_, err := manager.secrets.Get(credentialService, apiKeyAccount(id))
-			if err == nil {
-				hasKey = true
-			} else if !errors.Is(err, ErrSecretNotFound) {
+			_, resolvedSource, err := manager.resolveAPIKey(id)
+			if err != nil {
 				return LLMConfig{}, fmt.Errorf("read %s API key from credential store: %w", id, err)
+			}
+			source = resolvedSource
+			if resolvedSource != CredentialSourceNone {
+				hasKey = true
 			}
 		}
 		validationErr := manager.registry.Validate(cfg)
@@ -743,14 +762,15 @@ func (manager *Manager) buildConfig(ctx context.Context, active *ActiveModelRef,
 			configured = false
 		}
 		providers = append(providers, ProviderSettings{
-			ProviderID:   id,
-			DisplayLabel: entry.DisplayLabel,
-			Model:        entry.Model,
-			Models:       append([]string(nil), entry.Models...),
-			Options:      entry.Options,
-			HasAPIKey:    hasKey,
-			Configured:   configured,
-			IsActive:     id == activeProviderID,
+			ProviderID:       id,
+			DisplayLabel:     entry.DisplayLabel,
+			Model:            entry.Model,
+			Models:           append([]string(nil), entry.Models...),
+			Options:          entry.Options,
+			HasAPIKey:        hasKey,
+			Configured:       configured,
+			IsActive:         id == activeProviderID,
+			CredentialSource: source,
 		})
 	}
 	return LLMConfig{
@@ -1063,6 +1083,53 @@ func normalizedOptions(options map[string]any) map[string]any {
 
 func apiKeyAccount(providerID string) string {
 	return "llm." + providerID + ".api_key"
+}
+
+// envVarNameFor returns the env var name that overrides the keyring API key
+// for the given provider. openai_compatible:<slug> maps to
+// GLINT_OPENAI_COMPATIBLE_<UPPER_SLUG>_API_KEY (slug `-` becomes `_`). The
+// bare template id `openai_compatible` is rejected because it never represents
+// a real configured provider.
+func envVarNameFor(providerID string) string {
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" || providerID == string(llm.ProviderOpenAICompatible) {
+		return ""
+	}
+	if llm.IsOpenAICompatibleID(llm.ProviderID(providerID)) {
+		slug := llm.OpenAICompatibleSlug(llm.ProviderID(providerID))
+		if slug == "" {
+			return ""
+		}
+		normalized := strings.ToUpper(strings.ReplaceAll(slug, "-", "_"))
+		return "GLINT_OPENAI_COMPATIBLE_" + normalized + "_API_KEY"
+	}
+	return "GLINT_" + strings.ToUpper(providerID) + "_API_KEY"
+}
+
+// resolveAPIKey returns the API key for a provider, preferring the env var
+// override over the keyring entry. The boolean indicates whether a key was
+// found at all; the CredentialSource tells callers which storage produced it
+// so the UI can warn about env-driven overrides.
+func (manager *Manager) resolveAPIKey(providerID string) (string, CredentialSource, error) {
+	if envName := envVarNameFor(providerID); envName != "" && manager.lookupEnv != nil {
+		if value, ok := manager.lookupEnv(envName); ok {
+			value = strings.TrimSpace(value)
+			if value != "" {
+				return value, CredentialSourceEnv, nil
+			}
+		}
+	}
+	value, err := manager.secrets.Get(credentialService, apiKeyAccount(providerID))
+	if errors.Is(err, ErrSecretNotFound) {
+		return "", CredentialSourceNone, nil
+	}
+	if err != nil {
+		return "", CredentialSourceNone, err
+	}
+	if strings.TrimSpace(value) == "" {
+		return "", CredentialSourceNone, nil
+	}
+	return value, CredentialSourceKeyring, nil
 }
 
 func providerRequiresAPIKey(descriptor llm.ProviderDescriptor, cfg llm.ProviderConfig) bool {

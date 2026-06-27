@@ -443,6 +443,43 @@ describe("LLMSettingsPage", () => {
     expect(customRow!.getAttribute("class")).toContain("is-expanded");
   });
 
+  it("shows an env override badge when the backend reports credentialSource=env", async () => {
+    backend.getLLMConfig.mockResolvedValue({
+      activeProviderId: "openai",
+      activeModelRef: { providerId: "openai", modelId: "gpt-5" },
+      providers: [{
+        providerId: "openai",
+        model: "gpt-5",
+        models: [],
+        options: {},
+        hasApiKey: true,
+        configured: true,
+        isActive: true,
+        credentialSource: "env",
+      }],
+      catalog: [openAIDescriptor],
+      recentProviderIds: ["openai"],
+      recentModels: [{ providerId: "openai", modelId: "gpt-5" }],
+    });
+    backend.listProviderModels.mockResolvedValue({
+      providerId: "openai",
+      models: [{ id: "gpt-5", source: "builtin" }],
+      source: "builtin",
+    });
+    render(<LLMSettingsPage onBack={vi.fn()} />);
+
+    // The summary row shows a small env badge so the user notices that the
+    // active key is coming from outside the keyring.
+    const badge = await screen.findByText("env上書き中");
+    expect(badge).toBeTruthy();
+    expect(badge.getAttribute("title")).toContain("GLINT_OPENAI_API_KEY");
+
+    // The Manage panel surfaces the same env var name in a longer notice so
+    // users editing credentials understand the override is active.
+    const note = screen.getByText(/API keyを GLINT_OPENAI_API_KEY から/);
+    expect(note).toBeTruthy();
+  });
+
   it("adds a manual model to a custom provider via the AddCustomModel API", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",

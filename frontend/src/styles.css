@@ -2914,6 +2914,38 @@ button.page-count:disabled {
   letter-spacing: 0.03em;
 }
 
+.provider-row-env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--signal-deep);
+  border-radius: 999px;
+  color: var(--signal-deep);
+  background: transparent;
+  font-family: var(--utility-font);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+.provider-row-env-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--signal-deep);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--signal-deep);
+  font-family: var(--utility-font);
+  font-size: 10px;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+}
+
 .provider-row-detail {
   display: flex;
   flex-direction: column;
@@ -3516,6 +3548,21 @@ button.page-count:disabled {
   color: var(--faint);
   font-family: var(--utility-font);
   font-size: 8px;
+}
+
+.composer-env-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--signal-deep);
+  border-radius: 999px;
+  color: var(--signal-deep);
+  background: transparent;
+  font-family: var(--utility-font);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: help;
 }
 
 .model-selector-wrapper {
