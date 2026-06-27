@@ -970,17 +970,23 @@ export function PdfReader({
         </div>
         <div className="reader-controls" aria-label={t("reader.pageControls")}>
           <ToolButton
-            label={t("reader.previousPage")}
-            disabled={pageNumber <= 1}
+            label={
+              isRtlBinding ? t("reader.nextPage") : t("reader.previousPage")
+            }
+            disabled={
+              isRtlBinding
+                ? !document || pageNumber + step > document.numPages
+                : pageNumber <= 1
+            }
             onClick={() =>
-              setPageNumber((current) => Math.max(1, current - step))
+              isRtlBinding
+                ? setPageNumber((current) =>
+                    Math.min(document!.numPages, current + step),
+                  )
+                : setPageNumber((current) => Math.max(1, current - step))
             }
           >
-            {isRtlBinding ? (
-              <CaretRight size={15} weight="bold" />
-            ) : (
-              <CaretLeft size={15} weight="bold" />
-            )}
+            <CaretLeft size={15} weight="bold" />
           </ToolButton>
           {isEditingPage ? (
             <form
@@ -1028,19 +1034,23 @@ export function PdfReader({
             </button>
           )}
           <ToolButton
-            label={t("reader.nextPage")}
-            disabled={!document || pageNumber + step > document.numPages}
+            label={
+              isRtlBinding ? t("reader.previousPage") : t("reader.nextPage")
+            }
+            disabled={
+              isRtlBinding
+                ? pageNumber <= 1
+                : !document || pageNumber + step > document.numPages
+            }
             onClick={() =>
-              setPageNumber((current) =>
-                Math.min(document!.numPages, current + step),
-              )
+              isRtlBinding
+                ? setPageNumber((current) => Math.max(1, current - step))
+                : setPageNumber((current) =>
+                    Math.min(document!.numPages, current + step),
+                  )
             }
           >
-            {isRtlBinding ? (
-              <CaretLeft size={15} weight="bold" />
-            ) : (
-              <CaretRight size={15} weight="bold" />
-            )}
+            <CaretRight size={15} weight="bold" />
           </ToolButton>
           <ToolButton
             label={
