@@ -55,7 +55,7 @@ const openAIDescriptor = {
 
 const anthropicDescriptor = {
   id: "anthropic",
-  displayName: "Anthropic Claude",
+  displayName: "Anthropic",
   authKind: "x-api-key" as const,
   optionSchema: [],
   capabilities: { streaming: true, tools: false, images: false },
@@ -63,7 +63,7 @@ const anthropicDescriptor = {
 
 const googleDescriptor = {
   id: "google",
-  displayName: "Google Gemini",
+  displayName: "Google",
   authKind: "x-api-key" as const,
   optionSchema: [],
   capabilities: { streaming: true, tools: false, images: false },
@@ -71,7 +71,7 @@ const googleDescriptor = {
 
 const ollamaDescriptor = {
   id: "ollama",
-  displayName: "Ollama (local)",
+  displayName: "Ollama",
   authKind: "none" as const,
   defaultBaseUrl: "http://localhost:11434/v1",
   optionSchema: [],
@@ -147,11 +147,15 @@ describe("LLMSettingsPage", () => {
     const list = await screen.findByRole("list", { name: "Model provider一覧" });
     const row = within(list).getAllByRole("listitem")[0]!;
     expect(row.querySelector(".provider-row-detail")).toBeNull();
-    expect(within(row).queryByLabelText("OpenRouterのAPI key")).toBeNull();
     expect(within(row).getByText(/現在のmodel|設定済み/)).toBeTruthy();
+
+    fireEvent.click(within(row).getByRole("button", { name: /OpenRouter/ }));
+    expect(row.querySelector(".provider-row-detail")).toBeTruthy();
+    expect(within(row).getByLabelText("API key")).toBeTruthy();
     expect(within(row).getByRole("button", { name: "保存済みAPI keyを削除" })).toBeTruthy();
     expect(within(row).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
-    expect(within(row).queryByRole("button", { name: "詳細設定" })).toBeNull();
+    expect(within(row).getByRole("button", { name: "設定を保存" })).toBeTruthy();
+
     expect(screen.getByText("modelの選択と管理はchatサイドバーから行います。")).toBeTruthy();
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(modelAPI.listProviderModels).not.toHaveBeenCalled();
@@ -160,15 +164,17 @@ describe("LLMSettingsPage", () => {
     expect(modelAPI.removeCustomModel).not.toHaveBeenCalled();
   });
 
-  it("stores a new built-in API key inline without provider options", async () => {
+  it("stores a new built-in API key from the expanded panel", async () => {
     backend.getLLMConfig.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    const keyInput = await screen.findByLabelText("OpenRouterのAPI key");
+    const list = await screen.findByRole("list", { name: "Model provider一覧" });
+    fireEvent.click(within(list).getByRole("button", { name: /OpenRouter/ }));
+    const keyInput = within(list).getByLabelText("API key");
     fireEvent.change(keyInput, { target: { value: "new-secret" } });
-    fireEvent.click(screen.getByRole("button", { name: "API keyを表示" }));
+    fireEvent.click(within(list).getByRole("button", { name: "API keyを表示" }));
     expect(keyInput).toHaveProperty("type", "text");
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(within(list).getByRole("button", { name: "設定を保存" }));
 
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "openrouter",
@@ -178,11 +184,15 @@ describe("LLMSettingsPage", () => {
     }));
   });
 
-  it("removes a stored built-in API key directly from the row", async () => {
+  it("removes a stored built-in API key from the expanded panel", async () => {
     backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "保存済みAPI keyを削除" }));
+    const list = await screen.findByRole("list", { name: "Model provider一覧" });
+    fireEvent.click(within(list).getByRole("button", { name: /OpenRouter/ }));
+    fireEvent.click(within(list).getByRole("button", { name: "保存済みAPI keyを削除" }));
+    fireEvent.click(within(list).getByRole("button", { name: "設定を保存" }));
+
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "openrouter",
       options: {},
@@ -204,10 +214,12 @@ describe("LLMSettingsPage", () => {
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledTimes(2));
   });
 
-  it("tests a saved built-in provider from the compact row", async () => {
+  it("tests a saved built-in provider from the expanded panel", async () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
+    const list = await screen.findByRole("list", { name: "Model provider一覧" });
+    fireEvent.click(within(list).getByRole("button", { name: /OpenRouter/ }));
+    fireEvent.click(within(list).getByRole("button", { name: "接続をテスト" }));
 
     await waitFor(() => expect(backend.testProviderConnection).toHaveBeenCalledWith("openrouter"));
     expect(
@@ -223,7 +235,9 @@ describe("LLMSettingsPage", () => {
     });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
+    const list = await screen.findByRole("list", { name: "Model provider一覧" });
+    fireEvent.click(within(list).getByRole("button", { name: /OpenRouter/ }));
+    fireEvent.click(within(list).getByRole("button", { name: "接続をテスト" }));
 
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
@@ -246,8 +260,8 @@ describe("LLMSettingsPage", () => {
     const openRouterRow = within(list).getAllByRole("listitem")[0]!;
     expect(openRouterRow.textContent).toContain("OpenRouter");
     expect(openRouterRow.getAttribute("class")).not.toContain("is-expanded");
-    expect(within(openRouterRow).queryByRole("button", { name: /^詳細設定/ })).toBeNull();
-    expect(within(openRouterRow).getByLabelText("OpenRouterのAPI key")).toBeTruthy();
+    expect(openRouterRow.querySelector(".provider-row-detail")).toBeNull();
+    expect(within(openRouterRow).queryByLabelText("API key")).toBeNull();
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(screen.queryByRole("button", { name: "設定を保存" })).toBeNull();
   });
@@ -263,11 +277,14 @@ describe("LLMSettingsPage", () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     const list = await screen.findByRole("list", { name: "Model provider一覧" });
-    expect(within(list).getByLabelText("OpenRouterのAPI key")).toBeTruthy();
-    expect(within(list).getByLabelText("OpenAIのAPI key")).toBeTruthy();
-    expect(within(list).getByLabelText("Anthropic ClaudeのAPI key")).toBeTruthy();
-    expect(within(list).getByLabelText("Google GeminiのAPI key")).toBeTruthy();
-    expect(within(list).queryByRole("button", { name: "詳細設定" })).toBeNull();
+    for (const name of ["OpenRouter", "OpenAI", "Anthropic", "Google"]) {
+      const row = within(list).getAllByRole("listitem").find((item) =>
+        item.querySelector(".provider-row-name")?.textContent === name,
+      )!;
+      fireEvent.click(within(row).getByRole("button", { name: new RegExp(name) }));
+      expect(within(row).getByLabelText("API key")).toBeTruthy();
+      fireEvent.click(within(row).getByRole("button", { name: new RegExp(name) }));
+    }
     for (const label of [
       "Base URL",
       "Anthropic version",
@@ -281,10 +298,11 @@ describe("LLMSettingsPage", () => {
       expect(screen.queryByText(label)).toBeNull();
     }
     const ollamaRow = within(list).getAllByRole("listitem").find((row) =>
-      row.querySelector(".provider-row-name")?.textContent === "Ollama (local)",
+      row.querySelector(".provider-row-name")?.textContent === "Ollama",
     )!;
-    expect(within(ollamaRow).queryByRole("textbox")).toBeNull();
     expect(within(ollamaRow).getByText("Endpoint: http://localhost:11434/v1")).toBeTruthy();
+    fireEvent.click(within(ollamaRow).getByRole("button", { name: /Ollama/ }));
+    expect(within(ollamaRow).queryByRole("textbox")).toBeNull();
     expect(within(ollamaRow).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
   });
 
@@ -314,7 +332,8 @@ describe("LLMSettingsPage", () => {
     backend.upsertProviderSettings.mockResolvedValue(customConfig);
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    expect(await screen.findByDisplayValue("Local")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: /Local/ }));
+    expect(screen.getByDisplayValue("Local")).toBeTruthy();
     expect(screen.getByDisplayValue("http://localhost:8080/v1")).toBeTruthy();
     expect(screen.queryByText("local-model")).toBeNull();
     expect(screen.queryByLabelText("API key")).toBeNull();
@@ -397,7 +416,8 @@ describe("LLMSettingsPage", () => {
     backend.testProviderConnection.mockResolvedValue({ providerId: "ollama", ok: true });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Ollama/ }));
+    fireEvent.click(screen.getByRole("button", { name: "接続をテスト" }));
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "ollama",
       options: {},
@@ -405,10 +425,10 @@ describe("LLMSettingsPage", () => {
       clearApiKey: false,
     }));
     await waitFor(() => expect(backend.testProviderConnection).toHaveBeenCalledWith("ollama"));
-    expect(await screen.findByText("Ollama (local)への接続に成功しました。")).toBeTruthy();
+    expect(await screen.findByText("Ollamaへの接続に成功しました。")).toBeTruthy();
   });
 
-  it("saves an API key inline from the row without entering the Manage panel", async () => {
+  it("saves an API key from the expanded provider row", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",
       providers: [],
@@ -434,9 +454,9 @@ describe("LLMSettingsPage", () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     const list = await screen.findByRole("list", { name: "Model provider一覧" });
-    const inlineInput = within(list).getByLabelText("OpenRouterのAPI key");
-    fireEvent.change(inlineInput, { target: { value: "sk-or-fresh" } });
-    fireEvent.click(within(list).getByRole("button", { name: "保存" }));
+    fireEvent.click(within(list).getByRole("button", { name: /OpenRouter/ }));
+    fireEvent.change(within(list).getByLabelText("API key"), { target: { value: "sk-or-fresh" } });
+    fireEvent.click(within(list).getByRole("button", { name: "設定を保存" }));
 
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "openrouter",
@@ -496,14 +516,14 @@ describe("LLMSettingsPage", () => {
     expect(badge).toBeTruthy();
     expect(badge.getAttribute("title")).toContain("GLINT_OPENAI_API_KEY");
 
-    // Built-in rows never open a detail form. The env-owned key cannot be
-    // edited/reset here, but the connection can still be tested.
-    expect(screen.queryByLabelText("OpenAIのAPI key")).toBeNull();
-    expect(screen.queryByRole("button", { name: "詳細設定" })).toBeNull();
+    // Expanding the row reveals an env note explaining the override and a
+    // working test-connection button.
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    expect(screen.getByText(/GLINT_OPENAI_API_KEY/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "接続をテスト" })).toBeTruthy();
   });
 
-  it("keeps custom provider removal in the Advanced panel", async () => {
+  it("keeps custom provider removal in the expanded panel", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",
       activeModelRef: undefined,
@@ -531,8 +551,7 @@ describe("LLMSettingsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    const manageButton = await screen.findByRole("button", { name: /^詳細設定/ });
-    fireEvent.click(manageButton);
+    fireEvent.click(await screen.findByRole("button", { name: /Local/ }));
     const removeButton = await screen.findByRole("button", { name: "providerを削除" });
     expect(removeButton.closest(".provider-row-detail-actions")).toBeTruthy();
     fireEvent.click(removeButton);

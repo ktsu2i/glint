@@ -271,7 +271,7 @@ func validateOpenAI(cfg ProviderConfig) error {
 func anthropicDescriptor() ProviderDescriptor {
 	return ProviderDescriptor{
 		ID:             ProviderAnthropic,
-		DisplayName:    "Anthropic Claude",
+		DisplayName:    "Anthropic",
 		AuthKind:       AuthKindXApiKey,
 		DefaultBaseURL: AnthropicDefaultEndpoint,
 		OptionSchema:   []ProviderOption{},
@@ -296,7 +296,7 @@ func validateAnthropic(cfg ProviderConfig) error {
 func googleDescriptor() ProviderDescriptor {
 	return ProviderDescriptor{
 		ID:             ProviderGoogle,
-		DisplayName:    "Google Gemini",
+		DisplayName:    "Google",
 		AuthKind:       AuthKindXApiKey,
 		DefaultBaseURL: GoogleDefaultBaseURL,
 		OptionSchema:   []ProviderOption{},
@@ -321,7 +321,7 @@ func validateGoogle(cfg ProviderConfig) error {
 func ollamaDescriptor() ProviderDescriptor {
 	return ProviderDescriptor{
 		ID:             ProviderOllama,
-		DisplayName:    "Ollama (local)",
+		DisplayName:    "Ollama",
 		AuthKind:       AuthKindNone,
 		DefaultBaseURL: OllamaDefaultBaseURL,
 		OptionSchema:   []ProviderOption{},

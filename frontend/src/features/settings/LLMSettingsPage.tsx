@@ -24,7 +24,6 @@ import {
   type ProviderDescriptor,
   type ProviderSettings,
   type ThemePreference,
-  type UpsertProviderRequest,
 } from "../../shared/api/backend";
 import { useLanguageSettings } from "../../shared/i18n/i18n";
 import { localizeBackendError } from "../../shared/i18n/error";
@@ -163,10 +162,6 @@ function endpointHintFor(
   return "";
 }
 
-function hasAdvancedSettings(row: ProviderRowDescriptor): boolean {
-  return row.isCustom;
-}
-
 // rows are sorted: configured built-ins (catalog order) -> configured customs ->
 // unconfigured built-ins (catalog order). Custom (openai_compatible:*) providers
 // only ever appear when explicitly added, so they have no unconfigured group.
@@ -238,114 +233,6 @@ type StagedCustom = {
   displayLabel: string;
 };
 
-type InlineApiKeyFormProps = {
-  providerLabel: string;
-  hasApiKey: boolean;
-  isPending: boolean;
-  isSaved: boolean;
-  isTesting: boolean;
-  canTest: boolean;
-  onSaveKey: (apiKey: string) => Promise<void>;
-  onClearKey: () => Promise<void>;
-  onTest: () => Promise<void>;
-};
-
-function InlineApiKeyForm({
-  providerLabel,
-  hasApiKey,
-  isPending,
-  isSaved,
-  isTesting,
-  canTest,
-  onSaveKey,
-  onClearKey,
-  onTest,
-}: InlineApiKeyFormProps) {
-  const { t } = useTranslation();
-  const [value, setValue] = useState("");
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    if (isSaved) setValue("");
-  }, [isSaved]);
-
-  const ariaLabel = t("settings.inlineApiKeyAria", { provider: providerLabel });
-  const placeholder = hasApiKey ? "••••••••••••••••" : t("settings.inlineApiKeyPlaceholder");
-  const canSave = value.trim() !== "" && !isPending;
-
-  function handleSave() {
-    if (!canSave) return;
-    void onSaveKey(value.trim());
-  }
-
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      handleSave();
-    }
-  }
-
-  // Inline credential editor is intentionally NOT a <form> element: this row
-  // sits inside the page-wide settings form, and nested forms are invalid HTML.
-  return (
-    <div className="provider-row-inline">
-      {!hasApiKey && (
-        <>
-          <div className="provider-row-inline-input">
-            <input
-              aria-label={ariaLabel}
-              type={show ? "text" : "password"}
-              value={value}
-              placeholder={placeholder}
-              autoComplete="new-password"
-              spellCheck={false}
-              onChange={(event) => setValue(event.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-            <button
-              type="button"
-              className="provider-row-inline-eye"
-              aria-label={show ? t("settings.hideApiKey") : t("settings.showApiKey")}
-              onClick={() => setShow((current) => !current)}
-              disabled={value === ""}
-            >
-              {show ? <EyeSlash size={12} /> : <Eye size={12} />}
-            </button>
-          </div>
-          <button
-            type="button"
-            className="provider-row-inline-save"
-            disabled={!canSave}
-            onClick={handleSave}
-          >
-            {isPending ? t("settings.inlineApiKeySaving") : t("settings.inlineApiKeySave")}
-          </button>
-        </>
-      )}
-      {canTest && (
-        <button
-          type="button"
-          className="provider-row-test"
-          onClick={() => void onTest()}
-          disabled={isPending || isTesting}
-        >
-          {isTesting ? t("settings.testingConnection") : t("settings.testConnection")}
-        </button>
-      )}
-      {hasApiKey && (
-        <button
-          type="button"
-          className="provider-row-inline-reset"
-          onClick={() => void onClearKey()}
-          disabled={isPending}
-        >
-          {t("settings.removeApiKey")}
-        </button>
-      )}
-    </div>
-  );
-}
-
 export function LLMSettingsPage({
   onBack,
   theme = "system",
@@ -378,14 +265,6 @@ export function LLMSettingsPage({
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTest, setConnectionTest] = useState<"success" | "error" | null>(null);
   const [connectionTestError, setConnectionTestError] = useState("");
-  const [inlineSavingId, setInlineSavingId] = useState<string>("");
-  const [inlineSavedId, setInlineSavedId] = useState<string>("");
-  const [rowTestingId, setRowTestingId] = useState<string>("");
-  const [rowTestResult, setRowTestResult] = useState<{
-    providerId: string;
-    status: "success" | "error";
-    message: string;
-  } | null>(null);
   const [removingId, setRemovingId] = useState<string>("");
   const [removedLabel, setRemovedLabel] = useState("");
   const [localThemeError, setLocalThemeError] = useState("");
@@ -441,30 +320,13 @@ export function LLMSettingsPage({
     try {
       const loaded = await getLLMConfig();
       setConfig(loaded);
-      // Built-in providers have no detail form in F16. Only a configured
-      // Custom OpenAI-compatible provider can be opened automatically.
-      const preferred = loaded.activeProviderId
-        || loaded.providers.find((provider) => provider.configured)?.providerId
-        || "";
-      if (preferred) {
-        const descriptor = resolveDescriptor(loaded, preferred);
-        if (descriptor) {
-          const stored = loaded.providers.find((provider) => provider.providerId === preferred) ?? null;
-          if (isOpenAICompatibleInstance(preferred)) {
-            openManagePanel(preferred, descriptor, stored);
-          } else {
-            closeManagePanel();
-          }
-        }
-      } else {
-        closeManagePanel();
-      }
+      closeManagePanel();
     } catch (reason) {
       setError(extractErrorMessage(reason, translationRef.current("settings.loadError")));
     } finally {
       setLoading(false);
     }
-  }, [closeManagePanel, openManagePanel]);
+  }, [closeManagePanel]);
 
   useEffect(() => {
     void loadSettings();
@@ -474,12 +336,6 @@ export function LLMSettingsPage({
     setConnectionTest(null);
     setConnectionTestError("");
   }, [apiKey, clearAPIKey, options, managedProviderId]);
-
-  useEffect(() => {
-    if (!inlineSavedId) return;
-    const timer = window.setTimeout(() => setInlineSavedId(""), 2400);
-    return () => window.clearTimeout(timer);
-  }, [inlineSavedId]);
 
   useEffect(() => {
     if (!removedLabel) return;
@@ -516,12 +372,23 @@ export function LLMSettingsPage({
   }
 
   async function handleTestConnection() {
-    if (testingConnection || !managedStored?.configured) return;
+    if (testingConnection || !managedDescriptor || !managedProviderId) return;
     setTestingConnection(true);
     setConnectionTest(null);
     setConnectionTestError("");
     try {
-      const result = await testProviderConnection(managedStored.providerId);
+      // Ollama has no credential form, so on first test we persist a row
+      // entry so the composer model selector becomes aware of it.
+      if (managedDescriptor.authKind === "none" && !managedStored) {
+        const next = await upsertProviderSettings({
+          providerId: managedProviderId,
+          options: {},
+          apiKey: "",
+          clearApiKey: false,
+        });
+        setConfig(next);
+      }
+      const result = await testProviderConnection(managedProviderId);
       if (result.ok) {
         setConnectionTest("success");
       } else {
@@ -536,105 +403,6 @@ export function LLMSettingsPage({
       ));
     } finally {
       setTestingConnection(false);
-    }
-  }
-
-  async function handleInlineSaveKey(row: ProviderRowDescriptor, nextKey: string) {
-    setInlineSavingId(row.rowId);
-    setError("");
-    setRemovedLabel("");
-    setInlineSavedId("");
-    try {
-      const request: UpsertProviderRequest = {
-        providerId: row.providerId,
-        options: {},
-        apiKey: nextKey,
-        clearApiKey: false,
-      };
-      if (row.stored?.displayLabel) request.displayLabel = row.stored.displayLabel;
-      const next = await upsertProviderSettings(request);
-      setConfig(next);
-      setInlineSavedId(row.rowId);
-      if (managedProviderId === row.rowId) {
-        const refreshedStored = next.providers.find((provider) => provider.providerId === row.rowId) ?? null;
-        openManagePanel(row.rowId, row.descriptor, refreshedStored);
-      }
-    } catch (reason) {
-      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
-    } finally {
-      setInlineSavingId("");
-    }
-  }
-
-  async function handleInlineClearKey(row: ProviderRowDescriptor) {
-    setInlineSavingId(row.rowId);
-    setError("");
-    setRemovedLabel("");
-    setInlineSavedId("");
-    try {
-      const request: UpsertProviderRequest = {
-        providerId: row.providerId,
-        options: {},
-        apiKey: "",
-        clearApiKey: true,
-      };
-      if (row.stored?.displayLabel) request.displayLabel = row.stored.displayLabel;
-      const next = await upsertProviderSettings(request);
-      setConfig(next);
-      setInlineSavedId(row.rowId);
-      if (managedProviderId === row.rowId) {
-        const refreshedStored = next.providers.find((provider) => provider.providerId === row.rowId) ?? null;
-        openManagePanel(row.rowId, row.descriptor, refreshedStored);
-      }
-    } catch (reason) {
-      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
-    } finally {
-      setInlineSavingId("");
-    }
-  }
-
-  async function handleRowTestConnection(row: ProviderRowDescriptor) {
-    if (rowTestingId) return;
-    setRowTestingId(row.rowId);
-    setRowTestResult(null);
-    setError("");
-    try {
-      // Ollama has no credential form. Persist its default-only connection on
-      // first test so it becomes available to the composer model selector.
-      if (row.descriptor.authKind === "none" && !row.stored) {
-        const next = await upsertProviderSettings({
-          providerId: row.providerId,
-          options: {},
-          apiKey: "",
-          clearApiKey: false,
-        });
-        setConfig(next);
-      }
-      const result = await testProviderConnection(row.providerId);
-      if (result.ok) {
-        setRowTestResult({
-          providerId: row.rowId,
-          status: "success",
-          message: t("settings.testConnectionSucceeded", { provider: row.displayName }),
-        });
-      } else {
-        setRowTestResult({
-          providerId: row.rowId,
-          status: "error",
-          message: localizeBackendError(result.error || t("settings.testConnectionFailed"), t),
-        });
-      }
-    } catch (reason) {
-      setRowTestResult({
-        providerId: row.rowId,
-        status: "error",
-        message: localizeBackendError(
-          extractErrorMessage(reason, t("settings.testConnectionFailed")),
-          t,
-        ),
-      });
-    } finally {
-      setRowTestingId("");
     }
   }
 
@@ -895,12 +663,6 @@ export function LLMSettingsPage({
                   const requiresKeyForRow = row.descriptor.authKind !== "none"
                     && !(row.isCustom && row.stored?.options?.requires_api_key === false);
                   const usesEnvCredential = row.stored?.credentialSource === "env";
-                  const showAdvanced = hasAdvancedSettings(row);
-                  const inlineEligible = !row.isCustom
-                    && row.descriptor.authKind !== "none"
-                    && !usesEnvCredential;
-                  const canTestFromRow = !row.isCustom
-                    && (row.descriptor.authKind === "none" || Boolean(row.stored?.configured));
                   const envVarName = requiresKeyForRow ? envVarNameFor(row.providerId) : "";
                   const isActive = row.stored?.isActive ?? false;
                   let statusLabel: string;
@@ -925,102 +687,47 @@ export function LLMSettingsPage({
                       data-provider-id={row.rowId}
                       data-status={statusKind}
                     >
-                      <div className="provider-row-summary">
-                        <div className="provider-row-identity">
-                          <ProviderIcon providerId={row.providerId} displayLabel={row.displayName} size={14} />
+                      <button
+                        type="button"
+                        className="provider-row-summary"
+                        aria-expanded={isManaged}
+                        aria-controls={`provider-row-${row.rowId}-detail`}
+                        onClick={() => {
+                          if (isManaged) {
+                            closeManagePanel(row.isStaged);
+                            return;
+                          }
+                          openManagePanel(
+                            row.rowId,
+                            row.descriptor,
+                            row.stored,
+                            row.isStaged ? row.displayName : "",
+                          );
+                        }}
+                      >
+                        <span className="provider-row-identity">
+                          <ProviderIcon providerId={row.providerId} displayLabel={row.displayName} size={16} />
                           <span className="provider-row-name">{row.displayName}</span>
-                        </div>
-                        <span
-                          className={`provider-row-status is-${statusKind}`}
-                          role="status"
-                          aria-label={statusLabel}
-                        >
+                        </span>
+                        <span className={`provider-row-status is-${statusKind}`}>
                           {(statusKind === "configured" || statusKind === "active") && <Check size={11} />}
                           <span>{statusLabel}</span>
                         </span>
                         {usesEnvCredential && envVarName && (
                           <span
                             className="provider-row-env-badge"
-                            role="status"
                             title={t("settings.credentialFromEnvHelp", { env: envVarName })}
                           >
                             <Key size={10} /> {t("settings.credentialFromEnvBadge")}
                           </span>
                         )}
-                        <div className="provider-row-action">
-                          {inlineEligible && !isManaged && (
-                            <InlineApiKeyForm
-                              providerLabel={row.displayName}
-                              hasApiKey={row.stored?.hasApiKey ?? false}
-                              isPending={inlineSavingId === row.rowId}
-                              isSaved={inlineSavedId === row.rowId}
-                              isTesting={rowTestingId === row.rowId}
-                              canTest={Boolean(row.stored?.configured)}
-                              onSaveKey={(key) => handleInlineSaveKey(row, key)}
-                              onClearKey={() => handleInlineClearKey(row)}
-                              onTest={() => handleRowTestConnection(row)}
-                            />
-                          )}
-                          {!inlineEligible && canTestFromRow && (
-                            <button
-                              type="button"
-                              className="provider-row-test"
-                              onClick={() => void handleRowTestConnection(row)}
-                              disabled={rowTestingId !== ""}
-                            >
-                              {rowTestingId === row.rowId
-                                ? t("settings.testingConnection")
-                                : t("settings.testConnection")}
-                            </button>
-                          )}
-                          {showAdvanced && (
-                            <button
-                              type="button"
-                              className={isManaged ? "provider-row-manage is-open" : "provider-row-manage"}
-                              aria-expanded={isManaged}
-                              aria-controls={`provider-row-${row.rowId}-detail`}
-                              onClick={() => {
-                                if (isManaged) {
-                                  closeManagePanel(row.isStaged);
-                                  return;
-                                }
-                                openManagePanel(
-                                  row.rowId,
-                                  row.descriptor,
-                                  row.stored,
-                                  row.isStaged ? row.displayName : "",
-                                );
-                              }}
-                            >
-                              {isManaged
-                                ? t("settings.closeAdvancedProvider")
-                                : t("settings.advancedProvider")}
-                              <CaretDown
-                                size={10}
-                                weight="bold"
-                                className="provider-row-manage-caret"
-                                aria-hidden="true"
-                              />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      {inlineSavedId === row.rowId && (
-                        <p className="provider-row-inline-status" role="status">
-                          <Check size={11} /> {t("settings.inlineApiKeySaved")}
-                        </p>
-                      )}
-                      {rowTestResult?.providerId === row.rowId && (
-                        <p
-                          className={rowTestResult.status === "success"
-                            ? "provider-row-inline-status"
-                            : "provider-row-inline-status is-error"}
-                          role={rowTestResult.status === "error" ? "alert" : "status"}
-                        >
-                          {rowTestResult.status === "success" && <Check size={11} />}
-                          {rowTestResult.message}
-                        </p>
-                      )}
+                        <CaretDown
+                          size={12}
+                          weight="bold"
+                          className={isManaged ? "provider-row-toggle is-open" : "provider-row-toggle"}
+                          aria-hidden="true"
+                        />
+                      </button>
                       {isManaged && managedDescriptor && (
                         <div
                           id={`provider-row-${row.rowId}-detail`}
@@ -1213,7 +920,11 @@ export function LLMSettingsPage({
                               className="settings-secondary"
                               type="button"
                               onClick={() => void handleTestConnection()}
-                              disabled={saving || testingConnection || !managedStored?.configured}
+                              disabled={
+                                saving
+                                || testingConnection
+                                || (!managedStored?.configured && managedDescriptor?.authKind !== "none")
+                              }
                             >
                               {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
                             </button>
