@@ -8,6 +8,8 @@ import {
   type CSSProperties,
 } from "react";
 import {
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   BookOpenText,
   BookmarkSimple,
@@ -73,7 +75,33 @@ function flattenOutline(
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
+type BindingDirection = "ltr" | "rtl";
 type ReaderPanel = "toc" | "search" | "bookmarks" | null;
+
+const bindingDirectionStorageKey = "glint.reader.bindingDirection";
+
+function loadBindingDirection(bookId: string | undefined): BindingDirection {
+  if (!bookId || typeof window === "undefined" || !window.localStorage) {
+    return "ltr";
+  }
+  const stored = window.localStorage.getItem(
+    `${bindingDirectionStorageKey}.${bookId}`,
+  );
+  return stored === "rtl" ? "rtl" : "ltr";
+}
+
+function persistBindingDirection(
+  bookId: string | undefined,
+  direction: BindingDirection,
+) {
+  if (!bookId || typeof window === "undefined" || !window.localStorage) {
+    return;
+  }
+  window.localStorage.setItem(
+    `${bindingDirectionStorageKey}.${bookId}`,
+    direction,
+  );
+}
 
 export type ReaderSelection = {
   text: string;
@@ -131,6 +159,9 @@ export function PdfReader({
   const [isEditingPage, setIsEditingPage] = useState(false);
   const pageInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
+  const [bindingDirection, setBindingDirection] = useState<BindingDirection>(
+    () => loadBindingDirection(book?.id),
+  );
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [effectiveScale, setEffectiveScale] = useState(1);
@@ -247,6 +278,7 @@ export function PdfReader({
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
+    setBindingDirection(loadBindingDirection(book.id));
     pageContextCallbackRef.current(0, "", 0);
 
     let timeout = 0;
@@ -398,17 +430,25 @@ export function PdfReader({
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
         return;
       }
-      if (event.key === "ArrowRight" || event.key === "PageDown") {
+      const forwardKeys =
+        bindingDirection === "rtl"
+          ? ["ArrowLeft", "PageDown"]
+          : ["ArrowRight", "PageDown"];
+      const backwardKeys =
+        bindingDirection === "rtl"
+          ? ["ArrowRight", "PageUp"]
+          : ["ArrowLeft", "PageUp"];
+      if (forwardKeys.includes(event.key)) {
         event.preventDefault();
         setPageNumber((current) => Math.min(numPages, current + step));
-      } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
+      } else if (backwardKeys.includes(event.key)) {
         event.preventDefault();
         setPageNumber((current) => Math.max(1, current - step));
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [document, viewMode]);
+  }, [document, viewMode, bindingDirection]);
 
   useEffect(() => {
     if (!document || !stageNodeRef.current) {
@@ -840,8 +880,11 @@ export function PdfReader({
   const step = viewMode === "spread" ? 2 : 1;
   const showRightCanvas = viewMode === "spread" && pageNumber + 1 <= numPages;
   const rightPageNumber = pageNumber + 1;
+  const isRtlBinding = bindingDirection === "rtl";
   const pageRangeLabel = showRightCanvas
-    ? `${pageNumber}–${rightPageNumber}`
+    ? isRtlBinding
+      ? `${rightPageNumber}–${pageNumber}`
+      : `${pageNumber}–${rightPageNumber}`
     : `${pageNumber}`;
   const pageInputWidth = Math.max(2, String(numPages || 1).length);
   const sliderMaximum = Math.max(1, numPages);
@@ -933,7 +976,11 @@ export function PdfReader({
               setPageNumber((current) => Math.max(1, current - step))
             }
           >
-            <CaretLeft size={15} weight="bold" />
+            {isRtlBinding ? (
+              <CaretRight size={15} weight="bold" />
+            ) : (
+              <CaretLeft size={15} weight="bold" />
+            )}
           </ToolButton>
           {isEditingPage ? (
             <form
@@ -989,7 +1036,11 @@ export function PdfReader({
               )
             }
           >
-            <CaretRight size={15} weight="bold" />
+            {isRtlBinding ? (
+              <CaretLeft size={15} weight="bold" />
+            ) : (
+              <CaretRight size={15} weight="bold" />
+            )}
           </ToolButton>
           <ToolButton
             label={
@@ -1012,6 +1063,28 @@ export function PdfReader({
           </ToolButton>
         </div>
         <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
+          <ToolButton
+            label={
+              isRtlBinding
+                ? t("reader.bindingSwitchToLtr")
+                : t("reader.bindingSwitchToRtl")
+            }
+            className={isRtlBinding ? "is-active" : ""}
+            onClick={() =>
+              setBindingDirection((current) => {
+                const next: BindingDirection =
+                  current === "rtl" ? "ltr" : "rtl";
+                persistBindingDirection(book?.id, next);
+                return next;
+              })
+            }
+          >
+            {isRtlBinding ? (
+              <ArrowLeft size={14} weight="bold" />
+            ) : (
+              <ArrowRight size={14} weight="bold" />
+            )}
+          </ToolButton>
           <ToolButton
             label={
               viewMode === "spread"
@@ -1270,7 +1343,7 @@ export function PdfReader({
             </div>
           )}
           <div
-            className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}`}
+            className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}${isRtlBinding ? " is-rtl" : ""}`}
           >
             <div className="pdf-page">
               <canvas
@@ -1312,7 +1385,9 @@ export function PdfReader({
         </div>
       </div>
       <div className="reader-page-slider">
-        <div className="reader-page-rail">
+        <div
+          className={`reader-page-rail${isRtlBinding ? " is-rtl" : ""}`}
+        >
           <input
             id="reader-page-slider"
             type="range"
@@ -1326,6 +1401,7 @@ export function PdfReader({
               total: numPages || 1,
             })}
             disabled={!document}
+            dir={isRtlBinding ? "rtl" : "ltr"}
             style={{ "--page-progress": `${sliderProgress}%` } as CSSProperties}
             onChange={(event) => setPageNumber(Number(event.target.value))}
           />

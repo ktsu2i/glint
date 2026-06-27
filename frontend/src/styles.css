@@ -1815,6 +1815,15 @@ button.page-count:disabled {
   opacity: 0.4;
 }
 
+.reader-page-rail.is-rtl input[type="range"] {
+  background:
+    linear-gradient(
+      to left,
+      var(--signal-deep) 0 var(--page-progress),
+      var(--line-strong) var(--page-progress) 100%
+    ) center / 100% 2px no-repeat;
+}
+
 .reader-slider-bookmarks {
   position: absolute;
   z-index: 2;
@@ -1837,6 +1846,12 @@ button.page-count:disabled {
   cursor: pointer;
   pointer-events: auto;
   transform: translateX(-50%);
+}
+
+.reader-page-rail.is-rtl .reader-slider-bookmark {
+  left: auto;
+  right: var(--bookmark-position);
+  transform: translateX(50%);
 }
 
 .reader-slider-bookmark-dot {
@@ -1909,6 +1924,10 @@ button.page-count:disabled {
 
 .pdf-spread.is-spread {
   gap: 4px;
+}
+
+.pdf-spread.is-spread.is-rtl {
+  flex-direction: row-reverse;
 }
 
 .pdf-page {
