@@ -27,7 +27,6 @@ import {
 } from "../../shared/api/backend";
 import { useLanguageSettings } from "../../shared/i18n/i18n";
 import { localizeBackendError } from "../../shared/i18n/error";
-import { ProviderIcon } from "../chat/ProviderIcon";
 
 type LLMSettingsPageProps = {
   onBack: () => void;
@@ -706,7 +705,6 @@ export function LLMSettingsPage({
                         }}
                       >
                         <span className="provider-row-identity">
-                          <ProviderIcon providerId={row.providerId} displayLabel={row.displayName} size={16} />
                           <span className="provider-row-name">{row.displayName}</span>
                         </span>
                         <span className={`provider-row-status is-${statusKind}`}>

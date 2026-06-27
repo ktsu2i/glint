@@ -2774,13 +2774,8 @@ button.page-count:disabled {
 .provider-row-identity {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   flex: 0 0 auto;
   min-width: 132px;
-}
-
-.provider-row-identity .provider-icon {
-  color: var(--muted);
 }
 
 .provider-row-name {
