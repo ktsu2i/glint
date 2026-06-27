@@ -19,7 +19,11 @@ const mocks = vi.hoisted(() => ({
   saveLanguageSettings: vi.fn(),
   upsertProviderSettings: vi.fn(),
   deleteProviderSettings: vi.fn(),
-  setActiveProvider: vi.fn(),
+  setActiveModel: vi.fn(),
+  testProviderConnection: vi.fn(),
+  listProviderModels: vi.fn(),
+  addCustomModel: vi.fn(),
+  removeCustomModel: vi.fn(),
 }));
 
 vi.mock("./shared/api/backend", () => ({
@@ -39,7 +43,11 @@ vi.mock("./shared/api/backend", () => ({
   saveLanguageSettings: mocks.saveLanguageSettings,
   upsertProviderSettings: mocks.upsertProviderSettings,
   deleteProviderSettings: mocks.deleteProviderSettings,
-  setActiveProvider: mocks.setActiveProvider,
+  setActiveModel: mocks.setActiveModel,
+  testProviderConnection: mocks.testProviderConnection,
+  listProviderModels: mocks.listProviderModels,
+  addCustomModel: mocks.addCustomModel,
+  removeCustomModel: mocks.removeCustomModel,
 }));
 vi.mock("./features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
@@ -132,9 +140,11 @@ beforeEach(() => {
   mocks.saveLanguageSettings.mockImplementation(async (language: string) => ({ language }));
   mocks.getLLMConfig.mockResolvedValue({
     activeProviderId: "openrouter",
+    activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
     providers: [{
       providerId: "openrouter",
       model: "provider/model",
+      models: [],
       options: { zdr: true },
       hasApiKey: true,
       configured: true,
@@ -147,12 +157,21 @@ beforeEach(() => {
       optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
       capabilities: { streaming: true, tools: false, images: false },
     }],
+    recentProviderIds: ["openrouter"],
+    recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
+  });
+  mocks.listProviderModels.mockResolvedValue({
+    providerId: "openrouter",
+    models: [{ id: "provider/model", source: "builtin" }],
+    source: "builtin",
   });
   mocks.upsertProviderSettings.mockImplementation(async () => ({
     activeProviderId: "openrouter",
+    activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
     providers: [{
       providerId: "openrouter",
       model: "provider/model",
+      models: [],
       options: { zdr: true },
       hasApiKey: true,
       configured: true,
@@ -165,6 +184,8 @@ beforeEach(() => {
       optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
       capabilities: { streaming: true, tools: false, images: false },
     }],
+    recentProviderIds: ["openrouter"],
+    recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
   }));
 });
 
@@ -305,7 +326,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "設定" }));
     expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
-    expect(screen.getByDisplayValue("provider/model")).toBeTruthy();
+    expect(await screen.findByText("provider/model")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "本棚" }));
     expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();

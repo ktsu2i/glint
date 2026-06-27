@@ -1197,7 +1197,7 @@ export function LLMSettingsPage({
                             </fieldset>
                           )}
 
-                          {managedStored?.configured && (
+                          {managedStored && (managedStored.configured || managedIsCustom) && (
                             <fieldset className="settings-fieldset" disabled={loading || saving}>
                               <legend>{t("settings.availableModels")}</legend>
                               {!managedIsCustom && (

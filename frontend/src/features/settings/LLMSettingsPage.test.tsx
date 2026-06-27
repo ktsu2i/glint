@@ -346,7 +346,7 @@ describe("LLMSettingsPage", () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     const list = await screen.findByRole("list", { name: "Model provider一覧" });
-    const rows = within(list).getAllByRole("listitem");
+    const rows = Array.from(list.querySelectorAll(":scope > .provider-row"));
     const names = rows.map((row) => row.querySelector(".provider-row-name")!.textContent);
     expect(names).toEqual(["OpenAI", "Groq", "OpenRouter"]);
   });
@@ -445,7 +445,7 @@ describe("LLMSettingsPage", () => {
 
   it("adds a manual model to a custom provider via the AddCustomModel API", async () => {
     backend.getLLMConfig.mockResolvedValue({
-      activeProviderId: "openai_compatible:local",
+      activeProviderId: "",
       activeModelRef: undefined,
       providers: [{
         providerId: "openai_compatible:local",
@@ -463,13 +463,16 @@ describe("LLMSettingsPage", () => {
     });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // Manage panel auto-opens for the only provider in the list.
     const manageButton = await screen.findByRole("button", { name: /^詳細/ });
     fireEvent.click(manageButton);
-    // The available-models fieldset only renders for configured providers, so
-    // we need to add a manual model entry directly.
-    // (The Add model row isn't rendered until the provider is configured; we
-    // test the API wiring at the unit level instead.)
-    expect(backend.addCustomModel).not.toHaveBeenCalled();
+    const modelInput = await screen.findByPlaceholderText("model id (例: llama-3.3-70b)");
+    fireEvent.change(modelInput, { target: { value: " local-model " } });
+    fireEvent.click(screen.getByRole("button", { name: "modelを追加" }));
+
+    await waitFor(() => expect(backend.addCustomModel).toHaveBeenCalledWith(
+      "openai_compatible:local",
+      "local-model",
+    ));
+    expect(await screen.findByText("local-model")).toBeTruthy();
   });
 });
