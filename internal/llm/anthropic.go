@@ -25,6 +25,7 @@ type AnthropicConfig struct {
 	BaseURL          string
 	AnthropicVersion string
 	MaxTokens        int
+	ModelMetadata    ModelDescriptor
 }
 
 type AnthropicGateway struct {
@@ -33,6 +34,7 @@ type AnthropicGateway struct {
 	apiKey           string
 	anthropicVersion string
 	maxTokens        int
+	budget           ContextBudget
 	httpClient       *http.Client
 	errorMapper      errorMapper
 }
@@ -80,6 +82,7 @@ func newAnthropicGateway(config AnthropicConfig, httpClient *http.Client) (*Anth
 		apiKey:           config.APIKey,
 		anthropicVersion: config.AnthropicVersion,
 		maxTokens:        config.MaxTokens,
+		budget:           EstimateBudget(config.ModelMetadata),
 		httpClient:       httpClient,
 		errorMapper: errorMapper{
 			providerName: "Anthropic",
@@ -94,7 +97,7 @@ func newAnthropicGateway(config AnthropicConfig, httpClient *http.Client) (*Anth
 }
 
 func (gateway *AnthropicGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, gateway.budget)
 	if err != nil {
 		return nil, err
 	}

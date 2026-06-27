@@ -16,6 +16,7 @@ import {
   SearchLibrary,
 } from "../../../wailsjs/go/books/Service";
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
+import { llm as wailsLLM } from "../../../wailsjs/go/models";
 import {
   AddCustomModel,
   DeleteProviderSettings,
@@ -82,12 +83,23 @@ export type LibrarySearchHit = {
   pages: BookSearchResult[];
 };
 
+export type BudgetSource = "model" | "fallback";
+
+export type ContextBudget = {
+  promptRunes: number;
+  answerTokens: number;
+  retrievalShare: number;
+  source: BudgetSource;
+  limit: number;
+};
+
 export type ChatRequest = {
   requestId: string;
   question: string;
   contextText: string;
   bookName: string;
   pageNumber: number;
+  budgetUsed?: ContextBudget;
 };
 
 export type AnswerDelta = {
@@ -271,7 +283,7 @@ export async function markBookCoverFailed(bookId: string): Promise<void> {
 }
 
 export async function startChat(request: ChatRequest): Promise<void> {
-  await StartChat(request);
+  await StartChat(new wailsLLM.ChatRequest(request));
 }
 
 export async function cancelChat(requestId: string): Promise<void> {

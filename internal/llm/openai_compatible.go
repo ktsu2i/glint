@@ -21,10 +21,12 @@ type OpenAICompatibleConfig struct {
 	Headers        map[string]string
 	RequiresAPIKey bool
 	DisplayName    string
+	ModelMetadata  ModelDescriptor
 }
 
 type OpenAICompatibleGateway struct {
 	model  string
+	budget ContextBudget
 	client *chatCompletionsClient
 }
 
@@ -74,7 +76,8 @@ func newOpenAICompatibleGateway(config OpenAICompatibleConfig, httpClient *http.
 	}
 
 	return &OpenAICompatibleGateway{
-		model: config.Model,
+		model:  config.Model,
+		budget: EstimateBudget(config.ModelMetadata),
 		client: newChatCompletionsClient(chatCompletionsConfig{
 			Endpoint:     chatCompletionsEndpoint(config.BaseURL, ""),
 			Headers:      headers,
@@ -89,7 +92,7 @@ func newOpenAICompatibleGateway(config OpenAICompatibleConfig, httpClient *http.
 }
 
 func (gateway *OpenAICompatibleGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, gateway.budget)
 	if err != nil {
 		return nil, err
 	}

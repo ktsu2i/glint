@@ -651,7 +651,9 @@ func (manager *Manager) gatewayForModel(ctx context.Context, providerID, modelID
 	if err := manager.registry.Validate(cfg); err != nil {
 		return nil, err
 	}
-	deps := llm.Deps{}
+	deps := llm.Deps{
+		Model: manager.resolveModelDescriptor(ctx, providerID, modelID),
+	}
 	if providerRequiresAPIKey(descriptor, cfg) {
 		apiKey, err := manager.secrets.Get(credentialService, apiKeyAccount(providerID))
 		if errors.Is(err, ErrSecretNotFound) {
@@ -663,6 +665,30 @@ func (manager *Manager) gatewayForModel(ctx context.Context, providerID, modelID
 		deps.APIKey = apiKey
 	}
 	return manager.registry.Build(cfg, deps)
+}
+
+// resolveModelDescriptor looks up cached and built-in metadata for the model
+// without performing any network I/O. Gateway construction must be fast, so we
+// rely on the listing cache populated by ListProviderModels rather than hitting
+// the upstream listing API on every chat request. Returns a zero descriptor
+// when nothing matches, which falls through to FallbackBudget downstream.
+func (manager *Manager) resolveModelDescriptor(ctx context.Context, providerID, modelID string) llm.ModelDescriptor {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return llm.ModelDescriptor{}
+	}
+	cached, _, _ := manager.loadModelCache(ctx, providerID)
+	for _, model := range cached {
+		if model.ID == modelID {
+			return model
+		}
+	}
+	for _, model := range llm.BuiltinModels(llm.ProviderID(providerID)) {
+		if model.ID == modelID {
+			return model
+		}
+	}
+	return llm.ModelDescriptor{ID: modelID}
 }
 
 func (manager *Manager) buildConfig(ctx context.Context, active *ActiveModelRef, stored map[string]storedProvider) (LLMConfig, error) {

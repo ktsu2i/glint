@@ -11,14 +11,16 @@ import (
 const OpenAIDefaultEndpoint = "https://api.openai.com/v1/chat/completions"
 
 type OpenAIConfig struct {
-	APIKey       string
-	Model        string
-	Organization string
-	BaseURL      string
+	APIKey        string
+	Model         string
+	Organization  string
+	BaseURL       string
+	ModelMetadata ModelDescriptor
 }
 
 type OpenAIGateway struct {
 	model  string
+	budget ContextBudget
 	client *chatCompletionsClient
 }
 
@@ -56,7 +58,8 @@ func newOpenAIGateway(config OpenAIConfig, httpClient *http.Client) (*OpenAIGate
 	}
 
 	return &OpenAIGateway{
-		model: config.Model,
+		model:  config.Model,
+		budget: EstimateBudget(config.ModelMetadata),
 		client: newChatCompletionsClient(chatCompletionsConfig{
 			Endpoint:     endpoint,
 			Headers:      headers,
@@ -72,7 +75,7 @@ func newOpenAIGateway(config OpenAIConfig, httpClient *http.Client) (*OpenAIGate
 }
 
 func (gateway *OpenAIGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, gateway.budget)
 	if err != nil {
 		return nil, err
 	}

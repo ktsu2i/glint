@@ -11,14 +11,16 @@ import (
 const OllamaDefaultBaseURL = "http://localhost:11434/v1"
 
 type OllamaConfig struct {
-	Model     string
-	BaseURL   string
-	KeepAlive string
+	Model         string
+	BaseURL       string
+	KeepAlive     string
+	ModelMetadata ModelDescriptor
 }
 
 type OllamaGateway struct {
 	model     string
 	keepAlive string
+	budget    ContextBudget
 	client    *chatCompletionsClient
 }
 
@@ -52,6 +54,7 @@ func newOllamaGateway(config OllamaConfig, httpClient *http.Client) (*OllamaGate
 	return &OllamaGateway{
 		model:     config.Model,
 		keepAlive: config.KeepAlive,
+		budget:    EstimateBudget(config.ModelMetadata),
 		client: newChatCompletionsClient(chatCompletionsConfig{
 			Endpoint:     endpoint,
 			Headers:      map[string]string{},
@@ -65,7 +68,7 @@ func newOllamaGateway(config OllamaConfig, httpClient *http.Client) (*OllamaGate
 }
 
 func (gateway *OllamaGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, gateway.budget)
 	if err != nil {
 		return nil, err
 	}

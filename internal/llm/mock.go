@@ -21,7 +21,7 @@ func newMockGatewayWithDelay(delay time.Duration) *MockGateway {
 }
 
 func (gateway *MockGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, FallbackBudget())
 	if err != nil {
 		return nil, err
 	}

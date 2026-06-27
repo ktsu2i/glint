@@ -22,11 +22,12 @@ const (
 )
 
 type GoogleConfig struct {
-	APIKey     string
-	Model      string
-	BaseURL    string
-	APIVersion string
-	AuthMode   string
+	APIKey        string
+	Model         string
+	BaseURL       string
+	APIVersion    string
+	AuthMode      string
+	ModelMetadata ModelDescriptor
 }
 
 type GoogleGateway struct {
@@ -34,6 +35,7 @@ type GoogleGateway struct {
 	endpoint    string
 	apiKey      string
 	authMode    string
+	budget      ContextBudget
 	httpClient  *http.Client
 	errorMapper errorMapper
 }
@@ -92,6 +94,7 @@ func newGoogleGateway(config GoogleConfig, httpClient *http.Client) (*GoogleGate
 		endpoint:   endpoint,
 		apiKey:     config.APIKey,
 		authMode:   config.AuthMode,
+		budget:     EstimateBudget(config.ModelMetadata),
 		httpClient: httpClient,
 		errorMapper: errorMapper{
 			providerName: "Google",
@@ -105,7 +108,7 @@ func newGoogleGateway(config GoogleConfig, httpClient *http.Client) (*GoogleGate
 }
 
 func (gateway *GoogleGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, gateway.budget)
 	if err != nil {
 		return nil, err
 	}

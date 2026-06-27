@@ -11,11 +11,12 @@ import (
 const MaxContextRunes = 6000
 
 type ChatRequest struct {
-	RequestID   string `json:"requestId"`
-	Question    string `json:"question"`
-	ContextText string `json:"contextText"`
-	BookName    string `json:"bookName"`
-	PageNumber  int    `json:"pageNumber"`
+	RequestID   string         `json:"requestId"`
+	Question    string         `json:"question"`
+	ContextText string         `json:"contextText"`
+	BookName    string         `json:"bookName"`
+	PageNumber  int            `json:"pageNumber"`
+	BudgetUsed  *ContextBudget `json:"budgetUsed,omitempty"`
 }
 
 type AnswerDelta struct {
@@ -54,10 +55,17 @@ func awaitConnectionTest(ctx context.Context, stream <-chan AnswerDelta) error {
 	}
 }
 
-func normalizeChatRequest(request ChatRequest) (ChatRequest, error) {
+// normalizeChatRequest trims, redacts, and attaches the budget metadata that
+// the frontend will surface in the context preview. The caller must pass the
+// budget it computed at construction time so the trim limit reflects the
+// active provider/model instead of the legacy hardcoded 6000 rune cap.
+func normalizeChatRequest(request ChatRequest, budget ContextBudget) (ChatRequest, error) {
+	if budget.PromptRunes <= 0 {
+		budget = FallbackBudget()
+	}
 	request.RequestID = strings.TrimSpace(request.RequestID)
 	request.Question = strings.TrimSpace(request.Question)
-	request.ContextText = trimRunes(request.ContextText, MaxContextRunes)
+	request.ContextText = trimRunes(request.ContextText, budget.PromptRunes)
 	request.Question = privacy.RedactKnownSecrets(request.Question)
 	request.ContextText = privacy.RedactKnownSecrets(request.ContextText)
 	request.BookName = strings.TrimSpace(request.BookName)
@@ -67,5 +75,7 @@ func normalizeChatRequest(request ChatRequest) (ChatRequest, error) {
 	if request.Question == "" {
 		return ChatRequest{}, errors.New("question is required")
 	}
+	budgetCopy := budget
+	request.BudgetUsed = &budgetCopy
 	return request, nil
 }

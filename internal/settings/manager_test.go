@@ -695,6 +695,43 @@ func TestSetActiveProviderUsesLastUsedModel(t *testing.T) {
 	assert.Equal(t, "openai/gpt-5", config.ActiveModel.ModelID)
 }
 
+func TestResolveModelDescriptorPrefersCacheThenBuiltin(t *testing.T) {
+	// F11: gatewayForModel が context budget を計算するために、cache → builtin の
+	// 順で ModelDescriptor を解決する。listing API は呼ばない（fast path）。
+	manager, settingStore, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "anthropic", APIKey: "sk",
+	})
+	require.NoError(t, err)
+
+	// cache 経由: 直接 settings store に書き込んだ cache が優先される。
+	cacheEntry := storedModelCache{
+		Models: []llm.ModelDescriptor{{
+			ID:              "claude-sonnet-4-6",
+			DisplayName:     "Cached Sonnet",
+			ContextWindow:   123_456,
+			MaxOutputTokens: 32_000,
+			Source:          llm.ModelSourceAPI,
+		}},
+		FetchedAt: time.Now(),
+	}
+	encoded, _ := json.Marshal(cacheEntry)
+	settingStore.values[llmModelCachePrefix+"anthropic"] = string(encoded)
+
+	descriptor := manager.resolveModelDescriptor(context.Background(), "anthropic", "claude-sonnet-4-6")
+	assert.Equal(t, 123_456, descriptor.ContextWindow)
+	assert.Equal(t, "Cached Sonnet", descriptor.DisplayName)
+
+	// builtin fallback: cache に無い model id は BuiltinModels から拾われる。
+	descriptor = manager.resolveModelDescriptor(context.Background(), "anthropic", "claude-haiku-4-5-20251001")
+	assert.Equal(t, 200_000, descriptor.ContextWindow)
+
+	// 完全に未知: 空 descriptor が返り、後段の EstimateBudget が fallback に落ちる。
+	descriptor = manager.resolveModelDescriptor(context.Background(), "anthropic", "totally-unknown-id")
+	assert.Equal(t, 0, descriptor.ContextWindow)
+	assert.Equal(t, "totally-unknown-id", descriptor.ID)
+}
+
 type failingSecretStore struct{}
 
 func (failingSecretStore) Get(string, string) (string, error) { return "", errors.New("locked") }

@@ -80,6 +80,11 @@ type ProviderConfig struct {
 // Deps は factory が gateway を組み立てるために必要な runtime 依存値。
 type Deps struct {
 	APIKey string
+	// Model は active な (provider, model) の listing / builtin metadata。
+	// F11 で context budget の推定に使う。zero value は ContextWindow=0 と
+	// なり、FallbackBudget に落ちる（Custom OpenAI-compatible や cache 未収録
+	// model はこの経路）。
+	Model ModelDescriptor
 }
 
 type gatewayFactory func(cfg ProviderConfig, deps Deps) (Gateway, error)
@@ -228,9 +233,10 @@ func openRouterDescriptor() ProviderDescriptor {
 
 func openRouterFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewOpenRouterGateway(OpenRouterConfig{
-		APIKey: deps.APIKey,
-		Model:  cfg.Model,
-		ZDR:    optionBool(cfg.Options, "zdr", true),
+		APIKey:        deps.APIKey,
+		Model:         cfg.Model,
+		ZDR:           optionBool(cfg.Options, "zdr", true),
+		ModelMetadata: deps.Model,
 	})
 }
 
@@ -276,10 +282,11 @@ func openAIDescriptor() ProviderDescriptor {
 
 func openAIFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewOpenAIGateway(OpenAIConfig{
-		APIKey:       deps.APIKey,
-		Model:        cfg.Model,
-		Organization: optionString(cfg.Options, "organization", ""),
-		BaseURL:      optionString(cfg.Options, "base_url", ""),
+		APIKey:        deps.APIKey,
+		Model:         cfg.Model,
+		Organization:  optionString(cfg.Options, "organization", ""),
+		BaseURL:       optionString(cfg.Options, "base_url", ""),
+		ModelMetadata: deps.Model,
 	})
 }
 
@@ -322,6 +329,7 @@ func anthropicFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 		Model:            cfg.Model,
 		BaseURL:          optionString(cfg.Options, "base_url", ""),
 		AnthropicVersion: optionString(cfg.Options, "anthropic_version", ""),
+		ModelMetadata:    deps.Model,
 	})
 }
 
@@ -368,11 +376,12 @@ func googleDescriptor() ProviderDescriptor {
 
 func googleFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewGoogleGateway(GoogleConfig{
-		APIKey:     deps.APIKey,
-		Model:      cfg.Model,
-		BaseURL:    optionString(cfg.Options, "base_url", ""),
-		APIVersion: optionString(cfg.Options, "api_version", ""),
-		AuthMode:   optionString(cfg.Options, "auth_mode", ""),
+		APIKey:        deps.APIKey,
+		Model:         cfg.Model,
+		BaseURL:       optionString(cfg.Options, "base_url", ""),
+		APIVersion:    optionString(cfg.Options, "api_version", ""),
+		AuthMode:      optionString(cfg.Options, "auth_mode", ""),
+		ModelMetadata: deps.Model,
 	})
 }
 
@@ -413,11 +422,11 @@ func ollamaDescriptor() ProviderDescriptor {
 }
 
 func ollamaFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
-	_ = deps
 	return NewOllamaGateway(OllamaConfig{
-		Model:     cfg.Model,
-		BaseURL:   optionString(cfg.Options, "base_url", ""),
-		KeepAlive: optionString(cfg.Options, "keep_alive", ""),
+		Model:         cfg.Model,
+		BaseURL:       optionString(cfg.Options, "base_url", ""),
+		KeepAlive:     optionString(cfg.Options, "keep_alive", ""),
+		ModelMetadata: deps.Model,
 	})
 }
 
@@ -474,6 +483,7 @@ func openAICompatibleFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 		Headers:        optionHeaders(cfg.Options, "headers"),
 		RequiresAPIKey: optionBool(cfg.Options, "requires_api_key", true),
 		DisplayName:    displayName,
+		ModelMetadata:  deps.Model,
 	})
 }
 

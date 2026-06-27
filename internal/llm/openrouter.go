@@ -11,15 +11,17 @@ import (
 const OpenRouterEndpoint = "https://openrouter.ai/api/v1/chat/completions"
 
 type OpenRouterConfig struct {
-	APIKey   string
-	Model    string
-	ZDR      bool
-	Endpoint string
+	APIKey        string
+	Model         string
+	ZDR           bool
+	Endpoint      string
+	ModelMetadata ModelDescriptor
 }
 
 type OpenRouterGateway struct {
 	model  string
 	zdr    bool
+	budget ContextBudget
 	client *chatCompletionsClient
 }
 
@@ -55,8 +57,9 @@ func newOpenRouterGateway(config OpenRouterConfig, httpClient *http.Client) (*Op
 		config.Endpoint = OpenRouterEndpoint
 	}
 	return &OpenRouterGateway{
-		model: config.Model,
-		zdr:   config.ZDR,
+		model:  config.Model,
+		zdr:    config.ZDR,
+		budget: EstimateBudget(config.ModelMetadata),
 		client: newChatCompletionsClient(chatCompletionsConfig{
 			Endpoint: config.Endpoint,
 			Headers: map[string]string{
@@ -75,7 +78,7 @@ func newOpenRouterGateway(config OpenRouterConfig, httpClient *http.Client) (*Op
 }
 
 func (gateway *OpenRouterGateway) Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error) {
-	request, err := normalizeChatRequest(request)
+	request, err := normalizeChatRequest(request, gateway.budget)
 	if err != nil {
 		return nil, err
 	}
