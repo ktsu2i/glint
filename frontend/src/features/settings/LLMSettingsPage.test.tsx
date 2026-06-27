@@ -6,8 +6,13 @@ const backend = vi.hoisted(() => ({
   getLLMConfig: vi.fn(),
   testProviderConnection: vi.fn(),
   upsertProviderSettings: vi.fn(),
-  setActiveModel: vi.fn(),
   deleteProviderSettings: vi.fn(),
+}));
+
+// These APIs remain available to the composer, but Settings must never call
+// them after F15's provider/model responsibility split.
+const modelAPI = vi.hoisted(() => ({
+  setActiveModel: vi.fn(),
   listProviderModels: vi.fn(),
   addCustomModel: vi.fn(),
   removeCustomModel: vi.fn(),
@@ -17,11 +22,11 @@ vi.mock("../../shared/api/backend", () => ({
   getLLMConfig: backend.getLLMConfig,
   testProviderConnection: backend.testProviderConnection,
   upsertProviderSettings: backend.upsertProviderSettings,
-  setActiveModel: backend.setActiveModel,
   deleteProviderSettings: backend.deleteProviderSettings,
-  listProviderModels: backend.listProviderModels,
-  addCustomModel: backend.addCustomModel,
-  removeCustomModel: backend.removeCustomModel,
+  setActiveModel: modelAPI.setActiveModel,
+  listProviderModels: modelAPI.listProviderModels,
+  addCustomModel: modelAPI.addCustomModel,
+  removeCustomModel: modelAPI.removeCustomModel,
 }));
 
 import { LLMSettingsPage } from "./LLMSettingsPage";
@@ -103,31 +108,7 @@ beforeEach(() => {
   backend.getLLMConfig.mockResolvedValue(configuredConfig());
   backend.testProviderConnection.mockResolvedValue({ providerId: "openrouter", ok: true });
   backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ model: "provider/next" }));
-  backend.setActiveModel.mockResolvedValue(configuredConfig());
   backend.deleteProviderSettings.mockResolvedValue(configuredConfig());
-  backend.listProviderModels.mockResolvedValue({
-    providerId: "openrouter",
-    models: [
-      { id: "provider/original", source: "builtin" },
-      { id: "anthropic/claude-sonnet-4-6", source: "builtin" },
-    ],
-    source: "builtin",
-  });
-  backend.addCustomModel.mockImplementation(async (providerId: string, modelId: string) => ({
-    ...configuredConfig(),
-    providers: [{
-      providerId,
-      displayLabel: "Local",
-      model: "",
-      models: [modelId],
-      options: { base_url: "http://localhost:8080/v1", requires_api_key: false, headers: {} },
-      hasApiKey: false,
-      configured: true,
-      isActive: false,
-    }],
-    catalog: [customDescriptor],
-  }));
-  backend.removeCustomModel.mockResolvedValue(configuredConfig());
 });
 
 describe("LLMSettingsPage", () => {
@@ -145,25 +126,32 @@ describe("LLMSettingsPage", () => {
     expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("auto-opens the active provider's Manage panel and shows the available models from the listing API", async () => {
+  it("keeps the Advanced panel limited to provider connection controls", async () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // F10: model id input is gone; models come from the listing API.
-    // F14: listProviderModels now takes (providerId, force) where force defaults
-    // to false on the panel-open lazy fetch.
-    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openrouter", { force: false }));
-    await screen.findByText("provider/original");
+    const list = await screen.findByRole("list", { name: "Model provider一覧" });
+    const row = within(list).getAllByRole("listitem")[0]!;
+    const detail = row.querySelector(".provider-row-detail") as HTMLElement;
+    expect(detail).toBeTruthy();
+    expect(within(detail).getByLabelText("API key")).toBeTruthy();
+    expect(within(detail).getByRole("switch", { name: "Zero Data Retentionを必須にする" })).toBeTruthy();
+    expect(within(detail).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
+    expect(within(detail).getByRole("button", { name: "設定を保存" })).toBeTruthy();
+    expect(within(detail).queryByText("利用可能なmodel")).toBeNull();
+    expect(screen.getByText("modelの選択と管理はchatサイドバーから行います。")).toBeTruthy();
     expect(screen.queryByLabelText("Model ID")).toBeNull();
-    expect(screen.getByLabelText("API key")).toBeTruthy();
+    expect(modelAPI.listProviderModels).not.toHaveBeenCalled();
+    expect(modelAPI.setActiveModel).not.toHaveBeenCalled();
+    expect(modelAPI.addCustomModel).not.toHaveBeenCalled();
+    expect(modelAPI.removeCustomModel).not.toHaveBeenCalled();
   });
 
-  it("stores a new API key inside the Manage panel and updates privacy settings", async () => {
+  it("stores a new API key inside the Advanced panel and updates privacy settings", async () => {
     backend.getLLMConfig.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // No Manage panel is open by default when nothing is configured. Click
-    // Manage to expand the row.
-    const manageButton = await screen.findByRole("button", { name: /^詳細/ });
+    // No Advanced panel is open by default when nothing is configured.
+    const manageButton = await screen.findByRole("button", { name: /^詳細設定/ });
     fireEvent.click(manageButton);
     const keyInput = await screen.findByLabelText("API key");
     fireEvent.change(keyInput, { target: { value: "new-secret" } });
@@ -180,7 +168,7 @@ describe("LLMSettingsPage", () => {
     }));
   });
 
-  it("can remove a stored API key from inside the Manage panel and return to the previous screen", async () => {
+  it("can remove a stored API key from inside the Advanced panel and return to the previous screen", async () => {
     backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     const onBack = vi.fn();
     render(<LLMSettingsPage onBack={onBack} />);
@@ -211,7 +199,7 @@ describe("LLMSettingsPage", () => {
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledTimes(2));
   });
 
-  it("tests the saved provider connection from inside the Manage panel and shows success", async () => {
+  it("tests the saved provider connection from inside the Advanced panel and shows success", async () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
@@ -253,23 +241,32 @@ describe("LLMSettingsPage", () => {
     const openRouterRow = within(list).getAllByRole("listitem")[0]!;
     expect(openRouterRow.textContent).toContain("OpenRouter");
     expect(openRouterRow.getAttribute("class")).not.toContain("is-expanded");
-    expect(within(openRouterRow).getByRole("button", { name: /^詳細/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(within(openRouterRow).getByRole("button", { name: /^詳細設定/ }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(screen.queryByRole("button", { name: "設定を保存" })).toBeNull();
   });
 
-  it("activates a (provider, model) pair from the Available models list", async () => {
+  it("hides Advanced for a built-in provider without options and keeps inline credential setup", async () => {
+    const optionlessDescriptor = {
+      ...openAIDescriptor,
+      id: "optionless",
+      displayName: "Optionless",
+      optionSchema: [],
+    };
+    backend.getLLMConfig.mockResolvedValue({
+      activeProviderId: "",
+      providers: [],
+      catalog: [optionlessDescriptor],
+      recentProviderIds: [],
+      recentModels: [],
+    });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // Listing API populates the panel; pick a different model id and activate it.
-    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openrouter", { force: false }));
-    const alternateButtons = await screen.findAllByRole("button", { name: /このmodelを使う/ });
-    fireEvent.click(alternateButtons[0]);
-
-    await waitFor(() => expect(backend.setActiveModel).toHaveBeenCalled());
-    const [providerId, modelId] = backend.setActiveModel.mock.calls[0];
-    expect(providerId).toBe("openrouter");
-    expect(modelId).toBe("anthropic/claude-sonnet-4-6");
+    const list = await screen.findByRole("list", { name: "Model provider一覧" });
+    const row = within(list).getAllByRole("listitem")[0]!;
+    expect(within(row).getByLabelText("OptionlessのAPI key")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "詳細設定" })).toBeNull();
+    expect(row.querySelector(".provider-row-detail")).toBeNull();
   });
 
   it("allows an OpenAI-compatible endpoint that does not require an API key", async () => {
@@ -298,8 +295,9 @@ describe("LLMSettingsPage", () => {
     backend.upsertProviderSettings.mockResolvedValue(customConfig);
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // Custom providers show their manually-registered models.
-    expect(await screen.findByText("local-model")).toBeTruthy();
+    expect(await screen.findByDisplayValue("Local")).toBeTruthy();
+    expect(screen.getByDisplayValue("http://localhost:8080/v1")).toBeTruthy();
+    expect(screen.queryByText("local-model")).toBeNull();
     expect(screen.queryByLabelText("API key")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
 
@@ -353,7 +351,7 @@ describe("LLMSettingsPage", () => {
     expect(names).toEqual(["OpenAI", "Groq", "OpenRouter"]);
   });
 
-  it("hides the ZDR control unless the OpenRouter Manage panel is open", async () => {
+  it("hides the ZDR control unless the OpenRouter Advanced panel is open", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "openai",
       activeModelRef: { providerId: "openai", modelId: "gpt-5" },
@@ -379,7 +377,7 @@ describe("LLMSettingsPage", () => {
     const openRouterRow = within(list).getAllByRole("listitem").find((row) =>
       row.querySelector(".provider-row-name")?.textContent === "OpenRouter",
     )!;
-    fireEvent.click(within(openRouterRow).getByRole("button", { name: /^詳細/ }));
+    fireEvent.click(within(openRouterRow).getByRole("button", { name: /^詳細設定/ }));
     expect(await screen.findByRole("switch", { name: "Zero Data Retentionを必須にする" })).toBeTruthy();
   });
 
@@ -463,11 +461,6 @@ describe("LLMSettingsPage", () => {
       recentProviderIds: ["openai"],
       recentModels: [{ providerId: "openai", modelId: "gpt-5" }],
     });
-    backend.listProviderModels.mockResolvedValue({
-      providerId: "openai",
-      models: [{ id: "gpt-5", source: "builtin" }],
-      source: "builtin",
-    });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     // The summary row shows a small env badge so the user notices that the
@@ -476,13 +469,13 @@ describe("LLMSettingsPage", () => {
     expect(badge).toBeTruthy();
     expect(badge.getAttribute("title")).toContain("GLINT_OPENAI_API_KEY");
 
-    // The Manage panel surfaces the same env var name in a longer notice so
+    // The Advanced panel surfaces the same env var name in a longer notice so
     // users editing credentials understand the override is active.
     const note = screen.getByText(/API keyを GLINT_OPENAI_API_KEY から/);
     expect(note).toBeTruthy();
   });
 
-  it("adds a manual model to a custom provider via the AddCustomModel API", async () => {
+  it("keeps custom provider removal in the Advanced panel", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",
       activeModelRef: undefined,
@@ -500,18 +493,22 @@ describe("LLMSettingsPage", () => {
       recentProviderIds: [],
       recentModels: [],
     });
+    backend.deleteProviderSettings.mockResolvedValue({
+      activeProviderId: "",
+      providers: [],
+      catalog: [customDescriptor],
+      recentProviderIds: [],
+      recentModels: [],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    const manageButton = await screen.findByRole("button", { name: /^詳細/ });
+    const manageButton = await screen.findByRole("button", { name: /^詳細設定/ });
     fireEvent.click(manageButton);
-    const modelInput = await screen.findByPlaceholderText("model id (例: llama-3.3-70b)");
-    fireEvent.change(modelInput, { target: { value: " local-model " } });
-    fireEvent.click(screen.getByRole("button", { name: "modelを追加" }));
+    const removeButton = await screen.findByRole("button", { name: "providerを削除" });
+    expect(removeButton.closest(".provider-row-detail-actions")).toBeTruthy();
+    fireEvent.click(removeButton);
 
-    await waitFor(() => expect(backend.addCustomModel).toHaveBeenCalledWith(
-      "openai_compatible:local",
-      "local-model",
-    ));
-    expect(await screen.findByText("local-model")).toBeTruthy();
+    await waitFor(() => expect(backend.deleteProviderSettings).toHaveBeenCalledWith("openai_compatible:local"));
   });
 });

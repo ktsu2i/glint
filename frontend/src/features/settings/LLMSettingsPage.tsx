@@ -2,7 +2,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Switch } from "@base-ui/react/switch";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowsClockwise,
   CaretDown,
   Check,
   Eye,
@@ -18,17 +17,11 @@ import {
   X,
 } from "@phosphor-icons/react";
 import {
-  addCustomModel,
   deleteProviderSettings,
   getLLMConfig,
-  listProviderModels,
-  removeCustomModel,
-  setActiveModel,
   testProviderConnection,
   upsertProviderSettings,
   type LLMConfig,
-  type ModelDescriptor,
-  type ModelListingResult,
   type ProviderDescriptor,
   type ProviderSettings,
   type ThemePreference,
@@ -165,6 +158,10 @@ function endpointHintFor(providerId: string, stored: ProviderSettings | null): s
     if (typeof baseUrl === "string" && baseUrl.trim() !== "") return baseUrl;
   }
   return "";
+}
+
+function hasAdvancedSettings(row: ProviderRowDescriptor): boolean {
+  return row.isCustom || row.descriptor.optionSchema.length > 0;
 }
 
 // rows are sorted: configured built-ins (catalog order) -> configured customs ->
@@ -370,13 +367,6 @@ export function LLMSettingsPage({
   const [newCustomLabel, setNewCustomLabel] = useState("");
   const [newCustomError, setNewCustomError] = useState("");
 
-  // F10: model listing は per-provider に lazy fetch する。
-  const [listingByProvider, setListingByProvider] = useState<Map<string, ModelListingResult>>(new Map());
-  const [listingLoading, setListingLoading] = useState<string>("");
-  const [newCustomModelId, setNewCustomModelId] = useState("");
-  const [customModelMutating, setCustomModelMutating] = useState(false);
-  const [activatingModelId, setActivatingModelId] = useState("");
-
   const rows = useMemo<ProviderRowDescriptor[]>(() => {
     if (!config) return [];
     return buildRows(config, staged);
@@ -401,7 +391,6 @@ export function LLMSettingsPage({
     setSaved(false);
     setConnectionTest(null);
     setConnectionTestError("");
-    setNewCustomModelId("");
   }, []);
 
   const closeManagePanel = useCallback((discardStaged = false) => {
@@ -414,7 +403,6 @@ export function LLMSettingsPage({
     setSaved(false);
     setConnectionTest(null);
     setConnectionTestError("");
-    setNewCustomModelId("");
     if (discardStaged) setStaged(null);
   }, []);
 
@@ -434,7 +422,12 @@ export function LLMSettingsPage({
         const descriptor = resolveDescriptor(loaded, preferred);
         if (descriptor) {
           const stored = loaded.providers.find((provider) => provider.providerId === preferred) ?? null;
-          openManagePanel(preferred, descriptor, stored);
+          const isCustom = isOpenAICompatibleInstance(preferred);
+          if (isCustom || descriptor.optionSchema.length > 0) {
+            openManagePanel(preferred, descriptor, stored);
+          } else {
+            closeManagePanel();
+          }
         }
       } else {
         closeManagePanel();
@@ -467,32 +460,6 @@ export function LLMSettingsPage({
     return () => window.clearTimeout(timer);
   }, [removedLabel]);
 
-  // F10: 公式 provider の Manage panel が開いたら model 一覧を取得して表示する。
-  // F14: Manage の `Refresh` button 経由 (`force=true`) では cache を bypass する。
-  // panel open 時の lazy load では force=false で TTL 内 cache を活用する。
-  const fetchListing = useCallback(async (providerId: string, force = false) => {
-    setListingLoading(providerId);
-    try {
-      const result = await listProviderModels(providerId, { force });
-      setListingByProvider((current) => {
-        const next = new Map(current);
-        next.set(providerId, result);
-        return next;
-      });
-    } catch (reason) {
-      setError(localizeBackendError(extractErrorMessage(reason, t("settings.modelListingFailed")), t));
-    } finally {
-      setListingLoading("");
-    }
-  }, [t]);
-
-  useEffect(() => {
-    if (!managedProviderId || managedIsCustom) return;
-    if (!managedStored?.configured) return;
-    if (listingByProvider.has(managedProviderId)) return;
-    void fetchListing(managedProviderId);
-  }, [managedProviderId, managedIsCustom, managedStored?.configured, listingByProvider, fetchListing]);
-
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving || !managedDescriptor || !managedProviderId) return;
@@ -513,62 +480,11 @@ export function LLMSettingsPage({
       setStaged(null);
       const refreshedStored = next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
       openManagePanel(managedProviderId, managedDescriptor, refreshedStored);
-      // 設定が変わったら最新の model listing を取り直す（base_url や api key が変わるとリストも変わるため）。
-      setListingByProvider((current) => {
-        if (!current.has(managedProviderId)) return current;
-        const next = new Map(current);
-        next.delete(managedProviderId);
-        return next;
-      });
       setSaved(true);
     } catch (reason) {
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleActivateModel(providerId: string, modelId: string) {
-    if (activatingModelId !== "") return;
-    setActivatingModelId(modelId);
-    setError("");
-    try {
-      const next = await setActiveModel(providerId, modelId);
-      setConfig(next);
-    } catch (reason) {
-      setError(localizeBackendError(extractErrorMessage(reason, t("settings.activateError")), t));
-    } finally {
-      setActivatingModelId("");
-    }
-  }
-
-  async function handleAddCustomModel() {
-    if (!managedStored || !managedIsCustom) return;
-    const modelId = newCustomModelId.trim();
-    if (!modelId) return;
-    setCustomModelMutating(true);
-    setError("");
-    try {
-      const next = await addCustomModel(managedStored.providerId, modelId);
-      setConfig(next);
-      setNewCustomModelId("");
-    } catch (reason) {
-      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
-    } finally {
-      setCustomModelMutating(false);
-    }
-  }
-
-  async function handleRemoveCustomModel(providerId: string, modelId: string) {
-    setCustomModelMutating(true);
-    setError("");
-    try {
-      const next = await removeCustomModel(providerId, modelId);
-      setConfig(next);
-    } catch (reason) {
-      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
-    } finally {
-      setCustomModelMutating(false);
     }
   }
 
@@ -764,21 +680,6 @@ export function LLMSettingsPage({
   }, [config, rows]);
   const headerConfigured = Boolean(activeRow?.stored?.configured);
 
-  // Models shown in the Manage panel. For custom providers this is the
-  // user-registered list; for built-in providers it's the latest listing
-  // result (or empty while fetching).
-  const visibleModels: ModelDescriptor[] = useMemo(() => {
-    if (!managedStored) return [];
-    if (managedIsCustom) {
-      return (managedStored.models ?? []).map((id) => ({ id, source: "builtin" }));
-    }
-    const listing = listingByProvider.get(managedStored.providerId);
-    return listing?.models ?? [];
-  }, [managedStored, managedIsCustom, listingByProvider]);
-
-  const currentListing = managedStored ? listingByProvider.get(managedStored.providerId) : undefined;
-  const activeModelRef = config?.activeModelRef;
-
   return (
     <section className="settings-page" aria-labelledby="settings-title">
       <div className="settings-page-shell">
@@ -901,6 +802,7 @@ export function LLMSettingsPage({
               <span className="provider-badge">{rows.length}</span>
             </div>
             <p className="appearance-description">{t("settings.modelConnectionsDescription")}</p>
+            <p className="model-connections-hint">{t("settings.modelConnectionsHint")}</p>
 
             {error && (
               <div className="settings-error" role="alert">
@@ -923,6 +825,7 @@ export function LLMSettingsPage({
                   const requiresKeyForRow = row.descriptor.authKind !== "none"
                     && !(row.isCustom && row.stored?.options?.requires_api_key === false);
                   const usesEnvCredential = row.stored?.credentialSource === "env";
+                  const showAdvanced = hasAdvancedSettings(row);
                   const inlineEligible = !row.isCustom
                     && row.descriptor.authKind !== "none"
                     && !usesEnvCredential;
@@ -983,46 +886,36 @@ export function LLMSettingsPage({
                               onClearKey={() => handleInlineClearKey(row)}
                             />
                           )}
-                          {row.isCustom && (
+                          {showAdvanced && (
                             <button
                               type="button"
-                              className="provider-row-remove"
-                              aria-label={t("settings.providerRemove")}
-                              onClick={() => void handleRemoveCustom(row)}
-                              disabled={removingId === row.rowId}
+                              className={isManaged ? "provider-row-manage is-open" : "provider-row-manage"}
+                              aria-expanded={isManaged}
+                              aria-controls={`provider-row-${row.rowId}-detail`}
+                              onClick={() => {
+                                if (isManaged) {
+                                  closeManagePanel(row.isStaged);
+                                  return;
+                                }
+                                openManagePanel(
+                                  row.rowId,
+                                  row.descriptor,
+                                  row.stored,
+                                  row.isStaged ? row.displayName : "",
+                                );
+                              }}
                             >
-                              <Trash size={12} />
-                              {removingId === row.rowId ? t("settings.providerRemoving") : t("settings.providerRemove")}
+                              {isManaged
+                                ? t("settings.closeAdvancedProvider")
+                                : t("settings.advancedProvider")}
+                              <CaretDown
+                                size={10}
+                                weight="bold"
+                                className="provider-row-manage-caret"
+                                aria-hidden="true"
+                              />
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className={isManaged ? "provider-row-manage is-open" : "provider-row-manage"}
-                            aria-expanded={isManaged}
-                            aria-controls={`provider-row-${row.rowId}-detail`}
-                            onClick={() => {
-                              if (isManaged) {
-                                closeManagePanel(row.isStaged);
-                                return;
-                              }
-                              openManagePanel(
-                                row.rowId,
-                                row.descriptor,
-                                row.stored,
-                                row.isStaged ? row.displayName : "",
-                              );
-                            }}
-                          >
-                            {isManaged
-                              ? t("settings.closeManageProvider")
-                              : t("settings.manageProvider")}
-                            <CaretDown
-                              size={10}
-                              weight="bold"
-                              className="provider-row-manage-caret"
-                              aria-hidden="true"
-                            />
-                          </button>
                         </div>
                       </div>
                       {inlineSavedId === row.rowId && (
@@ -1232,103 +1125,18 @@ export function LLMSettingsPage({
                             </fieldset>
                           )}
 
-                          {managedStored && (managedStored.configured || managedIsCustom) && (
-                            <fieldset className="settings-fieldset" disabled={loading || saving}>
-                              <legend>{t("settings.availableModels")}</legend>
-                              {!managedIsCustom && (
-                                <div className="provider-row-models-header">
-                                  <small>
-                                    {currentListing
-                                      ? t(`settings.modelSource.${currentListing.source}`, {
-                                        defaultValue: currentListing.source,
-                                      })
-                                      : t("settings.modelSourceLoading")}
-                                  </small>
-                                  <button
-                                    type="button"
-                                    className="settings-secondary settings-secondary-mini"
-                                    onClick={() => void fetchListing(managedStored.providerId, true)}
-                                    disabled={listingLoading === managedStored.providerId}
-                                  >
-                                    <ArrowsClockwise size={11} />
-                                    {listingLoading === managedStored.providerId
-                                      ? t("settings.refreshingModels")
-                                      : t("settings.refreshModels")}
-                                  </button>
-                                </div>
-                              )}
-                              {managedIsCustom && (
-                                <div className="provider-row-add-model">
-                                  <input
-                                    type="text"
-                                    value={newCustomModelId}
-                                    onChange={(event) => setNewCustomModelId(event.target.value)}
-                                    placeholder={t("settings.customModelPlaceholder")}
-                                    spellCheck={false}
-                                    autoComplete="off"
-                                  />
-                                  <button
-                                    type="button"
-                                    className="settings-secondary settings-secondary-mini"
-                                    onClick={() => void handleAddCustomModel()}
-                                    disabled={customModelMutating || newCustomModelId.trim() === ""}
-                                  >
-                                    <Plus size={11} weight="bold" />
-                                    {t("settings.addCustomModel")}
-                                  </button>
-                                </div>
-                              )}
-                              {visibleModels.length === 0 && (
-                                <p className="provider-row-models-empty">
-                                  {managedIsCustom
-                                    ? t("settings.customModelsEmpty")
-                                    : t("settings.modelListingEmpty")}
-                                </p>
-                              )}
-                              {visibleModels.length > 0 && (
-                                <ul className="provider-row-models">
-                                  {visibleModels.map((model) => {
-                                    const isActive = !!activeModelRef
-                                      && activeModelRef.providerId === managedStored.providerId
-                                      && activeModelRef.modelId === model.id;
-                                    return (
-                                      <li
-                                        key={model.id}
-                                        className={isActive ? "provider-row-model is-active" : "provider-row-model"}
-                                      >
-                                        <span className="provider-row-model-id">{model.id}</span>
-                                        <div className="provider-row-model-actions">
-                                          <button
-                                            type="button"
-                                            className={isActive ? "settings-secondary is-active-marker" : "settings-secondary"}
-                                            onClick={() => void handleActivateModel(managedStored.providerId, model.id)}
-                                            disabled={isActive || activatingModelId !== ""}
-                                          >
-                                            {isActive
-                                              ? t("settings.currentModel")
-                                              : t("settings.useThisModel")}
-                                          </button>
-                                          {managedIsCustom && (
-                                            <button
-                                              type="button"
-                                              className="provider-row-model-remove"
-                                              aria-label={t("settings.removeCustomModel")}
-                                              onClick={() => void handleRemoveCustomModel(managedStored.providerId, model.id)}
-                                              disabled={customModelMutating}
-                                            >
-                                              <X size={10} weight="bold" />
-                                            </button>
-                                          )}
-                                        </div>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              )}
-                            </fieldset>
-                          )}
-
                           <div className="provider-row-detail-actions">
+                            {row.isCustom && (
+                              <button
+                                type="button"
+                                className="settings-secondary provider-row-detail-remove"
+                                onClick={() => void handleRemoveCustom(row)}
+                                disabled={removingId === row.rowId}
+                              >
+                                <Trash size={12} />
+                                {removingId === row.rowId ? t("settings.providerRemoving") : t("settings.providerRemove")}
+                              </button>
+                            )}
                             <button
                               className="settings-secondary"
                               type="button"
