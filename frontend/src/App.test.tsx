@@ -326,7 +326,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "設定" }));
     expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
-    expect(await screen.findByText("modelの選択と管理はchatサイドバーから行います。")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "LLM Providers", level: 2 })).toBeTruthy();
     expect(screen.queryByText("provider/model")).toBeNull();
     expect(mocks.listProviderModels).not.toHaveBeenCalled();
     expect(mocks.setActiveModel).not.toHaveBeenCalled();

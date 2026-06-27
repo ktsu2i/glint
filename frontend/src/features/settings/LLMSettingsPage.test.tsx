@@ -156,7 +156,7 @@ describe("LLMSettingsPage", () => {
     expect(within(row).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
     expect(within(row).getByRole("button", { name: "設定を保存" })).toBeTruthy();
 
-    expect(screen.getByText("modelの選択と管理はchatサイドバーから行います。")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "LLM Providers", level: 2 })).toBeTruthy();
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(modelAPI.listProviderModels).not.toHaveBeenCalled();
     expect(modelAPI.setActiveModel).not.toHaveBeenCalled();
