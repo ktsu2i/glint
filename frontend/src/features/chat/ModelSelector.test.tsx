@@ -4,10 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
   listProviderModels: vi.fn(),
+  addCustomModel: vi.fn(),
+  removeCustomModel: vi.fn(),
 }));
 
 vi.mock("../../shared/api/backend", () => ({
   listProviderModels: backend.listProviderModels,
+  addCustomModel: backend.addCustomModel,
+  removeCustomModel: backend.removeCustomModel,
 }));
 
 import { ModelSelector } from "./ModelSelector";
@@ -82,6 +86,13 @@ beforeEach(() => {
     }
     return { providerId, models: [], source: "builtin" };
   });
+  backend.addCustomModel.mockImplementation(async (providerId: string) => makeConfig({
+    providers: makeConfig().providers.map((provider) =>
+      provider.providerId === providerId
+        ? { ...provider, models: [...(provider.models ?? []), "custom-new"] }
+        : provider),
+  }));
+  backend.removeCustomModel.mockImplementation(async () => makeConfig());
 });
 
 describe("ModelSelector", () => {
@@ -197,5 +208,103 @@ describe("ModelSelector", () => {
     expect(options[0]).toContain("claude-opus-4-7");
     expect(options[1]).toContain("gpt-5");
     expect(options[2]).toContain("local-7b");
+  });
+
+  // F14: listing source / fetched_at の表示
+  it("shows the listing source badge and a relative fetched-at when listing has metadata", async () => {
+    backend.listProviderModels.mockImplementation(async (providerId: string) => {
+      if (providerId === "openai") {
+        return {
+          providerId,
+          models: [{ id: "gpt-5", source: "api" }],
+          source: "api",
+          fetchedAt: new Date(Date.now() - 30_000).toISOString(),
+        };
+      }
+      return { providerId, models: [], source: "builtin" };
+    });
+    render(<ModelSelector config={makeConfig()} switching={false} onSelect={vi.fn()} onOpenSettings={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
+    await waitFor(() => expect(screen.getByText("API取得")).toBeTruthy());
+    // The English / Japanese "30 seconds ago" varies, but the badge must show something next to it.
+    const badge = screen.getByText("API取得");
+    expect(badge.getAttribute("data-source")).toBe("api");
+  });
+
+  // F14: Refresh button で listProviderModels が force: true で呼ばれる
+  it("re-fetches the provider listing with force when the Refresh button is pressed", async () => {
+    render(<ModelSelector config={makeConfig()} switching={false} onSelect={vi.fn()} onOpenSettings={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /gpt-5/ })).toBeTruthy());
+    backend.listProviderModels.mockClear();
+
+    const refresh = screen.getByRole("button", { name: /OpenAIのmodel一覧を再取得/ });
+    fireEvent.click(refresh);
+
+    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openai", { force: true }));
+  });
+
+  // F14: + Add custom model で addCustomModel が呼ばれる
+  it("adds a manual model id for a custom provider via the popover input", async () => {
+    const onConfigChange = vi.fn();
+    render(
+      <ModelSelector
+        config={makeConfig()}
+        switching={false}
+        onSelect={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onConfigChange={onConfigChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /local-7b/ })).toBeTruthy());
+
+    const input = screen.getByLabelText("Localにmodel idを追加");
+    fireEvent.change(input, { target: { value: "extra-7b" } });
+    const addButton = screen.getByRole("button", { name: "modelを追加" });
+    fireEvent.click(addButton);
+
+    await waitFor(() => expect(backend.addCustomModel).toHaveBeenCalledWith("openai_compatible:local", "extra-7b"));
+    await waitFor(() => expect(onConfigChange).toHaveBeenCalled());
+  });
+
+  // F14: custom model row の Remove で removeCustomModel が呼ばれる
+  it("removes a custom model id via the trailing remove button", async () => {
+    const onConfigChange = vi.fn();
+    render(
+      <ModelSelector
+        config={makeConfig()}
+        switching={false}
+        onSelect={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onConfigChange={onConfigChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /local-7b/ })).toBeTruthy());
+
+    const remove = screen.getByRole("button", { name: "local-7bを削除" });
+    fireEvent.click(remove);
+    await waitFor(() => expect(backend.removeCustomModel).toHaveBeenCalledWith("openai_compatible:local", "local-7b"));
+    await waitFor(() => expect(onConfigChange).toHaveBeenCalled());
+  });
+
+  // F14: keyboard 操作 - Tab で Refresh / Add / Remove 等が focusable
+  it("keeps Refresh, Add, and Remove buttons reachable via keyboard focus", async () => {
+    render(<ModelSelector config={makeConfig()} switching={false} onSelect={vi.fn()} onOpenSettings={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /local-7b/ })).toBeTruthy());
+
+    // Confirm each action button is a real <button> with a focusable target (not aria-hidden / disabled by default).
+    const refresh = screen.getByRole("button", { name: /OpenAIのmodel一覧を再取得/ });
+    const addButton = screen.getByRole("button", { name: "modelを追加" });
+    const remove = screen.getByRole("button", { name: "local-7bを削除" });
+
+    refresh.focus();
+    expect(document.activeElement).toBe(refresh);
+    // disabled until the input has text
+    expect(addButton.hasAttribute("disabled")).toBe(true);
+    remove.focus();
+    expect(document.activeElement).toBe(remove);
   });
 });

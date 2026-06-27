@@ -149,7 +149,9 @@ describe("LLMSettingsPage", () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     // F10: model id input is gone; models come from the listing API.
-    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openrouter"));
+    // F14: listProviderModels now takes (providerId, force) where force defaults
+    // to false on the panel-open lazy fetch.
+    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openrouter", { force: false }));
     await screen.findByText("provider/original");
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(screen.getByLabelText("API key")).toBeTruthy();
@@ -260,7 +262,7 @@ describe("LLMSettingsPage", () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     // Listing API populates the panel; pick a different model id and activate it.
-    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openrouter"));
+    await waitFor(() => expect(backend.listProviderModels).toHaveBeenCalledWith("openrouter", { force: false }));
     const alternateButtons = await screen.findAllByRole("button", { name: /このmodelを使う/ });
     fireEvent.click(alternateButtons[0]);
 

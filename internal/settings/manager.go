@@ -475,7 +475,13 @@ func (manager *Manager) RemoveCustomModel(ctx context.Context, providerID, model
 // api → cache → builtin fallback order defined in §10 of the design doc. The
 // returned `source` lets the UI render whether the list came from a fresh
 // API hit, a cached response, or the Glint-managed seed list.
-func (manager *Manager) ListProviderModels(ctx context.Context, providerID string) (ModelListingResult, error) {
+//
+// When force=false (the default for the composer popover lazy load) we serve
+// the cached listing first if it is still within modelListCacheTTL. This keeps
+// short-interval calls from the composer popover from hitting upstream every
+// time the popover opens. force=true (the explicit Refresh button) skips the
+// cache and always tries the listing API first.
+func (manager *Manager) ListProviderModels(ctx context.Context, providerID string, force bool) (ModelListingResult, error) {
 	if err := manager.ensureMigration(ctx); err != nil {
 		return ModelListingResult{}, err
 	}
@@ -517,8 +523,20 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 	}
 
 	cached, cachedAt, cacheErr := manager.loadModelCache(ctx, providerID)
+	cacheFresh := cacheErr == nil && len(cached) > 0 && manager.now().Sub(cachedAt) < modelListCacheTTL
 
 	if manager.registry.HasListing(llm.ProviderID(providerID)) {
+		// force=false で TTL 内の cache があれば、API hit をスキップして cache を返す。
+		// composer popover を短い間隔で開閉しても上流に負荷を掛けないための短絡。
+		if !force && cacheFresh {
+			merged := append(cached, manualModels(entry.Models)...)
+			return ModelListingResult{
+				ProviderID: providerID,
+				Models:     merged,
+				Source:     llm.ModelSourceCache,
+				FetchedAt:  pointer(cachedAt),
+			}, nil
+		}
 		fresh, apiErr := manager.registry.ListModels(ctx, cfg, deps)
 		if apiErr == nil && len(fresh) > 0 {
 			merged := llm.MergeModels(fresh, llm.BuiltinModels(llm.ProviderID(providerID)))
@@ -557,7 +575,7 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 
 	// listing API を持たない provider（Google 等）は cache → builtin の順だけ
 	// 確認する。cache は API 由来なので、現状は実質 builtin のみとなる。
-	if cacheErr == nil && len(cached) > 0 && manager.now().Sub(cachedAt) < modelListCacheTTL {
+	if cacheFresh {
 		merged := append(cached, manualModels(entry.Models)...)
 		return ModelListingResult{
 			ProviderID: providerID,
@@ -794,7 +812,7 @@ func (manager *Manager) pickDefaultModelID(ctx context.Context, providerID strin
 	if len(entry.Models) > 0 {
 		return entry.Models[0]
 	}
-	listing, err := manager.ListProviderModels(ctx, providerID)
+	listing, err := manager.ListProviderModels(ctx, providerID, false)
 	if err == nil && len(listing.Models) > 0 {
 		return listing.Models[0].ID
 	}

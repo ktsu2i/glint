@@ -584,7 +584,7 @@ func TestListProviderModelsUsesAPIAndCachesResult(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listing, err := manager.ListProviderModels(context.Background(), "openai")
+	listing, err := manager.ListProviderModels(context.Background(), "openai", true)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceAPI, listing.Source)
 	ids := make([]string, 0, len(listing.Models))
@@ -598,6 +598,46 @@ func TestListProviderModelsUsesAPIAndCachesResult(t *testing.T) {
 	// cache が SQLite に書かれていること。
 	assert.Contains(t, settingStore.values[llmModelCachePrefix+"openai"], "alpha-1")
 	assert.Equal(t, 1, requestCount)
+}
+
+// F14: composer popover が短時間に何度開閉されても、TTL 内なら ListProviderModels
+// は cache を返して上流 listing API を二度叩かない。Refresh button (force=true)
+// のときだけ upstream へ抜ける。
+func TestListProviderModelsServesCacheWithinTTLAndForceBypassesIt(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount++
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"data":[{"id":"alpha-1"}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Options:    map[string]any{"base_url": server.URL},
+		APIKey:     "sk",
+	})
+	require.NoError(t, err)
+
+	// 初回 (force=false) は cache が無いので API hit する。以降 TTL 内は cache。
+	first, err := manager.ListProviderModels(context.Background(), "openai", false)
+	require.NoError(t, err)
+	assert.Equal(t, llm.ModelSourceAPI, first.Source)
+	require.Equal(t, 1, requestCount)
+
+	for range 5 {
+		next, err := manager.ListProviderModels(context.Background(), "openai", false)
+		require.NoError(t, err)
+		assert.Equal(t, llm.ModelSourceCache, next.Source)
+	}
+	assert.Equal(t, 1, requestCount, "popover の連続 lazy fetch は cache を返して上流を叩かない")
+
+	// Refresh button (force=true) は cache を bypass して upstream を叩く。
+	refreshed, err := manager.ListProviderModels(context.Background(), "openai", true)
+	require.NoError(t, err)
+	assert.Equal(t, llm.ModelSourceAPI, refreshed.Source)
+	assert.Equal(t, 2, requestCount)
 }
 
 func TestListProviderModelsFallsBackToCacheWhenAPIFails(t *testing.T) {
@@ -616,7 +656,9 @@ func TestListProviderModelsFallsBackToCacheWhenAPIFails(t *testing.T) {
 	encoded, _ := json.Marshal(cacheEntry)
 	settingStore.values[llmModelCachePrefix+"openai"] = string(encoded)
 
-	listing, err := manager.ListProviderModels(context.Background(), "openai")
+	// force=true so we exercise the api → cache fallback rather than the
+	// TTL-fresh cache short-circuit.
+	listing, err := manager.ListProviderModels(context.Background(), "openai", true)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceCache, listing.Source)
 	require.NotEmpty(t, listing.Models)
@@ -633,7 +675,7 @@ func TestListProviderModelsFallsBackToBuiltinWhenAPIAndCacheFail(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listing, err := manager.ListProviderModels(context.Background(), "anthropic")
+	listing, err := manager.ListProviderModels(context.Background(), "anthropic", true)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceBuiltin, listing.Source)
 	assert.NotEmpty(t, listing.Models, "builtin seed list must always be available")
@@ -647,7 +689,7 @@ func TestListProviderModelsUsesBuiltinForGoogle(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	listing, err := manager.ListProviderModels(context.Background(), "google")
+	listing, err := manager.ListProviderModels(context.Background(), "google", false)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceBuiltin, listing.Source)
 	assert.NotEmpty(t, listing.Models)
@@ -665,7 +707,7 @@ func TestListProviderModelsReturnsManualEntriesForOpenAICompatible(t *testing.T)
 	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:foo", "custom-1")
 	require.NoError(t, err)
 
-	listing, err := manager.ListProviderModels(context.Background(), "openai_compatible:foo")
+	listing, err := manager.ListProviderModels(context.Background(), "openai_compatible:foo", false)
 	require.NoError(t, err)
 	require.Len(t, listing.Models, 1)
 	assert.Equal(t, "custom-1", listing.Models[0].ID)

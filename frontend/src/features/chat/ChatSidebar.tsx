@@ -334,6 +334,7 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
               switching={switchingModel}
               onSelect={handleSelectModel}
               onOpenSettings={() => onOpenSettings?.()}
+              onConfigChange={(next) => setLLMConfig(next)}
             />
             {activeProvider?.credentialSource === "env" && (
               <span

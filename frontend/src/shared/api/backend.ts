@@ -313,8 +313,11 @@ export async function setActiveModel(providerId: string, modelId: string): Promi
   return (await SetActiveModel(providerId, modelId)) as LLMConfig;
 }
 
-export async function listProviderModels(providerId: string): Promise<ModelListingResult> {
-  return (await ListProviderModels(providerId)) as ModelListingResult;
+export async function listProviderModels(
+  providerId: string,
+  opts: { force?: boolean } = {},
+): Promise<ModelListingResult> {
+  return (await ListProviderModels(providerId, opts.force ?? false)) as ModelListingResult;
 }
 
 export async function addCustomModel(providerId: string, modelId: string): Promise<LLMConfig> {

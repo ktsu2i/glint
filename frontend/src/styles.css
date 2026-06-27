@@ -3743,6 +3743,208 @@ button.page-count:disabled {
   color: var(--ink);
 }
 
+.model-selector-section-provider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 3px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 9px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+
+.model-selector-list > .model-selector-section-provider:first-of-type,
+.model-selector-section + .model-selector-section-provider {
+  border-top: 0;
+}
+
+.model-selector-section-name {
+  font-family: var(--utility-font);
+  font-weight: 600;
+  color: var(--ink);
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-selector-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--utility-font);
+  font-size: 8px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.model-selector-source-badge[data-source="api"] {
+  color: var(--signal-deep);
+  border-color: var(--signal-deep);
+}
+
+.model-selector-source-badge[data-source="cache"] {
+  color: var(--muted);
+}
+
+.model-selector-section-fetched {
+  font-family: var(--utility-font);
+  font-size: 8px;
+  color: var(--faint);
+  margin-left: 2px;
+}
+
+.model-selector-refresh {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--utility-font);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.model-selector-refresh:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.model-selector-refresh:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.model-selector-refresh:focus-visible {
+  outline: 2px solid var(--signal-deep);
+  outline-offset: 1px;
+}
+
+.model-selector-refresh-label {
+  font-size: 8px;
+}
+
+.model-selector-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px 10px;
+}
+
+.model-selector-skeleton-bar {
+  display: block;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--surface-2, rgb(0 0 0 / 6%));
+  animation: model-selector-pulse 1.4s ease-in-out infinite;
+}
+
+.model-selector-skeleton-bar:nth-child(2) {
+  width: 70%;
+  animation-delay: 0.2s;
+}
+
+@keyframes model-selector-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.model-selector-option-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.model-selector-option-remove:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-2, rgb(0 0 0 / 6%));
+}
+
+.model-selector-option-remove:focus-visible {
+  outline: 2px solid var(--signal-deep);
+  outline-offset: 1px;
+}
+
+.model-selector-custom-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 8px;
+}
+
+.model-selector-custom-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--utility-font);
+  font-size: 9px;
+}
+
+.model-selector-custom-add input:focus-visible {
+  outline: none;
+  border-color: var(--signal-deep);
+}
+
+.model-selector-custom-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--utility-font);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.model-selector-custom-add-button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.model-selector-custom-add-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.model-selector-error {
+  margin: 0;
+  padding: 6px 10px;
+  font-family: var(--utility-font);
+  font-size: 9px;
+  color: var(--signal-deep);
+  border-top: 1px solid var(--line);
+}
+
 .provider-icon-letter {
   display: inline-flex;
   align-items: center;

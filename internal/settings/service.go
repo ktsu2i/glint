@@ -53,11 +53,11 @@ func (service *Service) SetActiveModel(providerID, modelID string) (LLMConfig, e
 	return service.manager.SetActiveModel(service.ctx, providerID, modelID)
 }
 
-func (service *Service) ListProviderModels(providerID string) (ModelListingResult, error) {
+func (service *Service) ListProviderModels(providerID string, force bool) (ModelListingResult, error) {
 	if service.ctx == nil {
 		return ModelListingResult{}, errors.New("application is not ready")
 	}
-	return service.manager.ListProviderModels(service.ctx, providerID)
+	return service.manager.ListProviderModels(service.ctx, providerID, force)
 }
 
 func (service *Service) AddCustomModel(providerID, modelID string) (LLMConfig, error) {

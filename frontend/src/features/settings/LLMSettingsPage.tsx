@@ -468,10 +468,12 @@ export function LLMSettingsPage({
   }, [removedLabel]);
 
   // F10: 公式 provider の Manage panel が開いたら model 一覧を取得して表示する。
-  const fetchListing = useCallback(async (providerId: string) => {
+  // F14: Manage の `Refresh` button 経由 (`force=true`) では cache を bypass する。
+  // panel open 時の lazy load では force=false で TTL 内 cache を活用する。
+  const fetchListing = useCallback(async (providerId: string, force = false) => {
     setListingLoading(providerId);
     try {
-      const result = await listProviderModels(providerId);
+      const result = await listProviderModels(providerId, { force });
       setListingByProvider((current) => {
         const next = new Map(current);
         next.set(providerId, result);
@@ -1245,7 +1247,7 @@ export function LLMSettingsPage({
                                   <button
                                     type="button"
                                     className="settings-secondary settings-secondary-mini"
-                                    onClick={() => void fetchListing(managedStored.providerId)}
+                                    onClick={() => void fetchListing(managedStored.providerId, true)}
                                     disabled={listingLoading === managedStored.providerId}
                                   >
                                     <ArrowsClockwise size={11} />
