@@ -518,7 +518,11 @@ describe("LLMSettingsPage", () => {
 
     // Expanding the row reveals an env note explaining the override and a
     // working test-connection button.
-    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    const list = screen.getByRole("list", { name: "Model provider一覧" });
+    const openAIRow = within(list).getAllByRole("listitem").find((row) =>
+      row.querySelector(".provider-row-name")?.textContent === "OpenAI",
+    )!;
+    fireEvent.click(within(openAIRow).getByRole("button", { name: /OpenAI/ }));
     expect(screen.getByText(/GLINT_OPENAI_API_KEY/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "接続をテスト" })).toBeTruthy();
   });
