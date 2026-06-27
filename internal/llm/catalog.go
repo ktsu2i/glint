@@ -216,18 +216,9 @@ func openRouterDescriptor() ProviderDescriptor {
 		DisplayName:    "OpenRouter",
 		AuthKind:       AuthKindBearer,
 		DefaultBaseURL: OpenRouterEndpoint,
-		OptionSchema: []ProviderOption{
-			{
-				Key:      "zdr",
-				Label:    "Zero Data Retention",
-				Type:     ProviderOptionBool,
-				Required: false,
-				Default:  true,
-				HelpText: "データを保持しないendpointだけにroutingを制限します。",
-			},
-		},
-		Capabilities: ProviderCapabilities{Streaming: true},
-		Notes:        "model は OpenRouter の provider/model 形式で指定してください。",
+		OptionSchema:   []ProviderOption{},
+		Capabilities:   ProviderCapabilities{Streaming: true},
+		Notes:          "OpenRouter request は常に Zero Data Retention を有効にします。",
 	}
 }
 
@@ -235,7 +226,6 @@ func openRouterFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewOpenRouterGateway(OpenRouterConfig{
 		APIKey:        deps.APIKey,
 		Model:         cfg.Model,
-		ZDR:           optionBool(cfg.Options, "zdr", true),
 		ModelMetadata: deps.Model,
 	})
 }
@@ -259,24 +249,9 @@ func openAIDescriptor() ProviderDescriptor {
 		DisplayName:    "OpenAI",
 		AuthKind:       AuthKindBearer,
 		DefaultBaseURL: OpenAIDefaultEndpoint,
-		OptionSchema: []ProviderOption{
-			{
-				Key:      "organization",
-				Label:    "Organization ID",
-				Type:     ProviderOptionString,
-				Required: false,
-				HelpText: "OpenAI organizationを指定する場合のみ入力してください。",
-			},
-			{
-				Key:      "base_url",
-				Label:    "Base URL",
-				Type:     ProviderOptionURL,
-				Required: false,
-				HelpText: "Azure経由などの代替endpointを使う場合に上書きします。空欄ならOpenAI公式のendpointを使います。",
-			},
-		},
-		Capabilities: ProviderCapabilities{Streaming: true},
-		Notes:        "modelには `gpt-5` のようなOpenAI公式のmodel idを指定してください。",
+		OptionSchema:   []ProviderOption{},
+		Capabilities:   ProviderCapabilities{Streaming: true},
+		Notes:          "modelには `gpt-5` のようなOpenAI公式のmodel idを指定してください。",
 	}
 }
 
@@ -284,8 +259,6 @@ func openAIFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewOpenAIGateway(OpenAIConfig{
 		APIKey:        deps.APIKey,
 		Model:         cfg.Model,
-		Organization:  optionString(cfg.Options, "organization", ""),
-		BaseURL:       optionString(cfg.Options, "base_url", ""),
 		ModelMetadata: deps.Model,
 	})
 }
@@ -301,35 +274,17 @@ func anthropicDescriptor() ProviderDescriptor {
 		DisplayName:    "Anthropic Claude",
 		AuthKind:       AuthKindXApiKey,
 		DefaultBaseURL: AnthropicDefaultEndpoint,
-		OptionSchema: []ProviderOption{
-			{
-				Key:      "anthropic_version",
-				Label:    "Anthropic version",
-				Type:     ProviderOptionString,
-				Required: false,
-				Default:  AnthropicDefaultVersion,
-				HelpText: "`anthropic-version` ヘッダーの値です。通常はデフォルトのままで構いません。",
-			},
-			{
-				Key:      "base_url",
-				Label:    "Base URL",
-				Type:     ProviderOptionURL,
-				Required: false,
-				HelpText: "プロキシなど別のendpointを使う場合に上書きします。空欄ならAnthropic公式のendpointを使います。",
-			},
-		},
-		Capabilities: ProviderCapabilities{Streaming: true},
-		Notes:        "modelには `claude-opus-4-7` のようなAnthropic公式のmodel idを指定してください。",
+		OptionSchema:   []ProviderOption{},
+		Capabilities:   ProviderCapabilities{Streaming: true},
+		Notes:          "modelには `claude-opus-4-7` のようなAnthropic公式のmodel idを指定してください。",
 	}
 }
 
 func anthropicFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewAnthropicGateway(AnthropicConfig{
-		APIKey:           deps.APIKey,
-		Model:            cfg.Model,
-		BaseURL:          optionString(cfg.Options, "base_url", ""),
-		AnthropicVersion: optionString(cfg.Options, "anthropic_version", ""),
-		ModelMetadata:    deps.Model,
+		APIKey:        deps.APIKey,
+		Model:         cfg.Model,
+		ModelMetadata: deps.Model,
 	})
 }
 
@@ -344,33 +299,9 @@ func googleDescriptor() ProviderDescriptor {
 		DisplayName:    "Google Gemini",
 		AuthKind:       AuthKindXApiKey,
 		DefaultBaseURL: GoogleDefaultBaseURL,
-		OptionSchema: []ProviderOption{
-			{
-				Key:      "auth_mode",
-				Label:    "API key送信方式",
-				Type:     ProviderOptionString,
-				Required: false,
-				Default:  GoogleAuthModeHeader,
-				HelpText: "`header`（`x-goog-api-key`）または `query`（`?key=`）。通常は `header` のままで構いません。",
-			},
-			{
-				Key:      "api_version",
-				Label:    "API version",
-				Type:     ProviderOptionString,
-				Required: false,
-				Default:  GoogleDefaultAPIVersion,
-				HelpText: "`v1beta` や `v1` などのAPI versionです。",
-			},
-			{
-				Key:      "base_url",
-				Label:    "Base URL",
-				Type:     ProviderOptionURL,
-				Required: false,
-				HelpText: "プロキシなど別のendpointを使う場合に上書きします。空欄ならGoogle公式のendpointを使います。",
-			},
-		},
-		Capabilities: ProviderCapabilities{Streaming: true},
-		Notes:        "modelには `gemini-2.5-pro` のようなGoogle公式のmodel idを指定してください。Generative Language APIの有効化が必要です。",
+		OptionSchema:   []ProviderOption{},
+		Capabilities:   ProviderCapabilities{Streaming: true},
+		Notes:          "modelには `gemini-2.5-pro` のようなGoogle公式のmodel idを指定してください。Generative Language APIの有効化が必要です。",
 	}
 }
 
@@ -378,18 +309,12 @@ func googleFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewGoogleGateway(GoogleConfig{
 		APIKey:        deps.APIKey,
 		Model:         cfg.Model,
-		BaseURL:       optionString(cfg.Options, "base_url", ""),
-		APIVersion:    optionString(cfg.Options, "api_version", ""),
-		AuthMode:      optionString(cfg.Options, "auth_mode", ""),
 		ModelMetadata: deps.Model,
 	})
 }
 
 func validateGoogle(cfg ProviderConfig) error {
-	mode := strings.ToLower(strings.TrimSpace(optionString(cfg.Options, "auth_mode", "")))
-	if mode != "" && mode != GoogleAuthModeHeader && mode != GoogleAuthModeQuery {
-		return errors.New("auth_modeは `header` または `query` を指定してください。")
-	}
+	_ = cfg
 	return nil
 }
 
@@ -399,33 +324,15 @@ func ollamaDescriptor() ProviderDescriptor {
 		DisplayName:    "Ollama (local)",
 		AuthKind:       AuthKindNone,
 		DefaultBaseURL: OllamaDefaultBaseURL,
-		OptionSchema: []ProviderOption{
-			{
-				Key:      "base_url",
-				Label:    "Base URL",
-				Type:     ProviderOptionURL,
-				Required: false,
-				Default:  OllamaDefaultBaseURL,
-				HelpText: "Ollamaのbase URLです。デフォルトは http://localhost:11434/v1 です。",
-			},
-			{
-				Key:      "keep_alive",
-				Label:    "Keep alive",
-				Type:     ProviderOptionString,
-				Required: false,
-				HelpText: "modelをメモリに保持する時間（例: `5m`）。空欄ならOllamaのデフォルトに従います。",
-			},
-		},
-		Capabilities: ProviderCapabilities{Streaming: true},
-		Notes:        "ローカルのOllamaサーバが起動している必要があります。modelは事前に `ollama pull <model>` で取得してください。",
+		OptionSchema:   []ProviderOption{},
+		Capabilities:   ProviderCapabilities{Streaming: true},
+		Notes:          "ローカルのOllamaサーバが起動している必要があります。modelは事前に `ollama pull <model>` で取得してください。",
 	}
 }
 
 func ollamaFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return NewOllamaGateway(OllamaConfig{
 		Model:         cfg.Model,
-		BaseURL:       optionString(cfg.Options, "base_url", ""),
-		KeepAlive:     optionString(cfg.Options, "keep_alive", ""),
 		ModelMetadata: deps.Model,
 	})
 }

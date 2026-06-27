@@ -35,7 +35,7 @@ func TestOpenRouterGatewayStreamsNormalizedAnswer(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	gateway, err := newOpenRouterGateway(OpenRouterConfig{
-		APIKey: "secret-key", Model: "provider/model", ZDR: true, Endpoint: server.URL,
+		APIKey: "secret-key", Model: "provider/model", Endpoint: server.URL,
 	}, server.Client())
 	require.NoError(t, err)
 	stream, err := gateway.Complete(context.Background(), ChatRequest{
@@ -119,7 +119,7 @@ func TestOpenRouterGatewayTestsConnectionWithOneToken(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	gateway, err := newOpenRouterGateway(OpenRouterConfig{
-		APIKey: "key", Model: "provider/model", ZDR: true, Endpoint: server.URL,
+		APIKey: "key", Model: "provider/model", Endpoint: server.URL,
 	}, server.Client())
 	require.NoError(t, err)
 	require.NoError(t, gateway.TestConnection(context.Background()))

@@ -10,7 +10,6 @@ import {
   Monitor,
   Moon,
   Plus,
-  ShieldCheck,
   Sun,
   Translate,
   Trash,
@@ -151,17 +150,21 @@ function providerDisplayName(
   return descriptor.displayName;
 }
 
-function endpointHintFor(providerId: string, stored: ProviderSettings | null): string {
-  if (!stored?.options) return "";
-  const baseUrl = stored.options["base_url"];
-  if (providerId === "ollama" || isOpenAICompatibleInstance(providerId)) {
+function endpointHintFor(
+  providerId: string,
+  descriptor: ProviderDescriptor,
+  stored: ProviderSettings | null,
+): string {
+  if (isOpenAICompatibleInstance(providerId)) {
+    const baseUrl = stored?.options?.["base_url"];
     if (typeof baseUrl === "string" && baseUrl.trim() !== "") return baseUrl;
   }
+  if (providerId === "ollama") return descriptor.defaultBaseUrl ?? "";
   return "";
 }
 
 function hasAdvancedSettings(row: ProviderRowDescriptor): boolean {
-  return row.isCustom || row.descriptor.optionSchema.length > 0;
+  return row.isCustom;
 }
 
 // rows are sorted: configured built-ins (catalog order) -> configured customs ->
@@ -183,7 +186,7 @@ function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowD
       displayName: providerDisplayName(descriptor.id, descriptor, stored),
       isCustom: false,
       isStaged: false,
-      endpointHint: endpointHintFor(descriptor.id, stored),
+      endpointHint: endpointHintFor(descriptor.id, descriptor, stored),
     };
     if (stored?.configured) configured.push(row);
     else unconfigured.push(row);
@@ -204,7 +207,7 @@ function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowD
         displayName: providerDisplayName(stored.providerId, template, stored),
         isCustom: true,
         isStaged: false,
-        endpointHint: endpointHintFor(stored.providerId, stored),
+        endpointHint: endpointHintFor(stored.providerId, template, stored),
       });
     }
   }
@@ -240,8 +243,11 @@ type InlineApiKeyFormProps = {
   hasApiKey: boolean;
   isPending: boolean;
   isSaved: boolean;
+  isTesting: boolean;
+  canTest: boolean;
   onSaveKey: (apiKey: string) => Promise<void>;
   onClearKey: () => Promise<void>;
+  onTest: () => Promise<void>;
 };
 
 function InlineApiKeyForm({
@@ -249,8 +255,11 @@ function InlineApiKeyForm({
   hasApiKey,
   isPending,
   isSaved,
+  isTesting,
+  canTest,
   onSaveKey,
   onClearKey,
+  onTest,
 }: InlineApiKeyFormProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState("");
@@ -280,35 +289,49 @@ function InlineApiKeyForm({
   // sits inside the page-wide settings form, and nested forms are invalid HTML.
   return (
     <div className="provider-row-inline">
-      <div className="provider-row-inline-input">
-        <input
-          aria-label={ariaLabel}
-          type={show ? "text" : "password"}
-          value={value}
-          placeholder={placeholder}
-          autoComplete="new-password"
-          spellCheck={false}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={handleKeyDown}
-        />
+      {!hasApiKey && (
+        <>
+          <div className="provider-row-inline-input">
+            <input
+              aria-label={ariaLabel}
+              type={show ? "text" : "password"}
+              value={value}
+              placeholder={placeholder}
+              autoComplete="new-password"
+              spellCheck={false}
+              onChange={(event) => setValue(event.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <button
+              type="button"
+              className="provider-row-inline-eye"
+              aria-label={show ? t("settings.hideApiKey") : t("settings.showApiKey")}
+              onClick={() => setShow((current) => !current)}
+              disabled={value === ""}
+            >
+              {show ? <EyeSlash size={12} /> : <Eye size={12} />}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="provider-row-inline-save"
+            disabled={!canSave}
+            onClick={handleSave}
+          >
+            {isPending ? t("settings.inlineApiKeySaving") : t("settings.inlineApiKeySave")}
+          </button>
+        </>
+      )}
+      {canTest && (
         <button
           type="button"
-          className="provider-row-inline-eye"
-          aria-label={show ? t("settings.hideApiKey") : t("settings.showApiKey")}
-          onClick={() => setShow((current) => !current)}
-          disabled={value === ""}
+          className="provider-row-test"
+          onClick={() => void onTest()}
+          disabled={isPending || isTesting}
         >
-          {show ? <EyeSlash size={12} /> : <Eye size={12} />}
+          {isTesting ? t("settings.testingConnection") : t("settings.testConnection")}
         </button>
-      </div>
-      <button
-        type="button"
-        className="provider-row-inline-save"
-        disabled={!canSave}
-        onClick={handleSave}
-      >
-        {isPending ? t("settings.inlineApiKeySaving") : t("settings.inlineApiKeySave")}
-      </button>
+      )}
       {hasApiKey && (
         <button
           type="button"
@@ -357,6 +380,12 @@ export function LLMSettingsPage({
   const [connectionTestError, setConnectionTestError] = useState("");
   const [inlineSavingId, setInlineSavingId] = useState<string>("");
   const [inlineSavedId, setInlineSavedId] = useState<string>("");
+  const [rowTestingId, setRowTestingId] = useState<string>("");
+  const [rowTestResult, setRowTestResult] = useState<{
+    providerId: string;
+    status: "success" | "error";
+    message: string;
+  } | null>(null);
   const [removingId, setRemovingId] = useState<string>("");
   const [removedLabel, setRemovedLabel] = useState("");
   const [localThemeError, setLocalThemeError] = useState("");
@@ -412,9 +441,8 @@ export function LLMSettingsPage({
     try {
       const loaded = await getLLMConfig();
       setConfig(loaded);
-      // F9: do not auto-expand any row when nothing is configured. The active
-      // provider's Manage panel opens by default so existing tests / users can
-      // edit options without an extra click.
+      // Built-in providers have no detail form in F16. Only a configured
+      // Custom OpenAI-compatible provider can be opened automatically.
       const preferred = loaded.activeProviderId
         || loaded.providers.find((provider) => provider.configured)?.providerId
         || "";
@@ -422,8 +450,7 @@ export function LLMSettingsPage({
         const descriptor = resolveDescriptor(loaded, preferred);
         if (descriptor) {
           const stored = loaded.providers.find((provider) => provider.providerId === preferred) ?? null;
-          const isCustom = isOpenAICompatibleInstance(preferred);
-          if (isCustom || descriptor.optionSchema.length > 0) {
+          if (isOpenAICompatibleInstance(preferred)) {
             openManagePanel(preferred, descriptor, stored);
           } else {
             closeManagePanel();
@@ -520,7 +547,7 @@ export function LLMSettingsPage({
     try {
       const request: UpsertProviderRequest = {
         providerId: row.providerId,
-        options: row.stored?.options ?? defaultOptionsFor(row.descriptor),
+        options: {},
         apiKey: nextKey,
         clearApiKey: false,
       };
@@ -547,7 +574,7 @@ export function LLMSettingsPage({
     try {
       const request: UpsertProviderRequest = {
         providerId: row.providerId,
-        options: row.stored?.options ?? defaultOptionsFor(row.descriptor),
+        options: {},
         apiKey: "",
         clearApiKey: true,
       };
@@ -563,6 +590,51 @@ export function LLMSettingsPage({
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
     } finally {
       setInlineSavingId("");
+    }
+  }
+
+  async function handleRowTestConnection(row: ProviderRowDescriptor) {
+    if (rowTestingId) return;
+    setRowTestingId(row.rowId);
+    setRowTestResult(null);
+    setError("");
+    try {
+      // Ollama has no credential form. Persist its default-only connection on
+      // first test so it becomes available to the composer model selector.
+      if (row.descriptor.authKind === "none" && !row.stored) {
+        const next = await upsertProviderSettings({
+          providerId: row.providerId,
+          options: {},
+          apiKey: "",
+          clearApiKey: false,
+        });
+        setConfig(next);
+      }
+      const result = await testProviderConnection(row.providerId);
+      if (result.ok) {
+        setRowTestResult({
+          providerId: row.rowId,
+          status: "success",
+          message: t("settings.testConnectionSucceeded", { provider: row.displayName }),
+        });
+      } else {
+        setRowTestResult({
+          providerId: row.rowId,
+          status: "error",
+          message: localizeBackendError(result.error || t("settings.testConnectionFailed"), t),
+        });
+      }
+    } catch (reason) {
+      setRowTestResult({
+        providerId: row.rowId,
+        status: "error",
+        message: localizeBackendError(
+          extractErrorMessage(reason, t("settings.testConnectionFailed")),
+          t,
+        ),
+      });
+    } finally {
+      setRowTestingId("");
     }
   }
 
@@ -670,10 +742,8 @@ export function LLMSettingsPage({
     : true;
   const willHaveCredential = !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
   const canSave = !loading && !saving && (willHaveCredential || clearAPIKey);
-  const zdrOption = managedDescriptor?.optionSchema.find((option) => option.key === "zdr");
-  const zdrEnabled = zdrOption ? Boolean(options[zdrOption.key]) : false;
   const managedLabel = managedRow?.displayName ?? "—";
-  const generalOptionSchema = (managedDescriptor?.optionSchema ?? []).filter((option) => option.key !== "zdr");
+  const generalOptionSchema = managedDescriptor?.optionSchema ?? [];
   const activeRow = useMemo<ProviderRowDescriptor | null>(() => {
     if (!config?.activeProviderId) return null;
     return rows.find((row) => row.providerId === config.activeProviderId) ?? null;
@@ -829,6 +899,8 @@ export function LLMSettingsPage({
                   const inlineEligible = !row.isCustom
                     && row.descriptor.authKind !== "none"
                     && !usesEnvCredential;
+                  const canTestFromRow = !row.isCustom
+                    && (row.descriptor.authKind === "none" || Boolean(row.stored?.configured));
                   const envVarName = requiresKeyForRow ? envVarNameFor(row.providerId) : "";
                   const isActive = row.stored?.isActive ?? false;
                   let statusLabel: string;
@@ -882,9 +954,24 @@ export function LLMSettingsPage({
                               hasApiKey={row.stored?.hasApiKey ?? false}
                               isPending={inlineSavingId === row.rowId}
                               isSaved={inlineSavedId === row.rowId}
+                              isTesting={rowTestingId === row.rowId}
+                              canTest={Boolean(row.stored?.configured)}
                               onSaveKey={(key) => handleInlineSaveKey(row, key)}
                               onClearKey={() => handleInlineClearKey(row)}
+                              onTest={() => handleRowTestConnection(row)}
                             />
+                          )}
+                          {!inlineEligible && canTestFromRow && (
+                            <button
+                              type="button"
+                              className="provider-row-test"
+                              onClick={() => void handleRowTestConnection(row)}
+                              disabled={rowTestingId !== ""}
+                            >
+                              {rowTestingId === row.rowId
+                                ? t("settings.testingConnection")
+                                : t("settings.testConnection")}
+                            </button>
                           )}
                           {showAdvanced && (
                             <button
@@ -921,6 +1008,17 @@ export function LLMSettingsPage({
                       {inlineSavedId === row.rowId && (
                         <p className="provider-row-inline-status" role="status">
                           <Check size={11} /> {t("settings.inlineApiKeySaved")}
+                        </p>
+                      )}
+                      {rowTestResult?.providerId === row.rowId && (
+                        <p
+                          className={rowTestResult.status === "success"
+                            ? "provider-row-inline-status"
+                            : "provider-row-inline-status is-error"}
+                          role={rowTestResult.status === "error" ? "alert" : "status"}
+                        >
+                          {rowTestResult.status === "success" && <Check size={11} />}
+                          {rowTestResult.message}
                         </p>
                       )}
                       {isManaged && managedDescriptor && (
@@ -1096,32 +1194,6 @@ export function LLMSettingsPage({
                                   </div>
                                 );
                               })}
-                            </fieldset>
-                          )}
-
-                          {zdrOption && (
-                            <fieldset className="settings-fieldset" disabled={loading || saving}>
-                              <legend>{t("settings.privacy")}</legend>
-                              <div className="privacy-setting">
-                                <div>
-                                  <span><ShieldCheck size={16} /> {t("settings.zeroDataRetention")}</span>
-                                  <p>{zdrOption.helpText ?? t("settings.zdrDescription")}</p>
-                                </div>
-                                <Switch.Root
-                                  className="context-switch"
-                                  checked={zdrEnabled}
-                                  onCheckedChange={(checked) => {
-                                    setOptions((current) => ({ ...current, [zdrOption.key]: checked }));
-                                    setSaved(false);
-                                  }}
-                                  aria-label={t("settings.requireZdr")}
-                                >
-                                  <Switch.Thumb className="context-switch-thumb" />
-                                </Switch.Root>
-                              </div>
-                              <p className="remote-data-note">
-                                {t("settings.remoteDataNote")}
-                              </p>
                             </fieldset>
                           )}
 

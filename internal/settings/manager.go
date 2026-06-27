@@ -22,15 +22,16 @@ const (
 	legacyLLMSettingKey      = "llm.openrouter"
 	legacyOpenRouterKeyEntry = "openrouter-api-key"
 
-	llmActiveProviderKey  = "llm.active_provider"
-	llmActiveModelKey     = "llm.active_model_ref"
-	llmProvidersKey       = "llm.providers"
-	llmRecentProvidersKey = "llm.recent_providers"
-	llmRecentModelsKey    = "llm.recent_models"
-	llmModelCachePrefix   = "llm.model_cache."
-	llmMigrationDoneKey   = "llm.migration_v2_done"
-	llmKeyCleanupDoneKey  = "llm.migration_v3_done"
-	llmModelsMigrationKey = "llm.migration_v4_done"
+	llmActiveProviderKey   = "llm.active_provider"
+	llmActiveModelKey      = "llm.active_model_ref"
+	llmProvidersKey        = "llm.providers"
+	llmRecentProvidersKey  = "llm.recent_providers"
+	llmRecentModelsKey     = "llm.recent_models"
+	llmModelCachePrefix    = "llm.model_cache."
+	llmMigrationDoneKey    = "llm.migration_v2_done"
+	llmKeyCleanupDoneKey   = "llm.migration_v3_done"
+	llmModelsMigrationKey  = "llm.migration_v4_done"
+	llmOptionsMigrationKey = "llm.migration_v5_done"
 
 	// recentProvidersLimit / recentModelsLimit は composer popover の RECENT
 	// セクションに表示する最大件数。Zed の挙動に揃えて 3 件にしている。
@@ -162,21 +163,24 @@ type storedModelCache struct {
 }
 
 type Manager struct {
-	store     SettingStore
-	secrets   SecretStore
-	registry  *llm.Registry
-	now       func() time.Time
-	lookupEnv func(string) (string, bool)
-	migrated  bool
+	store      SettingStore
+	secrets    SecretStore
+	registry   *llm.Registry
+	listModels func(context.Context, llm.ProviderConfig, llm.Deps) ([]llm.ModelDescriptor, error)
+	now        func() time.Time
+	lookupEnv  func(string) (string, bool)
+	migrated   bool
 }
 
 func NewManager(store SettingStore, secrets SecretStore) *Manager {
+	registry := llm.NewRegistry()
 	return &Manager{
-		store:     store,
-		secrets:   secrets,
-		registry:  llm.NewRegistry(),
-		now:       time.Now,
-		lookupEnv: os.LookupEnv,
+		store:      store,
+		secrets:    secrets,
+		registry:   registry,
+		listModels: registry.ListModels,
+		now:        time.Now,
+		lookupEnv:  os.LookupEnv,
 	}
 }
 
@@ -224,7 +228,7 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 	cfg := llm.ProviderConfig{
 		ProviderID:   llm.ProviderID(providerID),
 		DisplayLabel: cleanedLabel,
-		Options:      normalizedOptions(request.Options),
+		Options:      providerOptions(llm.ProviderID(providerID), request.Options),
 	}
 	if err := manager.registry.Validate(cfg); err != nil {
 		return LLMConfig{}, err
@@ -537,7 +541,7 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 				FetchedAt:  pointer(cachedAt),
 			}, nil
 		}
-		fresh, apiErr := manager.registry.ListModels(ctx, cfg, deps)
+		fresh, apiErr := manager.listModels(ctx, cfg, deps)
 		if apiErr == nil && len(fresh) > 0 {
 			merged := llm.MergeModels(fresh, llm.BuiltinModels(llm.ProviderID(providerID)))
 			llm.SortModels(merged)
@@ -1097,6 +1101,17 @@ func normalizedOptions(options map[string]any) map[string]any {
 	out := make(map[string]any, len(options))
 	maps.Copy(out, options)
 	return out
+}
+
+// providerOptions keeps endpoint-level configuration exclusive to explicit
+// Custom OpenAI-compatible providers. Built-in provider behavior is versioned
+// in its adapter, so accepting options here would recreate hidden settings
+// that the Settings UI can no longer inspect or correct.
+func providerOptions(providerID llm.ProviderID, options map[string]any) map[string]any {
+	if !llm.IsOpenAICompatibleID(providerID) {
+		return nil
+	}
+	return normalizedOptions(options)
 }
 
 func apiKeyAccount(providerID string) string {

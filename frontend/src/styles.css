@@ -2874,7 +2874,8 @@ button.page-count:disabled {
 }
 
 .provider-row-inline-save,
-.provider-row-inline-reset {
+.provider-row-inline-reset,
+.provider-row-test {
   height: 26px;
   padding: 0 9px;
   border: 1px solid var(--line);
@@ -2892,13 +2893,19 @@ button.page-count:disabled {
   color: var(--signal-deep);
 }
 
+.provider-row-test:not(:disabled):hover {
+  border-color: var(--signal-deep);
+  color: var(--signal-deep);
+}
+
 .provider-row-inline-reset:not(:disabled):hover {
   border-color: var(--danger);
   color: var(--danger);
 }
 
 .provider-row-inline-save:disabled,
-.provider-row-inline-reset:disabled {
+.provider-row-inline-reset:disabled,
+.provider-row-test:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -2912,6 +2919,10 @@ button.page-count:disabled {
   font-family: var(--utility-font);
   font-size: 9px;
   letter-spacing: 0.03em;
+}
+
+.provider-row-inline-status.is-error {
+  color: var(--danger);
 }
 
 .provider-row-env-badge {

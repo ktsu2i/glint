@@ -18,8 +18,7 @@ func TestRegistryDescribesBuiltins(t *testing.T) {
 
 	descriptor, ok := registry.Descriptor(ProviderOpenRouter)
 	require.True(t, ok)
-	require.NotEmpty(t, descriptor.OptionSchema)
-	assert.Equal(t, "zdr", descriptor.OptionSchema[0].Key)
+	assert.Empty(t, descriptor.OptionSchema)
 	assert.True(t, descriptor.RequiresAPIKey())
 
 	ollama, ok := registry.Descriptor(ProviderOllama)
@@ -31,6 +30,15 @@ func TestRegistryDescribesBuiltins(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, openAI.RequiresAPIKey())
 	assert.Equal(t, OpenAIDefaultEndpoint, openAI.DefaultBaseURL)
+
+	for _, id := range []ProviderID{ProviderOpenRouter, ProviderOpenAI, ProviderAnthropic, ProviderGoogle, ProviderOllama} {
+		builtIn, found := registry.Descriptor(id)
+		require.True(t, found)
+		assert.Empty(t, builtIn.OptionSchema, "%s must not expose implementation options", id)
+	}
+	custom, ok := registry.Descriptor(ProviderOpenAICompatible)
+	require.True(t, ok)
+	assert.NotEmpty(t, custom.OptionSchema)
 }
 
 func TestRegistryResolvesOpenAICompatibleSlugToTemplate(t *testing.T) {
@@ -55,7 +63,7 @@ func TestRegistryValidatesOpenRouterModel(t *testing.T) {
 	)
 }
 
-func TestRegistryBuildDispatchesToOpenRouterFactory(t *testing.T) {
+func TestRegistryBuildUsesOpenRouterZDRDefault(t *testing.T) {
 	registry := NewRegistry()
 	gateway, err := registry.Build(
 		ProviderConfig{
@@ -68,7 +76,7 @@ func TestRegistryBuildDispatchesToOpenRouterFactory(t *testing.T) {
 	require.NoError(t, err)
 	openRouter, ok := gateway.(*OpenRouterGateway)
 	require.True(t, ok)
-	assert.False(t, openRouter.zdr)
+	assert.True(t, openRouter.zdr, "legacy user option must not disable ZDR")
 	assert.Equal(t, "provider/model", openRouter.model)
 }
 
@@ -84,7 +92,10 @@ func TestRegistryBuildDispatchesToOpenAIFactory(t *testing.T) {
 		ProviderConfig{
 			ProviderID: ProviderOpenAI,
 			Model:      "gpt-5",
-			Options:    map[string]any{"organization": "org_abc"},
+			Options: map[string]any{
+				"organization": "org_abc",
+				"base_url":     "https://legacy.example.com/v1",
+			},
 		},
 		Deps{APIKey: "secret"},
 	)
@@ -92,6 +103,8 @@ func TestRegistryBuildDispatchesToOpenAIFactory(t *testing.T) {
 	openAI, ok := gateway.(*OpenAIGateway)
 	require.True(t, ok)
 	assert.Equal(t, "gpt-5", openAI.model)
+	assert.Equal(t, OpenAIDefaultEndpoint, openAI.client.endpoint)
+	assert.Empty(t, openAI.client.headers["OpenAI-Organization"])
 }
 
 func TestRegistryBuildDispatchesToAnthropicFactory(t *testing.T) {
@@ -100,7 +113,10 @@ func TestRegistryBuildDispatchesToAnthropicFactory(t *testing.T) {
 		ProviderConfig{
 			ProviderID: ProviderAnthropic,
 			Model:      "claude-opus-4-7",
-			Options:    map[string]any{"anthropic_version": "2024-10-22"},
+			Options: map[string]any{
+				"anthropic_version": "2024-10-22",
+				"base_url":          "https://legacy.example.com",
+			},
 		},
 		Deps{APIKey: "secret"},
 	)
@@ -108,7 +124,8 @@ func TestRegistryBuildDispatchesToAnthropicFactory(t *testing.T) {
 	anthropic, ok := gateway.(*AnthropicGateway)
 	require.True(t, ok)
 	assert.Equal(t, "claude-opus-4-7", anthropic.model)
-	assert.Equal(t, "2024-10-22", anthropic.anthropicVersion)
+	assert.Equal(t, AnthropicDefaultEndpoint, anthropic.endpoint)
+	assert.Equal(t, AnthropicDefaultVersion, anthropic.anthropicVersion)
 }
 
 func TestRegistryValidatesAnthropicModel(t *testing.T) {
@@ -137,7 +154,11 @@ func TestRegistryBuildDispatchesToGoogleFactory(t *testing.T) {
 		ProviderConfig{
 			ProviderID: ProviderGoogle,
 			Model:      "gemini-2.5-pro",
-			Options:    map[string]any{"auth_mode": GoogleAuthModeQuery},
+			Options: map[string]any{
+				"auth_mode":   GoogleAuthModeQuery,
+				"api_version": "v1",
+				"base_url":    "https://legacy.example.com",
+			},
 		},
 		Deps{APIKey: "secret"},
 	)
@@ -145,7 +166,9 @@ func TestRegistryBuildDispatchesToGoogleFactory(t *testing.T) {
 	google, ok := gateway.(*GoogleGateway)
 	require.True(t, ok)
 	assert.Equal(t, "gemini-2.5-pro", google.model)
-	assert.Equal(t, GoogleAuthModeQuery, google.authMode)
+	assert.Equal(t, GoogleAuthModeHeader, google.authMode)
+	assert.Contains(t, google.endpoint, GoogleDefaultBaseURL+"/"+GoogleDefaultAPIVersion+"/models/")
+	assert.NotContains(t, google.endpoint, "key=")
 }
 
 func TestRegistryValidatesGoogleModel(t *testing.T) {
@@ -154,14 +177,11 @@ func TestRegistryValidatesGoogleModel(t *testing.T) {
 	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderGoogle}),
 	)
-	assert.ErrorContains(t,
-		registry.Validate(ProviderConfig{
-			ProviderID: ProviderGoogle,
-			Model:      "gemini-pro",
-			Options:    map[string]any{"auth_mode": "bogus"},
-		}),
-		"auth_mode",
-	)
+	assert.NoError(t, registry.Validate(ProviderConfig{
+		ProviderID: ProviderGoogle,
+		Model:      "gemini-pro",
+		Options:    map[string]any{"auth_mode": "bogus"},
+	}))
 	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderGoogle, Model: "gemini-pro"}),
 	)
@@ -182,6 +202,10 @@ func TestRegistryBuildDispatchesToOllamaFactory(t *testing.T) {
 		ProviderConfig{
 			ProviderID: ProviderOllama,
 			Model:      "llama3",
+			Options: map[string]any{
+				"base_url":   "http://legacy.example.com/v1",
+				"keep_alive": "5m",
+			},
 		},
 		Deps{},
 	)
@@ -189,6 +213,8 @@ func TestRegistryBuildDispatchesToOllamaFactory(t *testing.T) {
 	ollama, ok := gateway.(*OllamaGateway)
 	require.True(t, ok)
 	assert.Equal(t, "llama3", ollama.model)
+	assert.Equal(t, OllamaDefaultBaseURL+"/chat/completions", ollama.client.endpoint)
+	assert.Empty(t, ollama.keepAlive)
 }
 
 func TestRegistryBuildDispatchesToOpenAICompatibleFactory(t *testing.T) {

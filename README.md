@@ -19,7 +19,7 @@ Glint は、技術書PDFを読みながら、その内容を自分のコード�
 - OpenRouter / OpenAI / Anthropic / Google Gemini / Ollama / OpenAI互換endpointの設定UI
 - 保存済みprovider設定の接続テスト
 - light / dark / system theme切替と、選択内容のlocal保存
-- API keyのOS credential store保存。SQLiteにはmodelとprivacy設定だけを保存
+- API keyのOS credential store保存。SQLiteにはmodel選択とCustom providerの接続設定だけを保存
 - token付きlocal endpointによるPDF配信。frontendへlocal pathは渡さない
 
 section / chunk抽出、Library横断検索、repo indexing、book-to-repo mappingはまだ含みません。
@@ -27,12 +27,12 @@ section / chunk抽出、Library横断検索、repo indexing、book-to-repo mappi
 ## LLM provider設定
 
 1. Reader右上の`設定する`を開く。
-2. 利用するproviderを選ぶ。
-3. providerのmodel IDと、必要な場合はAPI keyを入力する。
-4. provider固有optionを確認して設定を保存する。
-5. `接続をテスト`でcredential、endpoint、modelを確認する。
+2. 組み込みremote providerにはAPI keyだけを保存する。Ollamaは既定のlocal endpointを使う。
+3. Custom OpenAI-compatible providerを使う場合だけ、Base URL、任意のAPI key、custom headersを設定する。
+4. Chat composerのmodel selectorから利用するprovider / modelを選ぶ。
+5. `接続をテスト`でcredential、Glint管理のendpoint、modelを確認する。
 
-API keyはproviderごとにOS credential storeへ保存し、通常のSQLite rowには保存しません。OpenRouterの`Zero Data Retention`はdefaultで有効です。有効時はOpenRouter requestに`provider.zdr = true`を指定し、ZDR endpointだけにroutingを制限します。
+API keyはproviderごとにOS credential storeへ保存し、通常のSQLite rowには保存しません。組み込みproviderのBase URL、API version、認証方式はGlintが管理し、Settingsには表示しません。OpenRouter requestは常に`provider.zdr = true`を指定し、ZDR endpointだけにroutingを制限します。
 
 質問とユーザーが明示的に添付したPDF textは、選択したproviderまたはユーザー指定endpointへ送信されます。providerが未設定でもLibraryとPDF readerは利用できます。
 

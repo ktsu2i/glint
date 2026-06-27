@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/kaito/glint/internal/llm"
 )
 
 type legacyOpenRouterSettings struct {
@@ -60,6 +62,23 @@ func (manager *Manager) ensureMigration(ctx context.Context) error {
 			return err
 		}
 		if err := manager.store.SaveSetting(ctx, llmModelsMigrationKey, "1"); err != nil {
+			return err
+		}
+	}
+
+	// F16: built-in provider options are implementation details owned by the
+	// adapters. Remove legacy endpoint/version/auth overrides so hidden values
+	// cannot keep affecting chat, listing, or connection tests. Custom
+	// OpenAI-compatible options remain user-managed and are preserved.
+	optionsDone, err := manager.store.Setting(ctx, llmOptionsMigrationKey)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(optionsDone) != "1" {
+		if err := manager.migrateBuiltInProviderOptions(ctx); err != nil {
+			return err
+		}
+		if err := manager.store.SaveSetting(ctx, llmOptionsMigrationKey, "1"); err != nil {
 			return err
 		}
 	}
@@ -212,4 +231,31 @@ func (manager *Manager) migrateToActiveModelRef(ctx context.Context) error {
 		return fmt.Errorf("encode active model ref during migration: %w", err)
 	}
 	return manager.store.SaveSetting(ctx, llmActiveModelKey, string(encoded))
+}
+
+// migrateBuiltInProviderOptions deletes only options previously persisted for
+// built-in providers. Models, labels, active/recent references, and keyring
+// credentials live in separate fields/stores and are intentionally untouched.
+func (manager *Manager) migrateBuiltInProviderOptions(ctx context.Context) error {
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return err
+	}
+	mutated := false
+	for id, entry := range stored {
+		providerID := llm.ProviderID(id)
+		if llm.IsOpenAICompatibleID(providerID) || len(entry.Options) == 0 {
+			continue
+		}
+		if _, builtIn := manager.registry.Descriptor(providerID); !builtIn {
+			continue
+		}
+		entry.Options = nil
+		stored[id] = entry
+		mutated = true
+	}
+	if !mutated {
+		return nil
+	}
+	return manager.saveStoredProviders(ctx, stored)
 }

@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-const OpenAIDefaultEndpoint = "https://api.openai.com/v1/chat/completions"
+const (
+	OpenAIDefaultBaseURL  = "https://api.openai.com/v1"
+	OpenAIDefaultEndpoint = OpenAIDefaultBaseURL + "/chat/completions"
+)
 
 type OpenAIConfig struct {
 	APIKey        string

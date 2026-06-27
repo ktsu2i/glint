@@ -13,7 +13,6 @@ const OpenRouterEndpoint = "https://openrouter.ai/api/v1/chat/completions"
 type OpenRouterConfig struct {
 	APIKey        string
 	Model         string
-	ZDR           bool
 	Endpoint      string
 	ModelMetadata ModelDescriptor
 }
@@ -58,7 +57,7 @@ func newOpenRouterGateway(config OpenRouterConfig, httpClient *http.Client) (*Op
 	}
 	return &OpenRouterGateway{
 		model:  config.Model,
-		zdr:    config.ZDR,
+		zdr:    true,
 		budget: EstimateBudget(config.ModelMetadata),
 		client: newChatCompletionsClient(chatCompletionsConfig{
 			Endpoint: config.Endpoint,

@@ -22,16 +22,6 @@ func httpClientForListing() *http.Client {
 	}
 }
 
-// listingBaseURL は cfg.Options["base_url"] の上書きを尊重して listing endpoint
-// を組み立てる helper。fallback には provider 公式 endpoint を渡す。
-func listingBaseURL(cfg ProviderConfig, fallback string) string {
-	base := strings.TrimSpace(optionString(cfg.Options, "base_url", ""))
-	if base == "" {
-		return fallback
-	}
-	return strings.TrimRight(base, "/")
-}
-
 // fetchJSON は listing API への共通 GET 呼び出し。auth header やクエリは
 // provider 側で組み立て済みのものを渡す。
 func fetchJSON(ctx context.Context, client *http.Client, endpoint string, headers map[string]string, out any) error {
@@ -60,18 +50,9 @@ func fetchJSON(ctx context.Context, client *http.Client, endpoint string, header
 
 // anthropicModelLister は Anthropic の `/v1/models` を叩く。
 func anthropicModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
-	if strings.TrimSpace(deps.APIKey) == "" {
-		return nil, fmt.Errorf("anthropic API key is required for model listing")
-	}
-	base := listingBaseURL(cfg, "https://api.anthropic.com")
-	endpoint := base + "/v1/models?limit=1000"
-	version := strings.TrimSpace(optionString(cfg.Options, "anthropic_version", AnthropicDefaultVersion))
-	if version == "" {
-		version = AnthropicDefaultVersion
-	}
-	headers := map[string]string{
-		"x-api-key":         deps.APIKey,
-		"anthropic-version": version,
+	endpoint, headers, err := anthropicModelListingRequest(cfg, deps)
+	if err != nil {
+		return nil, err
 	}
 	var payload struct {
 		Data []struct {
@@ -99,21 +80,9 @@ func anthropicModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([
 
 // openAIModelLister は OpenAI の `/v1/models` を叩く。
 func openAIModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
-	if strings.TrimSpace(deps.APIKey) == "" {
-		return nil, fmt.Errorf("openai API key is required for model listing")
-	}
-	base := listingBaseURL(cfg, "https://api.openai.com/v1")
-	endpoint := base + "/models"
-	// OpenAI base_url は `chat/completions` までを含めて入力されることがある。
-	// listing endpoint だけ別 path なので、`/chat/completions` 部を落とす。
-	if trimmed, ok := strings.CutSuffix(base, "/chat/completions"); ok {
-		endpoint = trimmed + "/models"
-	}
-	headers := map[string]string{
-		"Authorization": "Bearer " + deps.APIKey,
-	}
-	if org := strings.TrimSpace(optionString(cfg.Options, "organization", "")); org != "" {
-		headers["OpenAI-Organization"] = org
+	endpoint, headers, err := openAIModelListingRequest(cfg, deps)
+	if err != nil {
+		return nil, err
 	}
 	var payload struct {
 		Data []struct {
@@ -177,18 +146,9 @@ func openRouterLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]Mod
 // `/api/tags`（OpenAI 互換 namespace 外）にある点に注意。
 func ollamaModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
 	_ = deps
-	base := strings.TrimSpace(optionString(cfg.Options, "base_url", OllamaDefaultBaseURL))
-	if base == "" {
-		base = OllamaDefaultBaseURL
-	}
-	// 入力が `/v1` を含んでいる場合（OpenAI 互換 namespace）はその上の root に上る。
-	root := strings.TrimRight(base, "/")
-	if trimmed, ok := strings.CutSuffix(root, "/v1"); ok {
-		root = trimmed
-	}
-	parsed, err := url.Parse(root + "/api/tags")
+	endpoint, err := ollamaModelListingEndpoint(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Ollama base URL: %w", err)
+		return nil, err
 	}
 	var payload struct {
 		Models []struct {
@@ -196,7 +156,7 @@ func ollamaModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]Mo
 			Model string `json:"model"`
 		} `json:"models"`
 	}
-	if err := fetchJSON(ctx, httpClientForListing(), parsed.String(), nil, &payload); err != nil {
+	if err := fetchJSON(ctx, httpClientForListing(), endpoint, nil, &payload); err != nil {
 		return nil, err
 	}
 	models := make([]ModelDescriptor, 0, len(payload.Models))
@@ -214,4 +174,38 @@ func ollamaModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]Mo
 		})
 	}
 	return models, nil
+}
+
+func anthropicModelListingRequest(cfg ProviderConfig, deps Deps) (string, map[string]string, error) {
+	_ = cfg // legacy options are deliberately ignored for built-in providers.
+	if strings.TrimSpace(deps.APIKey) == "" {
+		return "", nil, fmt.Errorf("anthropic API key is required for model listing")
+	}
+	return AnthropicDefaultBaseURL + "/v1/models?limit=1000", map[string]string{
+		"x-api-key":         deps.APIKey,
+		"anthropic-version": AnthropicDefaultVersion,
+	}, nil
+}
+
+func openAIModelListingRequest(cfg ProviderConfig, deps Deps) (string, map[string]string, error) {
+	_ = cfg // legacy endpoint / organization options are deliberately ignored.
+	if strings.TrimSpace(deps.APIKey) == "" {
+		return "", nil, fmt.Errorf("openai API key is required for model listing")
+	}
+	return OpenAIDefaultBaseURL + "/models", map[string]string{
+		"Authorization": "Bearer " + deps.APIKey,
+	}, nil
+}
+
+func ollamaModelListingEndpoint(cfg ProviderConfig) (string, error) {
+	_ = cfg // alternate hosts are represented as Custom OpenAI-compatible providers.
+	root := strings.TrimRight(OllamaDefaultBaseURL, "/")
+	if trimmed, ok := strings.CutSuffix(root, "/v1"); ok {
+		root = trimmed
+	}
+	parsed, err := url.Parse(root + "/api/tags")
+	if err != nil {
+		return "", fmt.Errorf("invalid Ollama base URL: %w", err)
+	}
+	return parsed.String(), nil
 }

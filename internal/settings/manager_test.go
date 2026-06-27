@@ -87,6 +87,7 @@ func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
 	assert.True(t, provider.Configured, "openrouter should be configured once API key is saved")
 	assert.False(t, provider.IsActive, "upsert alone never activates a provider in F10")
 	assert.Equal(t, "", config.ActiveProviderID)
+	assert.Empty(t, provider.Options, "built-in options must not be persisted")
 
 	assert.NotContains(t, settingStore.values[llmProvidersKey], "secret-value")
 	assert.Equal(t, "secret-value", secretStore.values[openRouterAccount()])
@@ -115,7 +116,7 @@ func TestUpsertWithoutAPIKeyKeepsExistingCredential(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	assert.True(t, config.Providers[0].HasAPIKey)
-	assert.Equal(t, false, config.Providers[0].Options["zdr"])
+	assert.Empty(t, config.Providers[0].Options)
 }
 
 func TestUpsertClearAPIKeyRemovesCredentialButKeepsConfig(t *testing.T) {
@@ -296,6 +297,7 @@ func TestMigrationCopiesLegacyOpenRouterIntoNewSchema(t *testing.T) {
 	assert.Equal(t, "1", settingStore.values[llmMigrationDoneKey])
 	assert.Equal(t, "1", settingStore.values[llmKeyCleanupDoneKey])
 	assert.Equal(t, "1", settingStore.values[llmModelsMigrationKey])
+	assert.Equal(t, "1", settingStore.values[llmOptionsMigrationKey])
 }
 
 func TestMigrationIsIdempotent(t *testing.T) {
@@ -407,7 +409,7 @@ func TestUpsertOllamaDoesNotRequireAPIKey(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestUpsertOpenAIPersistsOrganization(t *testing.T) {
+func TestUpsertOpenAIIgnoresLegacyOptions(t *testing.T) {
 	manager, settingStore, secretStore := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
@@ -420,10 +422,53 @@ func TestUpsertOpenAIPersistsOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	assert.Equal(t, "openai", config.Providers[0].ProviderID)
-	assert.Equal(t, "org_abc", config.Providers[0].Options["organization"])
+	assert.Empty(t, config.Providers[0].Options)
 	assert.True(t, config.Providers[0].HasAPIKey)
 	assert.NotContains(t, settingStore.values[llmProvidersKey], "sk-secret")
 	assert.Equal(t, "sk-secret", secretStore.values[secretKey(credentialService, "llm.openai.api_key")])
+}
+
+func TestMigrationV5RemovesOnlyBuiltInProviderOptions(t *testing.T) {
+	manager, settingStore, secretStore := newTestManager()
+	settingStore.values[llmMigrationDoneKey] = "1"
+	settingStore.values[llmKeyCleanupDoneKey] = "1"
+	settingStore.values[llmModelsMigrationKey] = "1"
+	settingStore.values[llmProvidersKey] = `{
+		"openrouter":{"model":"openai/gpt-5","models":["openai/gpt-5"],"options":{"zdr":false}},
+		"openai":{"model":"gpt-5","models":["gpt-5"],"options":{"base_url":"https://legacy.example.com","organization":"org_legacy"}},
+		"anthropic":{"model":"claude-sonnet-4-6","models":["claude-sonnet-4-6"],"options":{"base_url":"https://legacy.example.com","anthropic_version":"2099-01-01"}},
+		"google":{"model":"gemini-2.5-pro","models":["gemini-2.5-pro"],"options":{"base_url":"https://legacy.example.com","api_version":"v1","auth_mode":"query"}},
+		"ollama":{"model":"llama3","models":["llama3"],"options":{"base_url":"http://legacy.example.com/v1","keep_alive":"5m"}},
+		"openai_compatible:local":{"displayLabel":"Local","model":"custom","models":["custom"],"options":{"base_url":"http://localhost:8080/v1","requires_api_key":false,"headers":{"X-Tenant":"dev"}}}
+	}`
+	settingStore.values[llmActiveModelKey] = `{"providerId":"openai","modelId":"gpt-5"}`
+	settingStore.values[llmRecentModelsKey] = `[{"providerId":"openai","modelId":"gpt-5"}]`
+	secretStore.values[secretKey(credentialService, apiKeyAccount("openai"))] = "sk-preserved"
+
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "1", settingStore.values[llmOptionsMigrationKey])
+	require.NotNil(t, config.ActiveModel)
+	assert.Equal(t, ActiveModelRef{ProviderID: "openai", ModelID: "gpt-5"}, *config.ActiveModel)
+	assert.Equal(t, []ActiveModelRef{{ProviderID: "openai", ModelID: "gpt-5"}}, config.RecentModels)
+	assert.Equal(t, "sk-preserved", secretStore.values[secretKey(credentialService, apiKeyAccount("openai"))])
+
+	stored, err := manager.loadStoredProviders(context.Background())
+	require.NoError(t, err)
+	for _, id := range []string{"openrouter", "openai", "anthropic", "google", "ollama"} {
+		assert.Empty(t, stored[id].Options, "%s legacy options must be removed", id)
+	}
+	assert.Equal(t, map[string]any{
+		"base_url":         "http://localhost:8080/v1",
+		"requires_api_key": false,
+		"headers":          map[string]any{"X-Tenant": "dev"},
+	}, stored["openai_compatible:local"].Options)
+
+	first := settingStore.values[llmProvidersKey]
+	manager.migrated = false
+	_, err = manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, first, settingStore.values[llmProvidersKey], "migration must be idempotent")
 }
 
 func TestUpsertOpenAICompatibleRequiresSlug(t *testing.T) {
@@ -521,7 +566,7 @@ func TestProviderConnectionUsesSavedProviderWithMinimalOutput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload map[string]any
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&payload))
-		maxTokens, _ = payload["max_completion_tokens"].(float64)
+		maxTokens, _ = payload["max_tokens"].(float64)
 		writer.Header().Set("Content-Type", "text/event-stream")
 		_, _ = writer.Write([]byte("data: [DONE]\n\n"))
 	}))
@@ -529,15 +574,19 @@ func TestProviderConnectionUsesSavedProviderWithMinimalOutput(t *testing.T) {
 
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openai",
-		Options:    map[string]any{"base_url": server.URL},
-		APIKey:     "sk-test",
+		ProviderID:   "openai_compatible:test",
+		DisplayLabel: "Test endpoint",
+		Options: map[string]any{
+			"base_url":         server.URL,
+			"requires_api_key": true,
+		},
+		APIKey: "sk-test",
 	})
 	require.NoError(t, err)
-	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
+	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:test", "test-model")
 	require.NoError(t, err)
 
-	result, err := manager.TestProviderConnection(context.Background(), "openai")
+	result, err := manager.TestProviderConnection(context.Background(), "openai_compatible:test")
 	require.NoError(t, err)
 	assert.True(t, result.OK)
 	assert.Empty(t, result.Error)
@@ -552,34 +601,37 @@ func TestProviderConnectionReturnsProviderError(t *testing.T) {
 
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openai",
-		Options:    map[string]any{"base_url": server.URL},
-		APIKey:     "bad-key",
+		ProviderID:   "openai_compatible:test",
+		DisplayLabel: "Test endpoint",
+		Options: map[string]any{
+			"base_url":         server.URL,
+			"requires_api_key": true,
+		},
+		APIKey: "bad-key",
 	})
 	require.NoError(t, err)
-	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
+	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:test", "test-model")
 	require.NoError(t, err)
 
-	result, err := manager.TestProviderConnection(context.Background(), "openai")
+	result, err := manager.TestProviderConnection(context.Background(), "openai_compatible:test")
 	require.NoError(t, err)
 	assert.False(t, result.OK)
-	assert.Contains(t, result.Error, "OpenAI API key")
+	assert.Contains(t, result.Error, "Test endpointのAPI key")
 }
 
 func TestListProviderModelsUsesAPIAndCachesResult(t *testing.T) {
 	requestCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		requestCount++
-		assert.Equal(t, "/models", request.URL.Path)
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"data":[{"id":"alpha-1"},{"id":"alpha-2"}]}`))
-	}))
-	t.Cleanup(server.Close)
-
 	manager, settingStore, _ := newTestManager()
+	manager.listModels = func(_ context.Context, cfg llm.ProviderConfig, _ llm.Deps) ([]llm.ModelDescriptor, error) {
+		requestCount++
+		assert.Equal(t, llm.ProviderOpenAI, cfg.ProviderID)
+		return []llm.ModelDescriptor{
+			{ID: "alpha-1", Source: llm.ModelSourceAPI},
+			{ID: "alpha-2", Source: llm.ModelSourceAPI},
+		}, nil
+	}
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
-		Options:    map[string]any{"base_url": server.URL},
 		APIKey:     "sk",
 	})
 	require.NoError(t, err)
@@ -605,17 +657,13 @@ func TestListProviderModelsUsesAPIAndCachesResult(t *testing.T) {
 // のときだけ upstream へ抜ける。
 func TestListProviderModelsServesCacheWithinTTLAndForceBypassesIt(t *testing.T) {
 	requestCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		requestCount++
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"data":[{"id":"alpha-1"}]}`))
-	}))
-	t.Cleanup(server.Close)
-
 	manager, _, _ := newTestManager()
+	manager.listModels = func(_ context.Context, _ llm.ProviderConfig, _ llm.Deps) ([]llm.ModelDescriptor, error) {
+		requestCount++
+		return []llm.ModelDescriptor{{ID: "alpha-1", Source: llm.ModelSourceAPI}}, nil
+	}
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
-		Options:    map[string]any{"base_url": server.URL},
 		APIKey:     "sk",
 	})
 	require.NoError(t, err)
@@ -642,9 +690,11 @@ func TestListProviderModelsServesCacheWithinTTLAndForceBypassesIt(t *testing.T) 
 
 func TestListProviderModelsFallsBackToCacheWhenAPIFails(t *testing.T) {
 	manager, settingStore, _ := newTestManager()
+	manager.listModels = func(context.Context, llm.ProviderConfig, llm.Deps) ([]llm.ModelDescriptor, error) {
+		return nil, errors.New("listing unavailable")
+	}
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
-		Options:    map[string]any{"base_url": "http://127.0.0.1:1"}, // unroutable
 		APIKey:     "sk",
 	})
 	require.NoError(t, err)
@@ -668,9 +718,11 @@ func TestListProviderModelsFallsBackToCacheWhenAPIFails(t *testing.T) {
 
 func TestListProviderModelsFallsBackToBuiltinWhenAPIAndCacheFail(t *testing.T) {
 	manager, _, _ := newTestManager()
+	manager.listModels = func(context.Context, llm.ProviderConfig, llm.Deps) ([]llm.ModelDescriptor, error) {
+		return nil, errors.New("listing unavailable")
+	}
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "anthropic",
-		Options:    map[string]any{"base_url": "http://127.0.0.1:1"},
 		APIKey:     "sk",
 	})
 	require.NoError(t, err)
@@ -859,16 +911,20 @@ func TestGatewayPrefersEnvKeyOverKeyring(t *testing.T) {
 
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openai",
-		Options:    map[string]any{"base_url": server.URL},
-		APIKey:     "keyring-value",
+		ProviderID:   "openai_compatible:test",
+		DisplayLabel: "Test endpoint",
+		Options: map[string]any{
+			"base_url":         server.URL,
+			"requires_api_key": true,
+		},
+		APIKey: "keyring-value",
 	})
 	require.NoError(t, err)
-	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
+	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:test", "test-model")
 	require.NoError(t, err)
 
 	manager.lookupEnv = func(name string) (string, bool) {
-		if name == "GLINT_OPENAI_API_KEY" {
+		if name == "GLINT_OPENAI_COMPATIBLE_TEST_API_KEY" {
 			return "env-value", true
 		}
 		return "", false
@@ -877,7 +933,7 @@ func TestGatewayPrefersEnvKeyOverKeyring(t *testing.T) {
 	// TestProviderConnection drives Gateway -> chat request through openai
 	// adapter, so the wire-level Authorization header reflects whichever key
 	// the manager handed to the gateway.
-	result, err := manager.TestProviderConnection(context.Background(), "openai")
+	result, err := manager.TestProviderConnection(context.Background(), "openai_compatible:test")
 	require.NoError(t, err)
 	assert.True(t, result.OK, "expected env key to satisfy the upstream: %s", result.Error)
 	assert.Equal(t, "Bearer env-value", seenAuth)

@@ -41,14 +41,7 @@ const openRouterDescriptor = {
   displayName: "OpenRouter",
   authKind: "bearer" as const,
   defaultBaseUrl: "https://openrouter.ai/api/v1/chat/completions",
-  optionSchema: [{
-    key: "zdr",
-    label: "Zero Data Retention",
-    type: "bool" as const,
-    required: false,
-    default: true,
-    helpText: "データを保持しないendpointだけにroutingを制限します。",
-  }],
+  optionSchema: [],
   capabilities: { streaming: true, tools: false, images: false },
 };
 
@@ -56,10 +49,32 @@ const openAIDescriptor = {
   id: "openai",
   displayName: "OpenAI",
   authKind: "bearer" as const,
-  optionSchema: [
-    { key: "organization", label: "Organization", type: "string" as const, required: false },
-    { key: "base_url", label: "Base URL", type: "url" as const, required: false },
-  ],
+  optionSchema: [],
+  capabilities: { streaming: true, tools: false, images: false },
+};
+
+const anthropicDescriptor = {
+  id: "anthropic",
+  displayName: "Anthropic Claude",
+  authKind: "x-api-key" as const,
+  optionSchema: [],
+  capabilities: { streaming: true, tools: false, images: false },
+};
+
+const googleDescriptor = {
+  id: "google",
+  displayName: "Google Gemini",
+  authKind: "x-api-key" as const,
+  optionSchema: [],
+  capabilities: { streaming: true, tools: false, images: false },
+};
+
+const ollamaDescriptor = {
+  id: "ollama",
+  displayName: "Ollama (local)",
+  authKind: "none" as const,
+  defaultBaseUrl: "http://localhost:11434/v1",
+  optionSchema: [],
   capabilities: { streaming: true, tools: false, images: false },
 };
 
@@ -81,7 +96,7 @@ const customDescriptor = {
   capabilities: { streaming: true, tools: false, images: false },
 };
 
-function configuredConfig(overrides: { hasApiKey?: boolean; configured?: boolean; model?: string; zdr?: boolean } = {}) {
+function configuredConfig(overrides: { hasApiKey?: boolean; configured?: boolean; model?: string } = {}) {
   const hasApiKey = overrides.hasApiKey ?? true;
   const configured = overrides.configured ?? hasApiKey;
   const model = overrides.model ?? "provider/original";
@@ -92,7 +107,7 @@ function configuredConfig(overrides: { hasApiKey?: boolean; configured?: boolean
       providerId: "openrouter",
       model,
       models: [],
-      options: { zdr: overrides.zdr ?? true },
+      options: {},
       hasApiKey,
       configured,
       isActive: configured,
@@ -126,18 +141,17 @@ describe("LLMSettingsPage", () => {
     expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("keeps the Advanced panel limited to provider connection controls", async () => {
+  it("keeps a configured built-in provider API key-only", async () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     const list = await screen.findByRole("list", { name: "Model provider一覧" });
     const row = within(list).getAllByRole("listitem")[0]!;
-    const detail = row.querySelector(".provider-row-detail") as HTMLElement;
-    expect(detail).toBeTruthy();
-    expect(within(detail).getByLabelText("API key")).toBeTruthy();
-    expect(within(detail).getByRole("switch", { name: "Zero Data Retentionを必須にする" })).toBeTruthy();
-    expect(within(detail).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
-    expect(within(detail).getByRole("button", { name: "設定を保存" })).toBeTruthy();
-    expect(within(detail).queryByText("利用可能なmodel")).toBeNull();
+    expect(row.querySelector(".provider-row-detail")).toBeNull();
+    expect(within(row).queryByLabelText("OpenRouterのAPI key")).toBeNull();
+    expect(within(row).getByText(/現在のmodel|設定済み/)).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "保存済みAPI keyを削除" })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "詳細設定" })).toBeNull();
     expect(screen.getByText("modelの選択と管理はchatサイドバーから行います。")).toBeTruthy();
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(modelAPI.listProviderModels).not.toHaveBeenCalled();
@@ -146,44 +160,35 @@ describe("LLMSettingsPage", () => {
     expect(modelAPI.removeCustomModel).not.toHaveBeenCalled();
   });
 
-  it("stores a new API key inside the Advanced panel and updates privacy settings", async () => {
+  it("stores a new built-in API key inline without provider options", async () => {
     backend.getLLMConfig.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // No Advanced panel is open by default when nothing is configured.
-    const manageButton = await screen.findByRole("button", { name: /^詳細設定/ });
-    fireEvent.click(manageButton);
-    const keyInput = await screen.findByLabelText("API key");
+    const keyInput = await screen.findByLabelText("OpenRouterのAPI key");
     fireEvent.change(keyInput, { target: { value: "new-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "API keyを表示" }));
     expect(keyInput).toHaveProperty("type", "text");
-    fireEvent.click(screen.getByRole("switch", { name: "Zero Data Retentionを必須にする" }));
-    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "openrouter",
-      options: { zdr: false },
+      options: {},
       apiKey: "new-secret",
       clearApiKey: false,
     }));
   });
 
-  it("can remove a stored API key from inside the Advanced panel and return to the previous screen", async () => {
+  it("removes a stored built-in API key directly from the row", async () => {
     backend.upsertProviderSettings.mockResolvedValue(configuredConfig({ hasApiKey: false, configured: false }));
-    const onBack = vi.fn();
-    render(<LLMSettingsPage onBack={onBack} />);
+    render(<LLMSettingsPage onBack={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "保存済みAPI keyを削除" }));
-    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "openrouter",
-      options: { zdr: true },
+      options: {},
       apiKey: "",
       clearApiKey: true,
     }));
-
-    fireEvent.click(screen.getByRole("button", { name: "戻る" }));
-    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it("offers a retry when settings cannot be loaded", async () => {
@@ -199,7 +204,7 @@ describe("LLMSettingsPage", () => {
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledTimes(2));
   });
 
-  it("tests the saved provider connection from inside the Advanced panel and shows success", async () => {
+  it("tests a saved built-in provider from the compact row", async () => {
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
@@ -241,32 +246,46 @@ describe("LLMSettingsPage", () => {
     const openRouterRow = within(list).getAllByRole("listitem")[0]!;
     expect(openRouterRow.textContent).toContain("OpenRouter");
     expect(openRouterRow.getAttribute("class")).not.toContain("is-expanded");
-    expect(within(openRouterRow).getByRole("button", { name: /^詳細設定/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(within(openRouterRow).queryByRole("button", { name: /^詳細設定/ })).toBeNull();
+    expect(within(openRouterRow).getByLabelText("OpenRouterのAPI key")).toBeTruthy();
     expect(screen.queryByLabelText("Model ID")).toBeNull();
     expect(screen.queryByRole("button", { name: "設定を保存" })).toBeNull();
   });
 
-  it("hides Advanced for a built-in provider without options and keeps inline credential setup", async () => {
-    const optionlessDescriptor = {
-      ...openAIDescriptor,
-      id: "optionless",
-      displayName: "Optionless",
-      optionSchema: [],
-    };
+  it("does not render implementation option fields for any built-in provider", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",
       providers: [],
-      catalog: [optionlessDescriptor],
+      catalog: [openRouterDescriptor, openAIDescriptor, anthropicDescriptor, googleDescriptor, ollamaDescriptor],
       recentProviderIds: [],
       recentModels: [],
     });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
     const list = await screen.findByRole("list", { name: "Model provider一覧" });
-    const row = within(list).getAllByRole("listitem")[0]!;
-    expect(within(row).getByLabelText("OptionlessのAPI key")).toBeTruthy();
-    expect(within(row).queryByRole("button", { name: "詳細設定" })).toBeNull();
-    expect(row.querySelector(".provider-row-detail")).toBeNull();
+    expect(within(list).getByLabelText("OpenRouterのAPI key")).toBeTruthy();
+    expect(within(list).getByLabelText("OpenAIのAPI key")).toBeTruthy();
+    expect(within(list).getByLabelText("Anthropic ClaudeのAPI key")).toBeTruthy();
+    expect(within(list).getByLabelText("Google GeminiのAPI key")).toBeTruthy();
+    expect(within(list).queryByRole("button", { name: "詳細設定" })).toBeNull();
+    for (const label of [
+      "Base URL",
+      "Anthropic version",
+      "API version",
+      "Authentication mode",
+      "API key送信方式",
+      "Organization",
+      "Organization ID",
+      "Zero Data Retention",
+    ]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+    const ollamaRow = within(list).getAllByRole("listitem").find((row) =>
+      row.querySelector(".provider-row-name")?.textContent === "Ollama (local)",
+    )!;
+    expect(within(ollamaRow).queryByRole("textbox")).toBeNull();
+    expect(within(ollamaRow).getByText("Endpoint: http://localhost:11434/v1")).toBeTruthy();
+    expect(within(ollamaRow).getByRole("button", { name: "接続をテスト" })).toBeTruthy();
   });
 
   it("allows an OpenAI-compatible endpoint that does not require an API key", async () => {
@@ -323,7 +342,7 @@ describe("LLMSettingsPage", () => {
           providerId: "openai",
           model: "gpt-5",
           models: [],
-          options: { organization: "", base_url: "" },
+          options: {},
           hasApiKey: true,
           configured: true,
           isActive: true,
@@ -351,34 +370,42 @@ describe("LLMSettingsPage", () => {
     expect(names).toEqual(["OpenAI", "Groq", "OpenRouter"]);
   });
 
-  it("hides the ZDR control unless the OpenRouter Advanced panel is open", async () => {
+  it("persists and tests Ollama using its built-in local endpoint", async () => {
     backend.getLLMConfig.mockResolvedValue({
-      activeProviderId: "openai",
-      activeModelRef: { providerId: "openai", modelId: "gpt-5" },
-      providers: [{
-        providerId: "openai",
-        model: "gpt-5",
-        models: [],
-        options: { organization: "", base_url: "" },
-        hasApiKey: true,
-        configured: true,
-        isActive: true,
-      }],
-      catalog: [openAIDescriptor, openRouterDescriptor],
-      recentProviderIds: ["openai"],
-      recentModels: [{ providerId: "openai", modelId: "gpt-5" }],
+      activeProviderId: "",
+      providers: [],
+      catalog: [ollamaDescriptor],
+      recentProviderIds: [],
+      recentModels: [],
     });
+    const ollamaConfig = {
+      activeProviderId: "",
+      providers: [{
+        providerId: "ollama",
+        model: "llama3",
+        models: [],
+        options: {},
+        hasApiKey: false,
+        configured: true,
+        isActive: false,
+      }],
+      catalog: [ollamaDescriptor],
+      recentProviderIds: [],
+      recentModels: [],
+    };
+    backend.upsertProviderSettings.mockResolvedValue(ollamaConfig);
+    backend.testProviderConnection.mockResolvedValue({ providerId: "ollama", ok: true });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    await screen.findByText("OpenAI");
-    expect(screen.queryByRole("switch", { name: "Zero Data Retentionを必須にする" })).toBeNull();
-
-    const list = screen.getByRole("list", { name: "Model provider一覧" });
-    const openRouterRow = within(list).getAllByRole("listitem").find((row) =>
-      row.querySelector(".provider-row-name")?.textContent === "OpenRouter",
-    )!;
-    fireEvent.click(within(openRouterRow).getByRole("button", { name: /^詳細設定/ }));
-    expect(await screen.findByRole("switch", { name: "Zero Data Retentionを必須にする" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "接続をテスト" }));
+    await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
+      providerId: "ollama",
+      options: {},
+      apiKey: "",
+      clearApiKey: false,
+    }));
+    await waitFor(() => expect(backend.testProviderConnection).toHaveBeenCalledWith("ollama"));
+    expect(await screen.findByText("Ollama (local)への接続に成功しました。")).toBeTruthy();
   });
 
   it("saves an API key inline from the row without entering the Manage panel", async () => {
@@ -395,7 +422,7 @@ describe("LLMSettingsPage", () => {
         providerId: "openrouter",
         model: "",
         models: [],
-        options: { zdr: true },
+        options: {},
         hasApiKey: true,
         configured: false,
         isActive: false,
@@ -413,7 +440,7 @@ describe("LLMSettingsPage", () => {
 
     await waitFor(() => expect(backend.upsertProviderSettings).toHaveBeenCalledWith({
       providerId: "openrouter",
-      options: { zdr: true },
+      options: {},
       apiKey: "sk-or-fresh",
       clearApiKey: false,
     }));
@@ -469,10 +496,11 @@ describe("LLMSettingsPage", () => {
     expect(badge).toBeTruthy();
     expect(badge.getAttribute("title")).toContain("GLINT_OPENAI_API_KEY");
 
-    // The Advanced panel surfaces the same env var name in a longer notice so
-    // users editing credentials understand the override is active.
-    const note = screen.getByText(/API keyを GLINT_OPENAI_API_KEY から/);
-    expect(note).toBeTruthy();
+    // Built-in rows never open a detail form. The env-owned key cannot be
+    // edited/reset here, but the connection can still be tested.
+    expect(screen.queryByLabelText("OpenAIのAPI key")).toBeNull();
+    expect(screen.queryByRole("button", { name: "詳細設定" })).toBeNull();
+    expect(screen.getByRole("button", { name: "接続をテスト" })).toBeTruthy();
   });
 
   it("keeps custom provider removal in the Advanced panel", async () => {
