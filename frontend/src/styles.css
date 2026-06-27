@@ -2306,16 +2306,6 @@ button.page-count:disabled {
   line-height: 1.65;
 }
 
-.model-connections-hint {
-  margin: -8px 27px 18px;
-  padding-left: 9px;
-  border-left: 2px solid var(--signal-deep);
-  color: var(--faint);
-  font-family: var(--utility-font);
-  font-size: 9.5px;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
-}
 
 .appearance-error {
   margin-top: 0;

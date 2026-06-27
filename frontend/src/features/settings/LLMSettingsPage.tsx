@@ -639,7 +639,6 @@ export function LLMSettingsPage({
               <span className="provider-badge">{rows.length}</span>
             </div>
             <p className="appearance-description">{t("settings.modelConnectionsDescription")}</p>
-            <p className="model-connections-hint">{t("settings.modelConnectionsHint")}</p>
 
             {error && (
               <div className="settings-error" role="alert">
