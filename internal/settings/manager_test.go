@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/kaito/glint/internal/llm"
 	"github.com/stretchr/testify/assert"
@@ -59,6 +60,7 @@ func TestGetLLMConfigReturnsEmptyButCatalogOnFreshInstall(t *testing.T) {
 	config, err := manager.GetLLMConfig(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "", config.ActiveProviderID)
+	assert.Nil(t, config.ActiveModel)
 	assert.Empty(t, config.Providers)
 	require.NotEmpty(t, config.Catalog)
 	ids := make([]string, 0, len(config.Catalog))
@@ -75,109 +77,58 @@ func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
 	manager, settingStore, secretStore := newTestManager()
 	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openrouter",
-		Model:      " provider/model ",
 		Options:    map[string]any{"zdr": true},
 		APIKey:     " secret-value ",
-		Activate:   true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	provider := config.Providers[0]
-	assert.Equal(t, "provider/model", provider.Model)
-	assert.True(t, provider.Configured)
 	assert.True(t, provider.HasAPIKey)
-	assert.True(t, provider.IsActive)
-	assert.Equal(t, "openrouter", config.ActiveProviderID)
+	assert.True(t, provider.Configured, "openrouter should be configured once API key is saved")
+	assert.False(t, provider.IsActive, "upsert alone never activates a provider in F10")
+	assert.Equal(t, "", config.ActiveProviderID)
 
 	assert.NotContains(t, settingStore.values[llmProvidersKey], "secret-value")
 	assert.Equal(t, "secret-value", secretStore.values[openRouterAccount()])
+
+	// Selecting an active (provider, model) is what wires the chat path up.
+	next, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
+	require.NoError(t, err)
+	require.NotNil(t, next.ActiveModel)
+	assert.Equal(t, "openrouter", next.ActiveModel.ProviderID)
+	assert.Equal(t, "anthropic/claude-sonnet-4-6", next.ActiveModel.ModelID)
 
 	_, err = manager.Gateway(context.Background())
 	require.NoError(t, err)
 }
 
-func TestUpsertWithoutActivateLeavesActiveProviderUntouched(t *testing.T) {
-	manager, settingStore, _ := newTestManager()
-	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter",
-		Model:      "provider/model",
-		Options:    map[string]any{"zdr": true},
-		APIKey:     "secret-value",
-	})
-	require.NoError(t, err)
-	require.Len(t, config.Providers, 1)
-	provider := config.Providers[0]
-	assert.True(t, provider.Configured)
-	assert.True(t, provider.HasAPIKey)
-	assert.False(t, provider.IsActive, "providerは保存されてもactivateを指定しない限りactiveにならない")
-	assert.Equal(t, "", config.ActiveProviderID)
-	assert.Equal(t, "", settingStore.values[llmActiveProviderKey])
-
-	// Save again without Activate; active still untouched.
-	config, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter",
-		Model:      "provider/updated",
-		Options:    map[string]any{"zdr": false},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "", config.ActiveProviderID)
-	assert.False(t, config.Providers[0].IsActive)
-}
-
-func TestUpsertWithoutActivateDoesNotOverwriteExistingActive(t *testing.T) {
-	manager, _, _ := newTestManager()
-	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter",
-		Model:      "provider/first",
-		APIKey:     "secret",
-		Activate:   true,
-	})
-	require.NoError(t, err)
-
-	// A second provider is saved without Activate; the first one stays active.
-	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openai",
-		Model:      "gpt-5",
-		APIKey:     "openai-secret",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "openrouter", config.ActiveProviderID)
-	for _, provider := range config.Providers {
-		switch provider.ProviderID {
-		case "openrouter":
-			assert.True(t, provider.IsActive)
-		case "openai":
-			assert.False(t, provider.IsActive)
-		}
-	}
-}
-
 func TestUpsertWithoutAPIKeyKeepsExistingCredential(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/first", Options: map[string]any{"zdr": true}, APIKey: "secret",
+		ProviderID: "openrouter", Options: map[string]any{"zdr": true}, APIKey: "secret",
 	})
 	require.NoError(t, err)
 
 	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/second", Options: map[string]any{"zdr": false},
+		ProviderID: "openrouter", Options: map[string]any{"zdr": false},
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	assert.True(t, config.Providers[0].HasAPIKey)
-	assert.Equal(t, "provider/second", config.Providers[0].Model)
 	assert.Equal(t, false, config.Providers[0].Options["zdr"])
 }
 
 func TestUpsertClearAPIKeyRemovesCredentialButKeepsConfig(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/first", APIKey: "secret", Activate: true,
+		ProviderID: "openrouter", APIKey: "secret",
 	})
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
 	require.NoError(t, err)
 
 	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/first", ClearAPIKey: true,
+		ProviderID: "openrouter", ClearAPIKey: true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
@@ -190,25 +141,20 @@ func TestUpsertClearAPIKeyRemovesCredentialButKeepsConfig(t *testing.T) {
 
 func TestUpsertValidatesProviderConfig(t *testing.T) {
 	manager, _, _ := newTestManager()
-	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{ProviderID: "openrouter"})
-	assert.ErrorContains(t, err, "model")
 
-	_, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{ProviderID: "openrouter", Model: "invalid"})
-	assert.ErrorContains(t, err, "provider/model")
-
-	_, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/model", APIKey: "new", ClearAPIKey: true,
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openrouter", APIKey: "new", ClearAPIKey: true,
 	})
 	assert.ErrorContains(t, err, "同時")
 
-	_, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{ProviderID: "no-such-provider", Model: "provider/x"})
+	_, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{ProviderID: "no-such-provider"})
 	assert.ErrorContains(t, err, "未知")
 }
 
 func TestDeleteProviderRemovesConfigAndCredential(t *testing.T) {
 	manager, _, secretStore := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/model", APIKey: "secret",
+		ProviderID: "openrouter", APIKey: "secret",
 	})
 	require.NoError(t, err)
 
@@ -223,7 +169,7 @@ func TestDeleteProviderRemovesConfigAndCredential(t *testing.T) {
 func TestSetActiveProviderRejectsUnknownAndClears(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/model", APIKey: "secret",
+		ProviderID: "openrouter", APIKey: "secret",
 	})
 	require.NoError(t, err)
 
@@ -233,38 +179,41 @@ func TestSetActiveProviderRejectsUnknownAndClears(t *testing.T) {
 	cleared, err := manager.SetActiveProvider(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, "", cleared.ActiveProviderID)
+	assert.Nil(t, cleared.ActiveModel)
 }
 
-func TestSetActiveProviderTracksRecentProvidersAsLRU(t *testing.T) {
+func TestSetActiveModelTracksRecentProvidersAsLRU(t *testing.T) {
 	manager, settingStore, _ := newTestManager()
 	for _, request := range []UpsertProviderRequest{
-		{ProviderID: "openrouter", Model: "provider/router", APIKey: "k1"},
-		{ProviderID: "openai", Model: "gpt-5", APIKey: "k2"},
-		{ProviderID: "anthropic", Model: "claude-opus-4-7", APIKey: "k3"},
-		{ProviderID: "ollama", Model: "llama3"},
+		{ProviderID: "openrouter", APIKey: "k1"},
+		{ProviderID: "openai", APIKey: "k2"},
+		{ProviderID: "anthropic", APIKey: "k3"},
+		{ProviderID: "ollama"},
 	} {
 		_, err := manager.UpsertProviderSettings(context.Background(), request)
 		require.NoError(t, err)
 	}
 
-	first, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	first, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openrouter"}, first.RecentProviderIDs)
+	require.NotNil(t, first.ActiveModel)
+	assert.Equal(t, "anthropic/claude-sonnet-4-6", first.ActiveModel.ModelID)
 
-	second, err := manager.SetActiveProvider(context.Background(), "openai")
+	second, err := manager.SetActiveModel(context.Background(), "openai", "gpt-5")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openai", "openrouter"}, second.RecentProviderIDs)
 
 	// Re-activating openrouter promotes it back to the front without growing
 	// the list, proving the LRU updates rather than appends duplicates.
-	third, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	third, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openrouter", "openai"}, third.RecentProviderIDs)
 
 	// Adding two more entries pushes the oldest out so the window stays at 3.
-	_, err = manager.SetActiveProvider(context.Background(), "anthropic")
+	_, err = manager.SetActiveModel(context.Background(), "anthropic", "claude-opus-4-8")
 	require.NoError(t, err)
-	final, err := manager.SetActiveProvider(context.Background(), "ollama")
+	final, err := manager.SetActiveModel(context.Background(), "ollama", "llama3")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ollama", "anthropic", "openrouter"}, final.RecentProviderIDs)
 
@@ -282,15 +231,15 @@ func TestSetActiveProviderTracksRecentProvidersAsLRU(t *testing.T) {
 func TestRecentProvidersPruneDroppedEntries(t *testing.T) {
 	manager, _, _ := newTestManager()
 	for _, request := range []UpsertProviderRequest{
-		{ProviderID: "openrouter", Model: "provider/router", APIKey: "k1"},
-		{ProviderID: "openai", Model: "gpt-5", APIKey: "k2"},
+		{ProviderID: "openrouter", APIKey: "k1"},
+		{ProviderID: "openai", APIKey: "k2"},
 	} {
 		_, err := manager.UpsertProviderSettings(context.Background(), request)
 		require.NoError(t, err)
 	}
-	_, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	_, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
 	require.NoError(t, err)
-	_, err = manager.SetActiveProvider(context.Background(), "openai")
+	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
 	require.NoError(t, err)
 
 	// Deleting openrouter must drop it from the recent list so the composer
@@ -298,6 +247,31 @@ func TestRecentProvidersPruneDroppedEntries(t *testing.T) {
 	config, err := manager.DeleteProviderSettings(context.Background(), "openrouter")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openai"}, config.RecentProviderIDs)
+}
+
+func TestRecentModelsLRUTracksPairs(t *testing.T) {
+	manager, _, _ := newTestManager()
+	for _, request := range []UpsertProviderRequest{
+		{ProviderID: "openrouter", APIKey: "k1"},
+		{ProviderID: "openai", APIKey: "k2"},
+	} {
+		_, err := manager.UpsertProviderSettings(context.Background(), request)
+		require.NoError(t, err)
+	}
+	_, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
+	require.NoError(t, err)
+	final, err := manager.SetActiveModel(context.Background(), "openrouter", "openai/gpt-5")
+	require.NoError(t, err)
+
+	// 同じ provider でも model id が違えば別エントリとして残る。
+	expected := []ActiveModelRef{
+		{ProviderID: "openrouter", ModelID: "openai/gpt-5"},
+		{ProviderID: "openai", ModelID: "gpt-5"},
+		{ProviderID: "openrouter", ModelID: "anthropic/claude-sonnet-4-6"},
+	}
+	assert.Equal(t, expected, final.RecentModels)
 }
 
 func TestMigrationCopiesLegacyOpenRouterIntoNewSchema(t *testing.T) {
@@ -313,11 +287,15 @@ func TestMigrationCopiesLegacyOpenRouterIntoNewSchema(t *testing.T) {
 	assert.True(t, config.Providers[0].HasAPIKey)
 	assert.True(t, config.Providers[0].IsActive)
 	assert.Equal(t, "openrouter", config.ActiveProviderID)
+	require.NotNil(t, config.ActiveModel)
+	assert.Equal(t, "openrouter", config.ActiveModel.ProviderID)
+	assert.Equal(t, "provider/legacy", config.ActiveModel.ModelID)
 	assert.Equal(t, "legacy-key", secretStore.values[openRouterAccount()])
 	_, legacyExists := secretStore.values[secretKey(credentialService, legacyOpenRouterKeyEntry)]
 	assert.False(t, legacyExists)
 	assert.Equal(t, "1", settingStore.values[llmMigrationDoneKey])
 	assert.Equal(t, "1", settingStore.values[llmKeyCleanupDoneKey])
+	assert.Equal(t, "1", settingStore.values[llmModelsMigrationKey])
 }
 
 func TestMigrationIsIdempotent(t *testing.T) {
@@ -339,6 +317,48 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	require.Len(t, config.Providers, 1)
 }
 
+func TestMigrationV4PromotesActiveProviderToActiveModelRef(t *testing.T) {
+	manager, settingStore, _ := newTestManager()
+	settingStore.values[llmMigrationDoneKey] = "1"
+	settingStore.values[llmKeyCleanupDoneKey] = "1"
+	settingStore.values[llmProvidersKey] = `{"openai":{"model":"gpt-5","options":{}}}`
+	settingStore.values[llmActiveProviderKey] = "openai"
+
+	_, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "1", settingStore.values[llmModelsMigrationKey])
+
+	// active_model_ref が JSON で保存されている。
+	require.NotEmpty(t, settingStore.values[llmActiveModelKey])
+	var ref ActiveModelRef
+	require.NoError(t, json.Unmarshal([]byte(settingStore.values[llmActiveModelKey]), &ref))
+	assert.Equal(t, "openai", ref.ProviderID)
+	assert.Equal(t, "gpt-5", ref.ModelID)
+
+	// 旧 model 単独保存は models[] の先頭にも入れる。
+	stored, err := manager.loadStoredProviders(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gpt-5"}, stored["openai"].Models)
+}
+
+func TestMigrationV4IsIdempotent(t *testing.T) {
+	manager, settingStore, _ := newTestManager()
+	settingStore.values[llmMigrationDoneKey] = "1"
+	settingStore.values[llmKeyCleanupDoneKey] = "1"
+	settingStore.values[llmProvidersKey] = `{"openai":{"model":"gpt-5"}}`
+	settingStore.values[llmActiveProviderKey] = "openai"
+
+	_, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	first := settingStore.values[llmActiveModelKey]
+
+	// 2回目の起動でも結果が変わらない。
+	manager.migrated = false
+	_, err = manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, first, settingStore.values[llmActiveModelKey])
+}
+
 func TestMigrationCleansLegacyKeyForPreviouslyMigratedInstall(t *testing.T) {
 	manager, settingStore, secretStore := newTestManager()
 	settingStore.values[llmMigrationDoneKey] = "1"
@@ -358,7 +378,7 @@ func TestMigrationCleansLegacyKeyForPreviouslyMigratedInstall(t *testing.T) {
 func TestManagerSurfacesCredentialFailures(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
-		ProviderID: "openrouter", Model: "provider/model", APIKey: "secret",
+		ProviderID: "openrouter", APIKey: "secret",
 	})
 	require.NoError(t, err)
 	manager.secrets = failingSecretStore{}
@@ -370,17 +390,17 @@ func TestUpsertOllamaDoesNotRequireAPIKey(t *testing.T) {
 	manager, _, _ := newTestManager()
 	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "ollama",
-		Model:      "llama3",
 		Options:    map[string]any{"base_url": "http://localhost:11434/v1"},
-		Activate:   true,
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	assert.Equal(t, "ollama", config.Providers[0].ProviderID)
 	assert.False(t, config.Providers[0].HasAPIKey)
 	assert.True(t, config.Providers[0].Configured)
-	assert.True(t, config.Providers[0].IsActive)
+	assert.False(t, config.Providers[0].IsActive)
 
+	_, err = manager.SetActiveModel(context.Background(), "ollama", "llama3")
+	require.NoError(t, err)
 	gateway, err := manager.Gateway(context.Background())
 	require.NoError(t, err)
 	_, ok := gateway.(*llm.OllamaGateway)
@@ -391,7 +411,6 @@ func TestUpsertOpenAIPersistsOrganization(t *testing.T) {
 	manager, settingStore, secretStore := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
-		Model:      "gpt-5",
 		Options:    map[string]any{"organization": "org_abc"},
 		APIKey:     "sk-secret",
 	})
@@ -411,7 +430,6 @@ func TestUpsertOpenAICompatibleRequiresSlug(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai_compatible",
-		Model:      "llama-3.3-70b",
 		Options:    map[string]any{"base_url": "https://api.groq.com/openai/v1"},
 		APIKey:     "secret",
 	})
@@ -423,39 +441,73 @@ func TestUpsertOpenAICompatibleStoresSlugInstance(t *testing.T) {
 	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID:   "openai_compatible:groq",
 		DisplayLabel: "Groq",
-		Model:        "llama-3.3-70b-versatile",
 		Options: map[string]any{
 			"base_url":         "https://api.groq.com/openai/v1",
 			"requires_api_key": true,
 		},
-		APIKey:   "secret",
-		Activate: true,
+		APIKey: "secret",
 	})
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	assert.Equal(t, "openai_compatible:groq", config.Providers[0].ProviderID)
 	assert.Equal(t, "Groq", config.Providers[0].DisplayLabel)
 	assert.True(t, config.Providers[0].HasAPIKey)
+	// custom provider は manual model 登録が前提なので、credential が揃っても
+	// model 登録までは「configured = false」のままにする。
+	assert.False(t, config.Providers[0].Configured)
 	assert.Equal(t, "secret", secretStore.values[secretKey(credentialService, "llm.openai_compatible:groq.api_key")])
 
+	// AddCustomModel すると configured = true になり、SetActiveModel もできる。
+	added, err := manager.AddCustomModel(context.Background(), "openai_compatible:groq", "llama-3.3-70b-versatile")
+	require.NoError(t, err)
+	require.Len(t, added.Providers, 1)
+	assert.Equal(t, []string{"llama-3.3-70b-versatile"}, added.Providers[0].Models)
+	assert.True(t, added.Providers[0].Configured)
+
+	_, err = manager.SetActiveModel(context.Background(), "openai_compatible:groq", "llama-3.3-70b-versatile")
+	require.NoError(t, err)
 	gateway, err := manager.Gateway(context.Background())
 	require.NoError(t, err)
 	_, ok := gateway.(*llm.OpenAICompatibleGateway)
 	assert.True(t, ok)
 }
 
-func TestOpenAICompatibleCanBeConfiguredWithoutAPIKey(t *testing.T) {
+func TestRemoveCustomModelClearsActiveWhenSame(t *testing.T) {
 	manager, _, _ := newTestManager()
-	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID:   "openai_compatible:local",
 		DisplayLabel: "Local",
-		Model:        "local-model",
 		Options: map[string]any{
 			"base_url":         "http://localhost:8080/v1",
 			"requires_api_key": false,
 		},
-		Activate: true,
 	})
+	require.NoError(t, err)
+	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:local", "model-x")
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openai_compatible:local", "model-x")
+	require.NoError(t, err)
+
+	config, err := manager.RemoveCustomModel(context.Background(), "openai_compatible:local", "model-x")
+	require.NoError(t, err)
+	assert.Empty(t, config.Providers[0].Models)
+	assert.Nil(t, config.ActiveModel)
+}
+
+func TestOpenAICompatibleCanBeConfiguredWithoutAPIKey(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID:   "openai_compatible:local",
+		DisplayLabel: "Local",
+		Options: map[string]any{
+			"base_url":         "http://localhost:8080/v1",
+			"requires_api_key": false,
+		},
+	})
+	require.NoError(t, err)
+	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:local", "local-model")
+	require.NoError(t, err)
+	config, err := manager.SetActiveModel(context.Background(), "openai_compatible:local", "local-model")
 	require.NoError(t, err)
 	require.Len(t, config.Providers, 1)
 	assert.True(t, config.Providers[0].Configured)
@@ -478,10 +530,11 @@ func TestProviderConnectionUsesSavedProviderWithMinimalOutput(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
-		Model:      "gpt-5",
 		Options:    map[string]any{"base_url": server.URL},
 		APIKey:     "sk-test",
 	})
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
 	require.NoError(t, err)
 
 	result, err := manager.TestProviderConnection(context.Background(), "openai")
@@ -500,16 +553,146 @@ func TestProviderConnectionReturnsProviderError(t *testing.T) {
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",
-		Model:      "gpt-5",
 		Options:    map[string]any{"base_url": server.URL},
 		APIKey:     "bad-key",
 	})
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
 	require.NoError(t, err)
 
 	result, err := manager.TestProviderConnection(context.Background(), "openai")
 	require.NoError(t, err)
 	assert.False(t, result.OK)
 	assert.Contains(t, result.Error, "OpenAI API key")
+}
+
+func TestListProviderModelsUsesAPIAndCachesResult(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requestCount++
+		assert.Equal(t, "/models", request.URL.Path)
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"data":[{"id":"alpha-1"},{"id":"alpha-2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	manager, settingStore, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Options:    map[string]any{"base_url": server.URL},
+		APIKey:     "sk",
+	})
+	require.NoError(t, err)
+
+	listing, err := manager.ListProviderModels(context.Background(), "openai")
+	require.NoError(t, err)
+	assert.Equal(t, llm.ModelSourceAPI, listing.Source)
+	ids := make([]string, 0, len(listing.Models))
+	for _, model := range listing.Models {
+		ids = append(ids, model.ID)
+	}
+	assert.Contains(t, ids, "alpha-1")
+	assert.Contains(t, ids, "alpha-2")
+	require.NotNil(t, listing.FetchedAt)
+
+	// cache が SQLite に書かれていること。
+	assert.Contains(t, settingStore.values[llmModelCachePrefix+"openai"], "alpha-1")
+	assert.Equal(t, 1, requestCount)
+}
+
+func TestListProviderModelsFallsBackToCacheWhenAPIFails(t *testing.T) {
+	manager, settingStore, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai",
+		Options:    map[string]any{"base_url": "http://127.0.0.1:1"}, // unroutable
+		APIKey:     "sk",
+	})
+	require.NoError(t, err)
+
+	cacheEntry := storedModelCache{
+		Models:    []llm.ModelDescriptor{{ID: "cached-alpha", Source: llm.ModelSourceAPI}},
+		FetchedAt: time.Now().Add(-2 * time.Hour),
+	}
+	encoded, _ := json.Marshal(cacheEntry)
+	settingStore.values[llmModelCachePrefix+"openai"] = string(encoded)
+
+	listing, err := manager.ListProviderModels(context.Background(), "openai")
+	require.NoError(t, err)
+	assert.Equal(t, llm.ModelSourceCache, listing.Source)
+	require.NotEmpty(t, listing.Models)
+	assert.Equal(t, "cached-alpha", listing.Models[0].ID)
+	assert.NotEmpty(t, listing.Error, "API failure must be surfaced even when cache is used")
+}
+
+func TestListProviderModelsFallsBackToBuiltinWhenAPIAndCacheFail(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "anthropic",
+		Options:    map[string]any{"base_url": "http://127.0.0.1:1"},
+		APIKey:     "sk",
+	})
+	require.NoError(t, err)
+
+	listing, err := manager.ListProviderModels(context.Background(), "anthropic")
+	require.NoError(t, err)
+	assert.Equal(t, llm.ModelSourceBuiltin, listing.Source)
+	assert.NotEmpty(t, listing.Models, "builtin seed list must always be available")
+}
+
+func TestListProviderModelsUsesBuiltinForGoogle(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "google",
+		APIKey:     "sk",
+	})
+	require.NoError(t, err)
+
+	listing, err := manager.ListProviderModels(context.Background(), "google")
+	require.NoError(t, err)
+	assert.Equal(t, llm.ModelSourceBuiltin, listing.Source)
+	assert.NotEmpty(t, listing.Models)
+}
+
+func TestListProviderModelsReturnsManualEntriesForOpenAICompatible(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID:   "openai_compatible:foo",
+		DisplayLabel: "Foo",
+		Options:      map[string]any{"base_url": "http://localhost:1234/v1"},
+		APIKey:       "secret",
+	})
+	require.NoError(t, err)
+	_, err = manager.AddCustomModel(context.Background(), "openai_compatible:foo", "custom-1")
+	require.NoError(t, err)
+
+	listing, err := manager.ListProviderModels(context.Background(), "openai_compatible:foo")
+	require.NoError(t, err)
+	require.Len(t, listing.Models, 1)
+	assert.Equal(t, "custom-1", listing.Models[0].ID)
+}
+
+func TestSetActiveProviderUsesLastUsedModel(t *testing.T) {
+	manager, _, _ := newTestManager()
+	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openrouter", APIKey: "k",
+	})
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openrouter", "openai/gpt-5")
+	require.NoError(t, err)
+
+	// Switch away, then back: provider returns to its last model.
+	_, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
+		ProviderID: "openai", APIKey: "k",
+	})
+	require.NoError(t, err)
+	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
+	require.NoError(t, err)
+
+	config, err := manager.SetActiveProvider(context.Background(), "openrouter")
+	require.NoError(t, err)
+	require.NotNil(t, config.ActiveModel)
+	assert.Equal(t, "openrouter", config.ActiveModel.ProviderID)
+	assert.Equal(t, "openai/gpt-5", config.ActiveModel.ModelID)
 }
 
 type failingSecretStore struct{}

@@ -13,7 +13,7 @@ import {
   cancelChat,
   getLLMConfig,
   onAnswerDelta,
-  setActiveProvider,
+  setActiveModel,
   startChat,
   type AnswerDelta,
   type LLMConfig,
@@ -82,12 +82,12 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
     }
   }, [t]);
 
-  const handleSelectModel = useCallback(async (providerId: string) => {
+  const handleSelectModel = useCallback(async (providerId: string, modelId: string) => {
     if (switchingModel) return;
     setSwitchingModel(true);
     setSettingsError("");
     try {
-      const next = await setActiveProvider(providerId);
+      const next = await setActiveModel(providerId, modelId);
       setLLMConfig(next);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : t("chat.loadSettingsError");

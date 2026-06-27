@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Switch } from "@base-ui/react/switch";
 import { useTranslation } from "react-i18next";
 import {
+  ArrowsClockwise,
   CaretDown,
   Check,
   Eye,
@@ -17,12 +18,17 @@ import {
   X,
 } from "@phosphor-icons/react";
 import {
+  addCustomModel,
   deleteProviderSettings,
   getLLMConfig,
-  setActiveProvider,
+  listProviderModels,
+  removeCustomModel,
+  setActiveModel,
   testProviderConnection,
   upsertProviderSettings,
   type LLMConfig,
+  type ModelDescriptor,
+  type ModelListingResult,
   type ProviderDescriptor,
   type ProviderSettings,
   type ThemePreference,
@@ -328,7 +334,6 @@ export function LLMSettingsPage({
   const [managedProviderId, setManagedProviderId] = useState<string>("");
   const [staged, setStaged] = useState<StagedCustom | null>(null);
   const [displayLabel, setDisplayLabel] = useState("");
-  const [model, setModel] = useState("");
   const [options, setOptions] = useState<Record<string, unknown>>({});
   const [apiKey, setAPIKey] = useState("");
   const [showAPIKey, setShowAPIKey] = useState(false);
@@ -340,8 +345,6 @@ export function LLMSettingsPage({
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTest, setConnectionTest] = useState<"success" | "error" | null>(null);
   const [connectionTestError, setConnectionTestError] = useState("");
-  const [activatingProvider, setActivatingProvider] = useState(false);
-  const [activated, setActivated] = useState(false);
   const [inlineSavingId, setInlineSavingId] = useState<string>("");
   const [inlineSavedId, setInlineSavedId] = useState<string>("");
   const [removingId, setRemovingId] = useState<string>("");
@@ -353,6 +356,13 @@ export function LLMSettingsPage({
   const [newCustomSlug, setNewCustomSlug] = useState("");
   const [newCustomLabel, setNewCustomLabel] = useState("");
   const [newCustomError, setNewCustomError] = useState("");
+
+  // F10: model listing は per-provider に lazy fetch する。
+  const [listingByProvider, setListingByProvider] = useState<Map<string, ModelListingResult>>(new Map());
+  const [listingLoading, setListingLoading] = useState<string>("");
+  const [newCustomModelId, setNewCustomModelId] = useState("");
+  const [customModelMutating, setCustomModelMutating] = useState(false);
+  const [activatingModelId, setActivatingModelId] = useState("");
 
   const rows = useMemo<ProviderRowDescriptor[]>(() => {
     if (!config) return [];
@@ -371,29 +381,27 @@ export function LLMSettingsPage({
   const openManagePanel = useCallback((rowId: string, descriptor: ProviderDescriptor, stored: ProviderSettings | null, label = "") => {
     setManagedProviderId(rowId);
     setDisplayLabel(stored?.displayLabel ?? label);
-    setModel(stored?.model ?? "");
     setOptions(mergeOptions(descriptor, stored?.options));
     setAPIKey("");
     setShowAPIKey(false);
     setClearAPIKey(false);
     setSaved(false);
-    setActivated(false);
     setConnectionTest(null);
     setConnectionTestError("");
+    setNewCustomModelId("");
   }, []);
 
   const closeManagePanel = useCallback((discardStaged = false) => {
     setManagedProviderId("");
     setDisplayLabel("");
-    setModel("");
     setOptions({});
     setAPIKey("");
     setShowAPIKey(false);
     setClearAPIKey(false);
     setSaved(false);
-    setActivated(false);
     setConnectionTest(null);
     setConnectionTestError("");
+    setNewCustomModelId("");
     if (discardStaged) setStaged(null);
   }, []);
 
@@ -405,7 +413,7 @@ export function LLMSettingsPage({
       setConfig(loaded);
       // F9: do not auto-expand any row when nothing is configured. The active
       // provider's Manage panel opens by default so existing tests / users can
-      // edit model + options without an extra click.
+      // edit options without an extra click.
       const preferred = loaded.activeProviderId
         || loaded.providers.find((provider) => provider.configured)?.providerId
         || "";
@@ -432,8 +440,7 @@ export function LLMSettingsPage({
   useEffect(() => {
     setConnectionTest(null);
     setConnectionTestError("");
-    setActivated(false);
-  }, [apiKey, clearAPIKey, model, options, managedProviderId]);
+  }, [apiKey, clearAPIKey, options, managedProviderId]);
 
   useEffect(() => {
     if (!inlineSavedId) return;
@@ -447,6 +454,30 @@ export function LLMSettingsPage({
     return () => window.clearTimeout(timer);
   }, [removedLabel]);
 
+  // F10: 公式 provider の Manage panel が開いたら model 一覧を取得して表示する。
+  const fetchListing = useCallback(async (providerId: string) => {
+    setListingLoading(providerId);
+    try {
+      const result = await listProviderModels(providerId);
+      setListingByProvider((current) => {
+        const next = new Map(current);
+        next.set(providerId, result);
+        return next;
+      });
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.modelListingFailed")), t));
+    } finally {
+      setListingLoading("");
+    }
+  }, [t]);
+
+  useEffect(() => {
+    if (!managedProviderId || managedIsCustom) return;
+    if (!managedStored?.configured) return;
+    if (listingByProvider.has(managedProviderId)) return;
+    void fetchListing(managedProviderId);
+  }, [managedProviderId, managedIsCustom, managedStored?.configured, listingByProvider, fetchListing]);
+
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving || !managedDescriptor || !managedProviderId) return;
@@ -457,13 +488,9 @@ export function LLMSettingsPage({
       const trimmedLabel = displayLabel.trim();
       const next = await upsertProviderSettings({
         providerId: managedProviderId,
-        model: model.trim(),
         options,
         apiKey: apiKey.trim(),
         clearApiKey: clearAPIKey,
-        // F7: provider 設定の保存と「現在 chat で使う model」を分離する。
-        // active 切替は「現在のmodelとして使う」ボタン (handleActivate) からだけ行う。
-        activate: false,
         ...(trimmedLabel ? { displayLabel: trimmedLabel } : {}),
       });
       setConfig(next);
@@ -471,6 +498,13 @@ export function LLMSettingsPage({
       setStaged(null);
       const refreshedStored = next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
       openManagePanel(managedProviderId, managedDescriptor, refreshedStored);
+      // 設定が変わったら最新の model listing を取り直す（base_url や api key が変わるとリストも変わるため）。
+      setListingByProvider((current) => {
+        if (!current.has(managedProviderId)) return current;
+        const next = new Map(current);
+        next.delete(managedProviderId);
+        return next;
+      });
       setSaved(true);
     } catch (reason) {
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
@@ -479,24 +513,47 @@ export function LLMSettingsPage({
     }
   }
 
-  async function handleActivate() {
-    if (activatingProvider || !managedStored?.configured) return;
-    setActivatingProvider(true);
-    setActivated(false);
+  async function handleActivateModel(providerId: string, modelId: string) {
+    if (activatingModelId !== "") return;
+    setActivatingModelId(modelId);
     setError("");
     try {
-      const next = await setActiveProvider(managedProviderId);
+      const next = await setActiveModel(providerId, modelId);
       setConfig(next);
-      const descriptor = resolveDescriptor(next, managedProviderId);
-      if (descriptor) {
-        const refreshedStored = next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
-        openManagePanel(managedProviderId, descriptor, refreshedStored);
-      }
-      setActivated(true);
     } catch (reason) {
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.activateError")), t));
     } finally {
-      setActivatingProvider(false);
+      setActivatingModelId("");
+    }
+  }
+
+  async function handleAddCustomModel() {
+    if (!managedStored || !managedIsCustom) return;
+    const modelId = newCustomModelId.trim();
+    if (!modelId) return;
+    setCustomModelMutating(true);
+    setError("");
+    try {
+      const next = await addCustomModel(managedStored.providerId, modelId);
+      setConfig(next);
+      setNewCustomModelId("");
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
+    } finally {
+      setCustomModelMutating(false);
+    }
+  }
+
+  async function handleRemoveCustomModel(providerId: string, modelId: string) {
+    setCustomModelMutating(true);
+    setError("");
+    try {
+      const next = await removeCustomModel(providerId, modelId);
+      setConfig(next);
+    } catch (reason) {
+      setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
+    } finally {
+      setCustomModelMutating(false);
     }
   }
 
@@ -525,10 +582,6 @@ export function LLMSettingsPage({
   }
 
   async function handleInlineSaveKey(row: ProviderRowDescriptor, nextKey: string) {
-    if (!row.stored && !row.isStaged) {
-      // Inline form is only enabled for built-in rows; nothing to save against
-      // an entirely unknown provider.
-    }
     setInlineSavingId(row.rowId);
     setError("");
     setRemovedLabel("");
@@ -536,11 +589,9 @@ export function LLMSettingsPage({
     try {
       const request: UpsertProviderRequest = {
         providerId: row.providerId,
-        model: row.stored?.model ?? "",
         options: row.stored?.options ?? defaultOptionsFor(row.descriptor),
         apiKey: nextKey,
         clearApiKey: false,
-        activate: false,
       };
       if (row.stored?.displayLabel) request.displayLabel = row.stored.displayLabel;
       const next = await upsertProviderSettings(request);
@@ -565,11 +616,9 @@ export function LLMSettingsPage({
     try {
       const request: UpsertProviderRequest = {
         providerId: row.providerId,
-        model: row.stored?.model ?? "",
         options: row.stored?.options ?? defaultOptionsFor(row.descriptor),
         apiKey: "",
         clearApiKey: true,
-        activate: false,
       };
       if (row.stored?.displayLabel) request.displayLabel = row.stored.displayLabel;
       const next = await upsertProviderSettings(request);
@@ -689,7 +738,7 @@ export function LLMSettingsPage({
       && !(isCustomInstance && options.requires_api_key === false)
     : true;
   const willHaveCredential = !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
-  const canSave = !loading && !saving && model.trim() !== "" && (willHaveCredential || clearAPIKey);
+  const canSave = !loading && !saving && (willHaveCredential || clearAPIKey);
   const zdrOption = managedDescriptor?.optionSchema.find((option) => option.key === "zdr");
   const zdrEnabled = zdrOption ? Boolean(options[zdrOption.key]) : false;
   const managedLabel = managedRow?.displayName ?? "—";
@@ -699,6 +748,21 @@ export function LLMSettingsPage({
     return rows.find((row) => row.providerId === config.activeProviderId) ?? null;
   }, [config, rows]);
   const headerConfigured = Boolean(activeRow?.stored?.configured);
+
+  // Models shown in the Manage panel. For custom providers this is the
+  // user-registered list; for built-in providers it's the latest listing
+  // result (or empty while fetching).
+  const visibleModels: ModelDescriptor[] = useMemo(() => {
+    if (!managedStored) return [];
+    if (managedIsCustom) {
+      return (managedStored.models ?? []).map((id) => ({ id, source: "builtin" }));
+    }
+    const listing = listingByProvider.get(managedStored.providerId);
+    return listing?.models ?? [];
+  }, [managedStored, managedIsCustom, listingByProvider]);
+
+  const currentListing = managedStored ? listingByProvider.get(managedStored.providerId) : undefined;
+  const activeModelRef = config?.activeModelRef;
 
   return (
     <section className="settings-page" aria-labelledby="settings-title">
@@ -947,11 +1011,6 @@ export function LLMSettingsPage({
                               <Check size={14} /> {t("settings.saved")}
                             </p>
                           )}
-                          {activated && (
-                            <p className="settings-saved" role="status">
-                              <Check size={14} /> {t("settings.providerActivated", { provider: managedLabel })}
-                            </p>
-                          )}
                           {connectionTest === "success" && (
                             <p className="settings-saved" role="status">
                               <Check size={14} /> {t("settings.testConnectionSucceeded", { provider: managedLabel })}
@@ -982,33 +1041,6 @@ export function LLMSettingsPage({
                               </div>
                             </fieldset>
                           )}
-
-                          {/* Model ID stays here until F10 (model catalog) replaces it
-                              with a selector inside the chat composer. See ph9 in
-                              docs/llm-provider-design.md. */}
-                          <fieldset className="settings-fieldset" disabled={loading || saving || !managedDescriptor}>
-                            <legend>{t("settings.model")}</legend>
-                            <div className="settings-field">
-                              <label htmlFor={`provider-model-${row.rowId}`}>{t("settings.modelId")}</label>
-                              <input
-                                id={`provider-model-${row.rowId}`}
-                                value={model}
-                                onChange={(event) => {
-                                  setModel(event.target.value);
-                                  setSaved(false);
-                                }}
-                                placeholder={t("settings.modelPlaceholder")}
-                                autoComplete="off"
-                                spellCheck={false}
-                                required
-                              />
-                              <small>
-                                {t("settings.modelIdHelp", { provider: managedLabel })}
-                                <br />
-                                <em>{t("settings.modelIdNoteTransitional")}</em>
-                              </small>
-                            </div>
-                          </fieldset>
 
                           {requiresAPIKey && (
                             <fieldset className="settings-fieldset" disabled={loading || saving}>
@@ -1165,6 +1197,102 @@ export function LLMSettingsPage({
                             </fieldset>
                           )}
 
+                          {managedStored?.configured && (
+                            <fieldset className="settings-fieldset" disabled={loading || saving}>
+                              <legend>{t("settings.availableModels")}</legend>
+                              {!managedIsCustom && (
+                                <div className="provider-row-models-header">
+                                  <small>
+                                    {currentListing
+                                      ? t(`settings.modelSource.${currentListing.source}`, {
+                                        defaultValue: currentListing.source,
+                                      })
+                                      : t("settings.modelSourceLoading")}
+                                  </small>
+                                  <button
+                                    type="button"
+                                    className="settings-secondary settings-secondary-mini"
+                                    onClick={() => void fetchListing(managedStored.providerId)}
+                                    disabled={listingLoading === managedStored.providerId}
+                                  >
+                                    <ArrowsClockwise size={11} />
+                                    {listingLoading === managedStored.providerId
+                                      ? t("settings.refreshingModels")
+                                      : t("settings.refreshModels")}
+                                  </button>
+                                </div>
+                              )}
+                              {managedIsCustom && (
+                                <div className="provider-row-add-model">
+                                  <input
+                                    type="text"
+                                    value={newCustomModelId}
+                                    onChange={(event) => setNewCustomModelId(event.target.value)}
+                                    placeholder={t("settings.customModelPlaceholder")}
+                                    spellCheck={false}
+                                    autoComplete="off"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="settings-secondary settings-secondary-mini"
+                                    onClick={() => void handleAddCustomModel()}
+                                    disabled={customModelMutating || newCustomModelId.trim() === ""}
+                                  >
+                                    <Plus size={11} weight="bold" />
+                                    {t("settings.addCustomModel")}
+                                  </button>
+                                </div>
+                              )}
+                              {visibleModels.length === 0 && (
+                                <p className="provider-row-models-empty">
+                                  {managedIsCustom
+                                    ? t("settings.customModelsEmpty")
+                                    : t("settings.modelListingEmpty")}
+                                </p>
+                              )}
+                              {visibleModels.length > 0 && (
+                                <ul className="provider-row-models">
+                                  {visibleModels.map((model) => {
+                                    const isActive = !!activeModelRef
+                                      && activeModelRef.providerId === managedStored.providerId
+                                      && activeModelRef.modelId === model.id;
+                                    return (
+                                      <li
+                                        key={model.id}
+                                        className={isActive ? "provider-row-model is-active" : "provider-row-model"}
+                                      >
+                                        <span className="provider-row-model-id">{model.id}</span>
+                                        <div className="provider-row-model-actions">
+                                          <button
+                                            type="button"
+                                            className={isActive ? "settings-secondary is-active-marker" : "settings-secondary"}
+                                            onClick={() => void handleActivateModel(managedStored.providerId, model.id)}
+                                            disabled={isActive || activatingModelId !== ""}
+                                          >
+                                            {isActive
+                                              ? t("settings.currentModel")
+                                              : t("settings.useThisModel")}
+                                          </button>
+                                          {managedIsCustom && (
+                                            <button
+                                              type="button"
+                                              className="provider-row-model-remove"
+                                              aria-label={t("settings.removeCustomModel")}
+                                              onClick={() => void handleRemoveCustomModel(managedStored.providerId, model.id)}
+                                              disabled={customModelMutating}
+                                            >
+                                              <X size={10} weight="bold" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </fieldset>
+                          )}
+
                           <div className="provider-row-detail-actions">
                             <button
                               className="settings-secondary"
@@ -1173,23 +1301,6 @@ export function LLMSettingsPage({
                               disabled={saving || testingConnection || !managedStored?.configured}
                             >
                               {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
-                            </button>
-                            <button
-                              className="settings-secondary"
-                              type="button"
-                              onClick={() => void handleActivate()}
-                              disabled={
-                                saving
-                                || activatingProvider
-                                || !managedStored?.configured
-                                || managedStored?.isActive
-                              }
-                            >
-                              {managedStored?.isActive
-                                ? t("settings.providerIsActive")
-                                : activatingProvider
-                                  ? t("settings.activatingProvider")
-                                  : t("settings.activateProvider")}
                             </button>
                             <button className="settings-primary" type="submit" disabled={!canSave}>
                               {saving ? t("settings.saving") : t("settings.save")}

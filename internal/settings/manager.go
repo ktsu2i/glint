@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -21,14 +22,24 @@ const (
 	legacyOpenRouterKeyEntry = "openrouter-api-key"
 
 	llmActiveProviderKey  = "llm.active_provider"
+	llmActiveModelKey     = "llm.active_model_ref"
 	llmProvidersKey       = "llm.providers"
 	llmRecentProvidersKey = "llm.recent_providers"
+	llmRecentModelsKey    = "llm.recent_models"
+	llmModelCachePrefix   = "llm.model_cache."
 	llmMigrationDoneKey   = "llm.migration_v2_done"
 	llmKeyCleanupDoneKey  = "llm.migration_v3_done"
+	llmModelsMigrationKey = "llm.migration_v4_done"
 
-	// recentProvidersLimit は LRU で保持する provider id の最大件数。Zed の
-	// `RECENT` セクション相当で、第1フェーズでは3件あれば足りる。
+	// recentProvidersLimit / recentModelsLimit は composer popover の RECENT
+	// セクションに表示する最大件数。Zed の挙動に揃えて 3 件にしている。
 	recentProvidersLimit = 3
+	recentModelsLimit    = 3
+
+	// modelListCacheTTL は listing API 結果を再利用する期間。spec の §10
+	// (F10: default 24h) に合わせる。短期に上書きしたい場合は MockClock /
+	// 設定で代替するが、第1段階では定数とする。
+	modelListCacheTTL = 24 * time.Hour
 )
 
 var ErrSecretNotFound = errors.New("credential not found")
@@ -66,11 +77,20 @@ func (KeyringStore) Delete(service, account string) error {
 	return err
 }
 
+// ActiveModelRef は frontend が現在 chat で使う (provider, model) の組。
+// F10 で `llm.active_provider` 単独から拡張された。
+type ActiveModelRef struct {
+	ProviderID string `json:"providerId"`
+	ModelID    string `json:"modelId"`
+}
+
 // ProviderSettings は frontend へ返す1 provider 分の状態。secret 自体は含まない。
+// F10 で `Model` (per-provider last-used) と `Models` (registered set) を分けた。
 type ProviderSettings struct {
 	ProviderID   string         `json:"providerId"`
 	DisplayLabel string         `json:"displayLabel,omitempty"`
-	Model        string         `json:"model"`
+	Model        string         `json:"model"`            // 直近に SetActiveModel で選ばれた model id（per-provider memory）
+	Models       []string       `json:"models,omitempty"` // openai_compatible の手動登録 model id
 	Options      map[string]any `json:"options,omitempty"`
 	HasAPIKey    bool           `json:"hasApiKey"`
 	Configured   bool           `json:"configured"`
@@ -80,20 +100,22 @@ type ProviderSettings struct {
 // LLMConfig は GetLLMConfig が返す top-level shape。
 type LLMConfig struct {
 	ActiveProviderID  string                   `json:"activeProviderId"`
+	ActiveModel       *ActiveModelRef          `json:"activeModelRef,omitempty"`
 	Providers         []ProviderSettings       `json:"providers"`
 	Catalog           []llm.ProviderDescriptor `json:"catalog"`
 	RecentProviderIDs []string                 `json:"recentProviderIds"`
+	RecentModels      []ActiveModelRef         `json:"recentModels"`
 }
 
-// UpsertProviderRequest は frontend が provider 設定を upsert する時の入力。
+// UpsertProviderRequest は frontend が provider 接続設定を upsert する時の入力。
+// F10 で model / activate は削除し、provider 単位の接続情報（credential + options
+// + label）だけを扱うようにした。model 選択は SetActiveModel が担当する。
 type UpsertProviderRequest struct {
 	ProviderID   string         `json:"providerId"`
 	DisplayLabel string         `json:"displayLabel,omitempty"`
-	Model        string         `json:"model"`
 	Options      map[string]any `json:"options,omitempty"`
 	APIKey       string         `json:"apiKey,omitempty"`
 	ClearAPIKey  bool           `json:"clearApiKey,omitempty"`
-	Activate     bool           `json:"activate,omitempty"`
 }
 
 type TestProviderConnectionResult struct {
@@ -102,16 +124,34 @@ type TestProviderConnectionResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// ModelListingResult は ListProviderModels の戻り値。`source` は UI に
+// 「API から取得した最新」「cache から復元」「fallback の builtin」を区別して
+// 表示するために返す。
+type ModelListingResult struct {
+	ProviderID string                `json:"providerId"`
+	Models     []llm.ModelDescriptor `json:"models"`
+	Source     llm.ModelSource       `json:"source"`
+	FetchedAt  *time.Time            `json:"fetchedAt,omitempty"`
+	Error      string                `json:"error,omitempty"`
+}
+
 type storedProvider struct {
 	DisplayLabel string         `json:"displayLabel,omitempty"`
-	Model        string         `json:"model"`
+	Model        string         `json:"model,omitempty"`
+	Models       []string       `json:"models,omitempty"`
 	Options      map[string]any `json:"options,omitempty"`
+}
+
+type storedModelCache struct {
+	Models    []llm.ModelDescriptor `json:"models"`
+	FetchedAt time.Time             `json:"fetchedAt"`
 }
 
 type Manager struct {
 	store    SettingStore
 	secrets  SecretStore
 	registry *llm.Registry
+	now      func() time.Time
 	migrated bool
 }
 
@@ -120,6 +160,7 @@ func NewManager(store SettingStore, secrets SecretStore) *Manager {
 		store:    store,
 		secrets:  secrets,
 		registry: llm.NewRegistry(),
+		now:      time.Now,
 	}
 }
 
@@ -130,7 +171,7 @@ func (manager *Manager) GetLLMConfig(ctx context.Context) (LLMConfig, error) {
 	if err := manager.ensureMigration(ctx); err != nil {
 		return LLMConfig{}, err
 	}
-	active, err := manager.loadActiveProviderID(ctx)
+	active, err := manager.loadActiveModelRef(ctx)
 	if err != nil {
 		return LLMConfig{}, err
 	}
@@ -163,12 +204,10 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 		return LLMConfig{}, errors.New("API keyの更新と削除は同時に指定できません。")
 	}
 
-	cleanedModel := strings.TrimSpace(request.Model)
 	cleanedLabel := strings.TrimSpace(request.DisplayLabel)
 	cfg := llm.ProviderConfig{
 		ProviderID:   llm.ProviderID(providerID),
 		DisplayLabel: cleanedLabel,
-		Model:        cleanedModel,
 		Options:      normalizedOptions(request.Options),
 	}
 	if err := manager.registry.Validate(cfg); err != nil {
@@ -179,9 +218,11 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 	if err != nil {
 		return LLMConfig{}, err
 	}
+	previous := stored[providerID]
 	stored[providerID] = storedProvider{
 		DisplayLabel: cleanedLabel,
-		Model:        cleanedModel,
+		Model:        previous.Model,  // F10: model は SetActiveModel 経由でだけ更新する
+		Models:       previous.Models, // 既存の registered list は維持
 		Options:      cfg.Options,
 	}
 	if err := manager.saveStoredProviders(ctx, stored); err != nil {
@@ -199,15 +240,9 @@ func (manager *Manager) UpsertProviderSettings(ctx context.Context, request Upse
 		}
 	}
 
-	active, err := manager.loadActiveProviderID(ctx)
+	active, err := manager.loadActiveModelRef(ctx)
 	if err != nil {
 		return LLMConfig{}, err
-	}
-	if request.Activate {
-		if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, providerID); err != nil {
-			return LLMConfig{}, err
-		}
-		active = providerID
 	}
 	return manager.buildConfig(ctx, active, stored)
 }
@@ -237,46 +272,291 @@ func (manager *Manager) DeleteProviderSettings(ctx context.Context, providerID s
 	if err := manager.secrets.Delete(credentialService, apiKeyAccount(providerID)); err != nil {
 		return LLMConfig{}, fmt.Errorf("delete %s API key: %w", providerID, err)
 	}
+	// listing cache も provider が消えたら捨てる
+	_ = manager.store.SaveSetting(ctx, llmModelCachePrefix+providerID, "")
 
-	active, err := manager.loadActiveProviderID(ctx)
+	active, err := manager.loadActiveModelRef(ctx)
 	if err != nil {
 		return LLMConfig{}, err
 	}
-	if active == providerID {
-		if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, ""); err != nil {
+	if active != nil && active.ProviderID == providerID {
+		if err := manager.clearActiveModelRef(ctx); err != nil {
 			return LLMConfig{}, err
 		}
-		active = ""
+		active = nil
 	}
 	return manager.buildConfig(ctx, active, stored)
 }
 
 // SetActiveProvider switches the currently active provider. The target must
-// already exist in the stored config. Successful activations are recorded as
-// the most-recent provider in an LRU window so the composer can surface them.
+// already exist in the stored config. The provider's last-used model becomes
+// the active model; if none is recorded, the first known model is chosen.
 func (manager *Manager) SetActiveProvider(ctx context.Context, providerID string) (LLMConfig, error) {
 	if err := manager.ensureMigration(ctx); err != nil {
 		return LLMConfig{}, err
 	}
 	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		if err := manager.clearActiveModelRef(ctx); err != nil {
+			return LLMConfig{}, err
+		}
+		stored, err := manager.loadStoredProviders(ctx)
+		if err != nil {
+			return LLMConfig{}, err
+		}
+		return manager.buildConfig(ctx, nil, stored)
+	}
 	stored, err := manager.loadStoredProviders(ctx)
 	if err != nil {
 		return LLMConfig{}, err
 	}
-	if providerID != "" {
-		if _, exists := stored[providerID]; !exists {
-			return LLMConfig{}, fmt.Errorf("provider %s is not configured", providerID)
-		}
+	entry, exists := stored[providerID]
+	if !exists {
+		return LLMConfig{}, fmt.Errorf("provider %s is not configured", providerID)
 	}
-	if err := manager.store.SaveSetting(ctx, llmActiveProviderKey, providerID); err != nil {
+	modelID := strings.TrimSpace(entry.Model)
+	if modelID == "" {
+		modelID = manager.pickDefaultModelID(ctx, providerID, entry)
+	}
+	if modelID == "" {
+		return LLMConfig{}, fmt.Errorf("%sに利用可能なmodelがありません。", providerID)
+	}
+	return manager.SetActiveModel(ctx, providerID, modelID)
+}
+
+// SetActiveModel records (providerId, modelId) as the active reference. The
+// provider must already exist in the stored config. The chosen pair is also
+// promoted in the recent-models LRU so the composer popover can surface it.
+func (manager *Manager) SetActiveModel(ctx context.Context, providerID, modelID string) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
 		return LLMConfig{}, err
 	}
-	if providerID != "" {
-		if err := manager.touchRecentProvider(ctx, providerID); err != nil {
-			return LLMConfig{}, err
+	providerID = strings.TrimSpace(providerID)
+	modelID = strings.TrimSpace(modelID)
+	if providerID == "" {
+		return LLMConfig{}, errors.New("providerIdを指定してください。")
+	}
+	if modelID == "" {
+		return LLMConfig{}, errors.New("modelIdを指定してください。")
+	}
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	entry, exists := stored[providerID]
+	if !exists {
+		return LLMConfig{}, fmt.Errorf("provider %s is not configured", providerID)
+	}
+	// per-provider last-used を更新する。
+	entry.Model = modelID
+	stored[providerID] = entry
+	if err := manager.saveStoredProviders(ctx, stored); err != nil {
+		return LLMConfig{}, err
+	}
+	ref := &ActiveModelRef{ProviderID: providerID, ModelID: modelID}
+	if err := manager.saveActiveModelRef(ctx, ref); err != nil {
+		return LLMConfig{}, err
+	}
+	if err := manager.touchRecentProvider(ctx, providerID); err != nil {
+		return LLMConfig{}, err
+	}
+	if err := manager.touchRecentModel(ctx, *ref); err != nil {
+		return LLMConfig{}, err
+	}
+	return manager.buildConfig(ctx, ref, stored)
+}
+
+// AddCustomModel registers a manual model id for a provider. Today this is
+// only meaningful for openai_compatible providers, where no listing API is
+// available. Built-in providers ignore the call gracefully so the UI can
+// reuse the same code path without branching.
+func (manager *Manager) AddCustomModel(ctx context.Context, providerID, modelID string) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return LLMConfig{}, err
+	}
+	providerID = strings.TrimSpace(providerID)
+	modelID = strings.TrimSpace(modelID)
+	if providerID == "" {
+		return LLMConfig{}, errors.New("providerIdを指定してください。")
+	}
+	if modelID == "" {
+		return LLMConfig{}, errors.New("modelIdを指定してください。")
+	}
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	entry, exists := stored[providerID]
+	if !exists {
+		return LLMConfig{}, fmt.Errorf("provider %s is not configured", providerID)
+	}
+	if slices.Contains(entry.Models, modelID) {
+		return manager.GetLLMConfig(ctx)
+	}
+	entry.Models = append(entry.Models, modelID)
+	stored[providerID] = entry
+	if err := manager.saveStoredProviders(ctx, stored); err != nil {
+		return LLMConfig{}, err
+	}
+	active, err := manager.loadActiveModelRef(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	return manager.buildConfig(ctx, active, stored)
+}
+
+// RemoveCustomModel deletes a manual model id from the provider's registered
+// list. If the removed model was active, the active reference is cleared so
+// the next chat send will surface a clear error and the UI can prompt.
+func (manager *Manager) RemoveCustomModel(ctx context.Context, providerID, modelID string) (LLMConfig, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return LLMConfig{}, err
+	}
+	providerID = strings.TrimSpace(providerID)
+	modelID = strings.TrimSpace(modelID)
+	if providerID == "" {
+		return LLMConfig{}, errors.New("providerIdを指定してください。")
+	}
+	if modelID == "" {
+		return LLMConfig{}, errors.New("modelIdを指定してください。")
+	}
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	entry, exists := stored[providerID]
+	if !exists {
+		return manager.GetLLMConfig(ctx)
+	}
+	next := make([]string, 0, len(entry.Models))
+	for _, existing := range entry.Models {
+		if existing != modelID {
+			next = append(next, existing)
 		}
 	}
-	return manager.buildConfig(ctx, providerID, stored)
+	entry.Models = next
+	if entry.Model == modelID {
+		entry.Model = ""
+	}
+	stored[providerID] = entry
+	if err := manager.saveStoredProviders(ctx, stored); err != nil {
+		return LLMConfig{}, err
+	}
+	active, err := manager.loadActiveModelRef(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	if active != nil && active.ProviderID == providerID && active.ModelID == modelID {
+		if err := manager.clearActiveModelRef(ctx); err != nil {
+			return LLMConfig{}, err
+		}
+		active = nil
+	}
+	return manager.buildConfig(ctx, active, stored)
+}
+
+// ListProviderModels returns the model catalog for a provider, following the
+// api → cache → builtin fallback order defined in §10 of the design doc. The
+// returned `source` lets the UI render whether the list came from a fresh
+// API hit, a cached response, or the Glint-managed seed list.
+func (manager *Manager) ListProviderModels(ctx context.Context, providerID string) (ModelListingResult, error) {
+	if err := manager.ensureMigration(ctx); err != nil {
+		return ModelListingResult{}, err
+	}
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		return ModelListingResult{}, errors.New("providerIdを指定してください。")
+	}
+	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(providerID))
+	if !ok {
+		return ModelListingResult{}, fmt.Errorf("未知のproviderです: %s", providerID)
+	}
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return ModelListingResult{}, err
+	}
+	entry := stored[providerID]
+	cfg := llm.ProviderConfig{
+		ProviderID:   llm.ProviderID(providerID),
+		DisplayLabel: entry.DisplayLabel,
+		Options:      entry.Options,
+	}
+	deps := llm.Deps{}
+	if providerRequiresAPIKey(descriptor, cfg) {
+		apiKey, secretErr := manager.secrets.Get(credentialService, apiKeyAccount(providerID))
+		if secretErr == nil {
+			deps.APIKey = apiKey
+		}
+	}
+
+	// Custom OpenAI-compatible は listing API を持たないため、
+	// 手動登録 models[] のみが catalog になる。
+	if llm.IsOpenAICompatibleID(llm.ProviderID(providerID)) {
+		models := manualModels(entry.Models)
+		return ModelListingResult{
+			ProviderID: providerID,
+			Models:     models,
+			Source:     llm.ModelSourceBuiltin,
+		}, nil
+	}
+
+	cached, cachedAt, cacheErr := manager.loadModelCache(ctx, providerID)
+
+	if manager.registry.HasListing(llm.ProviderID(providerID)) {
+		fresh, apiErr := manager.registry.ListModels(ctx, cfg, deps)
+		if apiErr == nil && len(fresh) > 0 {
+			merged := llm.MergeModels(fresh, llm.BuiltinModels(llm.ProviderID(providerID)))
+			llm.SortModels(merged)
+			fetched := manager.now()
+			_ = manager.saveModelCache(ctx, providerID, merged, fetched)
+			merged = append(merged, manualModels(entry.Models)...)
+			return ModelListingResult{
+				ProviderID: providerID,
+				Models:     merged,
+				Source:     llm.ModelSourceAPI,
+				FetchedAt:  &fetched,
+			}, nil
+		}
+		// API 失敗時は cache → builtin に fallback。フレッシュ判定はせず
+		// 「ある cache をそのまま」表示する（spec: api → cache → builtin）。
+		if cacheErr == nil && len(cached) > 0 {
+			merged := append(cached, manualModels(entry.Models)...)
+			return ModelListingResult{
+				ProviderID: providerID,
+				Models:     merged,
+				Source:     llm.ModelSourceCache,
+				FetchedAt:  pointer(cachedAt),
+				Error:      apiErrorMessage(apiErr),
+			}, nil
+		}
+		builtin := llm.BuiltinModels(llm.ProviderID(providerID))
+		llm.SortModels(builtin)
+		return ModelListingResult{
+			ProviderID: providerID,
+			Models:     append(builtin, manualModels(entry.Models)...),
+			Source:     llm.ModelSourceBuiltin,
+			Error:      apiErrorMessage(apiErr),
+		}, nil
+	}
+
+	// listing API を持たない provider（Google 等）は cache → builtin の順だけ
+	// 確認する。cache は API 由来なので、現状は実質 builtin のみとなる。
+	if cacheErr == nil && len(cached) > 0 && manager.now().Sub(cachedAt) < modelListCacheTTL {
+		merged := append(cached, manualModels(entry.Models)...)
+		return ModelListingResult{
+			ProviderID: providerID,
+			Models:     merged,
+			Source:     llm.ModelSourceCache,
+			FetchedAt:  pointer(cachedAt),
+		}, nil
+	}
+	builtin := llm.BuiltinModels(llm.ProviderID(providerID))
+	llm.SortModels(builtin)
+	return ModelListingResult{
+		ProviderID: providerID,
+		Models:     append(builtin, manualModels(entry.Models)...),
+		Source:     llm.ModelSourceBuiltin,
+	}, nil
 }
 
 // Gateway resolves the active provider's config (and credential) each call so
@@ -285,16 +565,19 @@ func (manager *Manager) Gateway(ctx context.Context) (llm.Gateway, error) {
 	if err := manager.ensureMigration(ctx); err != nil {
 		return nil, err
 	}
-	active, err := manager.loadActiveProviderID(ctx)
+	active, err := manager.loadActiveModelRef(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if active == "" {
-		return nil, errors.New("LLM providerが選択されていません。")
+	if active == nil || active.ProviderID == "" || active.ModelID == "" {
+		return nil, errors.New("LLM modelが選択されていません。")
 	}
-	return manager.gatewayForProvider(ctx, active)
+	return manager.gatewayForModel(ctx, active.ProviderID, active.ModelID)
 }
 
+// TestProviderConnection checks that the active model for a provider works.
+// Today the test always uses the provider's last-used model so the result
+// matches what chat would see right now.
 func (manager *Manager) TestProviderConnection(ctx context.Context, providerID string) (TestProviderConnectionResult, error) {
 	if err := manager.ensureMigration(ctx); err != nil {
 		return TestProviderConnectionResult{}, err
@@ -305,7 +588,24 @@ func (manager *Manager) TestProviderConnection(ctx context.Context, providerID s
 		result.Error = "providerIdを指定してください。"
 		return result, nil
 	}
-	gateway, err := manager.gatewayForProvider(ctx, providerID)
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return TestProviderConnectionResult{}, err
+	}
+	entry, exists := stored[providerID]
+	if !exists {
+		result.Error = fmt.Sprintf("%sの設定が見つかりません。", providerID)
+		return result, nil
+	}
+	modelID := strings.TrimSpace(entry.Model)
+	if modelID == "" {
+		modelID = manager.pickDefaultModelID(ctx, providerID, entry)
+	}
+	if modelID == "" {
+		result.Error = "テスト用のmodelを先に選択してください。"
+		return result, nil
+	}
+	gateway, err := manager.gatewayForModel(ctx, providerID, modelID)
 	if err != nil {
 		result.Error = err.Error()
 		return result, nil
@@ -329,24 +629,23 @@ func (manager *Manager) TestProviderConnection(ctx context.Context, providerID s
 	return result, nil
 }
 
-func (manager *Manager) gatewayForProvider(ctx context.Context, providerID string) (llm.Gateway, error) {
-	active := strings.TrimSpace(providerID)
-	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(active))
+func (manager *Manager) gatewayForModel(ctx context.Context, providerID, modelID string) (llm.Gateway, error) {
+	descriptor, ok := manager.registry.Descriptor(llm.ProviderID(providerID))
 	if !ok {
-		return nil, fmt.Errorf("未知のproviderです: %s", active)
+		return nil, fmt.Errorf("未知のproviderです: %s", providerID)
 	}
 	stored, err := manager.loadStoredProviders(ctx)
 	if err != nil {
 		return nil, err
 	}
-	entry, exists := stored[active]
+	entry, exists := stored[providerID]
 	if !exists {
 		return nil, fmt.Errorf("%sの設定が見つかりません。", descriptor.DisplayName)
 	}
 	cfg := llm.ProviderConfig{
-		ProviderID:   llm.ProviderID(active),
+		ProviderID:   llm.ProviderID(providerID),
 		DisplayLabel: entry.DisplayLabel,
-		Model:        entry.Model,
+		Model:        strings.TrimSpace(modelID),
 		Options:      entry.Options,
 	}
 	if err := manager.registry.Validate(cfg); err != nil {
@@ -354,19 +653,19 @@ func (manager *Manager) gatewayForProvider(ctx context.Context, providerID strin
 	}
 	deps := llm.Deps{}
 	if providerRequiresAPIKey(descriptor, cfg) {
-		apiKey, err := manager.secrets.Get(credentialService, apiKeyAccount(active))
+		apiKey, err := manager.secrets.Get(credentialService, apiKeyAccount(providerID))
 		if errors.Is(err, ErrSecretNotFound) {
 			return nil, fmt.Errorf("%sのAPI keyを設定してください。", descriptor.DisplayName)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read %s API key from credential store: %w", active, err)
+			return nil, fmt.Errorf("read %s API key from credential store: %w", providerID, err)
 		}
 		deps.APIKey = apiKey
 	}
 	return manager.registry.Build(cfg, deps)
 }
 
-func (manager *Manager) buildConfig(ctx context.Context, active string, stored map[string]storedProvider) (LLMConfig, error) {
+func (manager *Manager) buildConfig(ctx context.Context, active *ActiveModelRef, stored map[string]storedProvider) (LLMConfig, error) {
 	descriptors := manager.registry.Descriptors()
 	providers := make([]ProviderSettings, 0, len(stored))
 	ids := make([]string, 0, len(stored))
@@ -379,6 +678,16 @@ func (manager *Manager) buildConfig(ctx context.Context, active string, stored m
 		return LLMConfig{}, err
 	}
 	recent = pruneRecentProviders(recent, stored)
+	recentModels, err := manager.loadRecentModels(ctx)
+	if err != nil {
+		return LLMConfig{}, err
+	}
+	recentModels = pruneRecentModels(recentModels, stored)
+
+	activeProviderID := ""
+	if active != nil {
+		activeProviderID = active.ProviderID
+	}
 	for _, id := range ids {
 		entry := stored[id]
 		descriptor, ok := manager.registry.Descriptor(llm.ProviderID(id))
@@ -403,22 +712,51 @@ func (manager *Manager) buildConfig(ctx context.Context, active string, stored m
 		validationErr := manager.registry.Validate(cfg)
 		requiresAPIKey := providerRequiresAPIKey(descriptor, cfg)
 		configured := validationErr == nil && (!requiresAPIKey || hasKey)
+		// openai_compatible は手動登録 model が無いと「chat に投げられる」状態にならない。
+		if llm.IsOpenAICompatibleID(cfg.ProviderID) && len(entry.Models) == 0 && strings.TrimSpace(entry.Model) == "" {
+			configured = false
+		}
 		providers = append(providers, ProviderSettings{
 			ProviderID:   id,
 			DisplayLabel: entry.DisplayLabel,
 			Model:        entry.Model,
+			Models:       append([]string(nil), entry.Models...),
 			Options:      entry.Options,
 			HasAPIKey:    hasKey,
 			Configured:   configured,
-			IsActive:     id == active,
+			IsActive:     id == activeProviderID,
 		})
 	}
 	return LLMConfig{
-		ActiveProviderID:  active,
+		ActiveProviderID:  activeProviderID,
+		ActiveModel:       active,
 		Providers:         providers,
 		Catalog:           descriptors,
 		RecentProviderIDs: recent,
+		RecentModels:      recentModels,
 	}, nil
+}
+
+// pickDefaultModelID は SetActiveProvider が呼ばれたときに、ユーザーが過去に
+// 選んだ model が無ければ provider の既知 model から1つ選んで返す。listing と
+// builtin のどちらでも構わない。manual models を持つ openai_compatible は
+// それを優先する。
+func (manager *Manager) pickDefaultModelID(ctx context.Context, providerID string, entry storedProvider) string {
+	if id := strings.TrimSpace(entry.Model); id != "" {
+		return id
+	}
+	if len(entry.Models) > 0 {
+		return entry.Models[0]
+	}
+	listing, err := manager.ListProviderModels(ctx, providerID)
+	if err == nil && len(listing.Models) > 0 {
+		return listing.Models[0].ID
+	}
+	builtin := llm.BuiltinModels(llm.ProviderID(providerID))
+	if len(builtin) > 0 {
+		return builtin[0].ID
+	}
+	return ""
 }
 
 func (manager *Manager) loadActiveProviderID(ctx context.Context) (string, error) {
@@ -427,6 +765,67 @@ func (manager *Manager) loadActiveProviderID(ctx context.Context) (string, error
 		return "", err
 	}
 	return strings.TrimSpace(value), nil
+}
+
+func (manager *Manager) loadActiveModelRef(ctx context.Context) (*ActiveModelRef, error) {
+	value, err := manager.store.Setting(ctx, llmActiveModelKey)
+	if err != nil {
+		return nil, err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		// v4 migration が走った直後は providerKey も同期されている。
+		legacy, legacyErr := manager.loadActiveProviderID(ctx)
+		if legacyErr != nil {
+			return nil, legacyErr
+		}
+		if legacy == "" {
+			return nil, nil
+		}
+		stored, storedErr := manager.loadStoredProviders(ctx)
+		if storedErr != nil {
+			return nil, storedErr
+		}
+		entry, exists := stored[legacy]
+		if !exists {
+			return nil, nil
+		}
+		model := strings.TrimSpace(entry.Model)
+		if model == "" {
+			return nil, nil
+		}
+		return &ActiveModelRef{ProviderID: legacy, ModelID: model}, nil
+	}
+	var ref ActiveModelRef
+	if err := json.Unmarshal([]byte(value), &ref); err != nil {
+		return nil, fmt.Errorf("decode active model ref: %w", err)
+	}
+	if strings.TrimSpace(ref.ProviderID) == "" || strings.TrimSpace(ref.ModelID) == "" {
+		return nil, nil
+	}
+	return &ref, nil
+}
+
+func (manager *Manager) saveActiveModelRef(ctx context.Context, ref *ActiveModelRef) error {
+	if ref == nil {
+		return manager.clearActiveModelRef(ctx)
+	}
+	encoded, err := json.Marshal(ref)
+	if err != nil {
+		return fmt.Errorf("encode active model ref: %w", err)
+	}
+	if err := manager.store.SaveSetting(ctx, llmActiveModelKey, string(encoded)); err != nil {
+		return err
+	}
+	// 旧 key も同期して frontend / migration の早期 read を安全にする。
+	return manager.store.SaveSetting(ctx, llmActiveProviderKey, ref.ProviderID)
+}
+
+func (manager *Manager) clearActiveModelRef(ctx context.Context) error {
+	if err := manager.store.SaveSetting(ctx, llmActiveModelKey, ""); err != nil {
+		return err
+	}
+	return manager.store.SaveSetting(ctx, llmActiveProviderKey, "")
 }
 
 func (manager *Manager) loadStoredProviders(ctx context.Context) (map[string]storedProvider, error) {
@@ -479,9 +878,32 @@ func (manager *Manager) saveRecentProviders(ctx context.Context, recent []string
 	return manager.store.SaveSetting(ctx, llmRecentProvidersKey, string(data))
 }
 
+func (manager *Manager) loadRecentModels(ctx context.Context) ([]ActiveModelRef, error) {
+	value, err := manager.store.Setting(ctx, llmRecentModelsKey)
+	if err != nil {
+		return nil, err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	var recent []ActiveModelRef
+	if err := json.Unmarshal([]byte(value), &recent); err != nil {
+		return nil, fmt.Errorf("decode LLM recent models: %w", err)
+	}
+	return recent, nil
+}
+
+func (manager *Manager) saveRecentModels(ctx context.Context, recent []ActiveModelRef) error {
+	data, err := json.Marshal(recent)
+	if err != nil {
+		return fmt.Errorf("encode LLM recent models: %w", err)
+	}
+	return manager.store.SaveSetting(ctx, llmRecentModelsKey, string(data))
+}
+
 // touchRecentProvider moves providerID to the front of the LRU list and
-// trims it to recentProvidersLimit. Persisted so the composer can show the
-// same ordering on next launch.
+// trims it to recentProvidersLimit.
 func (manager *Manager) touchRecentProvider(ctx context.Context, providerID string) error {
 	providerID = strings.TrimSpace(providerID)
 	if providerID == "" {
@@ -505,6 +927,53 @@ func (manager *Manager) touchRecentProvider(ctx context.Context, providerID stri
 	return manager.saveRecentProviders(ctx, next)
 }
 
+// touchRecentModel moves a (providerId, modelId) pair to the front of the LRU.
+func (manager *Manager) touchRecentModel(ctx context.Context, ref ActiveModelRef) error {
+	if strings.TrimSpace(ref.ProviderID) == "" || strings.TrimSpace(ref.ModelID) == "" {
+		return nil
+	}
+	current, err := manager.loadRecentModels(ctx)
+	if err != nil {
+		return err
+	}
+	next := make([]ActiveModelRef, 0, len(current)+1)
+	next = append(next, ref)
+	for _, entry := range current {
+		if entry.ProviderID == ref.ProviderID && entry.ModelID == ref.ModelID {
+			continue
+		}
+		next = append(next, entry)
+		if len(next) == recentModelsLimit {
+			break
+		}
+	}
+	return manager.saveRecentModels(ctx, next)
+}
+
+func (manager *Manager) loadModelCache(ctx context.Context, providerID string) ([]llm.ModelDescriptor, time.Time, error) {
+	value, err := manager.store.Setting(ctx, llmModelCachePrefix+providerID)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, time.Time{}, nil
+	}
+	var cached storedModelCache
+	if err := json.Unmarshal([]byte(value), &cached); err != nil {
+		return nil, time.Time{}, fmt.Errorf("decode model cache for %s: %w", providerID, err)
+	}
+	return cached.Models, cached.FetchedAt, nil
+}
+
+func (manager *Manager) saveModelCache(ctx context.Context, providerID string, models []llm.ModelDescriptor, fetchedAt time.Time) error {
+	data, err := json.Marshal(storedModelCache{Models: models, FetchedAt: fetchedAt})
+	if err != nil {
+		return fmt.Errorf("encode model cache for %s: %w", providerID, err)
+	}
+	return manager.store.SaveSetting(ctx, llmModelCachePrefix+providerID, string(data))
+}
+
 // pruneRecentProviders drops entries that no longer have a stored config so
 // the frontend never references a vanished provider.
 func pruneRecentProviders(recent []string, stored map[string]storedProvider) []string {
@@ -519,6 +988,40 @@ func pruneRecentProviders(recent []string, stored map[string]storedProvider) []s
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+func pruneRecentModels(recent []ActiveModelRef, stored map[string]storedProvider) []ActiveModelRef {
+	if len(recent) == 0 {
+		return nil
+	}
+	out := make([]ActiveModelRef, 0, len(recent))
+	for _, ref := range recent {
+		if _, exists := stored[ref.ProviderID]; exists {
+			out = append(out, ref)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func manualModels(modelIDs []string) []llm.ModelDescriptor {
+	if len(modelIDs) == 0 {
+		return nil
+	}
+	out := make([]llm.ModelDescriptor, 0, len(modelIDs))
+	for _, id := range modelIDs {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, llm.ModelDescriptor{
+			ID:     trimmed,
+			Source: llm.ModelSourceBuiltin,
+		})
 	}
 	return out
 }
@@ -551,4 +1054,13 @@ func providerRequiresAPIKey(descriptor llm.ProviderDescriptor, cfg llm.ProviderC
 		}
 	}
 	return descriptor.RequiresAPIKey()
+}
+
+func pointer[T any](value T) *T { return &value }
+
+func apiErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

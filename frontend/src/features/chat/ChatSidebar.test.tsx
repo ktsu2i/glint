@@ -14,7 +14,8 @@ const backend = vi.hoisted(() => ({
   getLLMConfig: vi.fn(),
   onAnswerDelta: vi.fn(),
   upsertProviderSettings: vi.fn(),
-  setActiveProvider: vi.fn(),
+  setActiveModel: vi.fn(),
+  listProviderModels: vi.fn(),
   startChat: vi.fn(),
 }));
 
@@ -23,7 +24,8 @@ vi.mock("../../shared/api/backend", () => ({
   getLLMConfig: backend.getLLMConfig,
   onAnswerDelta: backend.onAnswerDelta,
   upsertProviderSettings: backend.upsertProviderSettings,
-  setActiveProvider: backend.setActiveProvider,
+  setActiveModel: backend.setActiveModel,
+  listProviderModels: backend.listProviderModels,
   startChat: backend.startChat,
 }));
 
@@ -43,9 +45,11 @@ beforeEach(() => {
   });
   backend.getLLMConfig.mockResolvedValue({
     activeProviderId: "openrouter",
+    activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
     providers: [{
       providerId: "openrouter",
       model: "provider/model",
+      models: [],
       options: { zdr: true },
       hasApiKey: true,
       configured: true,
@@ -58,27 +62,36 @@ beforeEach(() => {
       optionSchema: [],
       capabilities: { streaming: true, tools: false, images: false },
     }],
-    recentProviderIds: [],
+    recentProviderIds: ["openrouter"],
+    recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
   });
-  backend.setActiveProvider.mockImplementation(async (providerId: string) => ({
+  backend.setActiveModel.mockImplementation(async (providerId: string, modelId: string) => ({
     activeProviderId: providerId,
+    activeModelRef: { providerId, modelId },
     providers: [{
       providerId,
-      model: "provider/model",
+      model: modelId,
+      models: [],
       options: {},
       hasApiKey: true,
       configured: true,
       isActive: true,
     }],
     catalog: [{
-      id: "openrouter",
-      displayName: "OpenRouter",
+      id: providerId,
+      displayName: providerId,
       authKind: "bearer",
       optionSchema: [],
       capabilities: { streaming: true, tools: false, images: false },
     }],
     recentProviderIds: [providerId],
+    recentModels: [{ providerId, modelId }],
   }));
+  backend.listProviderModels.mockResolvedValue({
+    providerId: "openrouter",
+    models: [{ id: "provider/model", source: "builtin" }],
+    source: "builtin",
+  });
   backend.startChat.mockResolvedValue(undefined);
   backend.cancelChat.mockResolvedValue(undefined);
   vi.stubGlobal("crypto", { randomUUID: vi.fn(() => "request-1") });
@@ -94,13 +107,15 @@ describe("ChatSidebar", () => {
     expect(selector.textContent).toContain("provider/model");
   });
 
-  it("switches active provider when the user picks one from the popover and updates the composer footer", async () => {
+  it("switches active (provider, model) when the user picks one from the popover", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "openrouter",
+      activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
       providers: [
         {
           providerId: "openrouter",
           model: "provider/model",
+          models: [],
           options: { zdr: true },
           hasApiKey: true,
           configured: true,
@@ -109,6 +124,7 @@ describe("ChatSidebar", () => {
         {
           providerId: "anthropic",
           model: "claude-opus-4-7",
+          models: [],
           hasApiKey: true,
           configured: true,
           isActive: false,
@@ -119,13 +135,26 @@ describe("ChatSidebar", () => {
         { id: "anthropic", displayName: "Anthropic", authKind: "x-api-key", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
       ],
       recentProviderIds: ["openrouter"],
+      recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
     });
-    backend.setActiveProvider.mockResolvedValueOnce({
+    backend.listProviderModels.mockImplementation(async (providerId: string) => {
+      if (providerId === "anthropic") {
+        return {
+          providerId: "anthropic",
+          models: [{ id: "claude-opus-4-7", source: "builtin" }],
+          source: "builtin",
+        };
+      }
+      return { providerId, models: [{ id: "provider/model", source: "builtin" }], source: "builtin" };
+    });
+    backend.setActiveModel.mockResolvedValueOnce({
       activeProviderId: "anthropic",
+      activeModelRef: { providerId: "anthropic", modelId: "claude-opus-4-7" },
       providers: [
         {
           providerId: "openrouter",
           model: "provider/model",
+          models: [],
           options: { zdr: true },
           hasApiKey: true,
           configured: true,
@@ -134,6 +163,7 @@ describe("ChatSidebar", () => {
         {
           providerId: "anthropic",
           model: "claude-opus-4-7",
+          models: [],
           hasApiKey: true,
           configured: true,
           isActive: true,
@@ -144,6 +174,10 @@ describe("ChatSidebar", () => {
         { id: "anthropic", displayName: "Anthropic", authKind: "x-api-key", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
       ],
       recentProviderIds: ["anthropic", "openrouter"],
+      recentModels: [
+        { providerId: "anthropic", modelId: "claude-opus-4-7" },
+        { providerId: "openrouter", modelId: "provider/model" },
+      ],
     });
 
     render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
@@ -153,7 +187,7 @@ describe("ChatSidebar", () => {
     fireEvent.click(selector);
     fireEvent.click(await screen.findByRole("option", { name: /claude-opus-4-7/ }));
 
-    await waitFor(() => expect(backend.setActiveProvider).toHaveBeenCalledWith("anthropic"));
+    await waitFor(() => expect(backend.setActiveModel).toHaveBeenCalledWith("anthropic", "claude-opus-4-7"));
     await waitFor(() => expect(
       screen.getByRole("button", { name: /claude-opus-4-7/ }).title,
     ).toBe("anthropic / claude-opus-4-7"));
@@ -171,6 +205,7 @@ describe("ChatSidebar", () => {
         capabilities: { streaming: true, tools: false, images: false },
       }],
       recentProviderIds: [],
+      recentModels: [],
     });
     const onOpenSettings = vi.fn();
     render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} onOpenSettings={onOpenSettings} />);

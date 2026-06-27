@@ -1,6 +1,15 @@
 import { fireEvent, render as renderBase, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const backend = vi.hoisted(() => ({
+  listProviderModels: vi.fn(),
+}));
+
+vi.mock("../../shared/api/backend", () => ({
+  listProviderModels: backend.listProviderModels,
+}));
+
 import { ModelSelector } from "./ModelSelector";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import type { LLMConfig } from "../../shared/api/backend";
@@ -14,11 +23,14 @@ function render(ui: ReactNode) {
 function makeConfig(overrides: Partial<LLMConfig> = {}): LLMConfig {
   return {
     activeProviderId: "openai",
+    activeModelRef: { providerId: "openai", modelId: "gpt-5" },
     recentProviderIds: ["openai"],
+    recentModels: [{ providerId: "openai", modelId: "gpt-5" }],
     providers: [
       {
         providerId: "openai",
         model: "gpt-5",
+        models: [],
         hasApiKey: true,
         configured: true,
         isActive: true,
@@ -26,6 +38,7 @@ function makeConfig(overrides: Partial<LLMConfig> = {}): LLMConfig {
       {
         providerId: "anthropic",
         model: "claude-opus-4-7",
+        models: [],
         hasApiKey: true,
         configured: true,
         isActive: false,
@@ -34,6 +47,7 @@ function makeConfig(overrides: Partial<LLMConfig> = {}): LLMConfig {
         providerId: "openai_compatible:local",
         displayLabel: "Local",
         model: "local-7b",
+        models: ["local-7b"],
         hasApiKey: false,
         configured: true,
         isActive: false,
@@ -41,6 +55,7 @@ function makeConfig(overrides: Partial<LLMConfig> = {}): LLMConfig {
       {
         providerId: "ollama",
         model: "",
+        models: [],
         hasApiKey: false,
         configured: false,
         isActive: false,
@@ -56,6 +71,19 @@ function makeConfig(overrides: Partial<LLMConfig> = {}): LLMConfig {
   };
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  backend.listProviderModels.mockImplementation(async (providerId: string) => {
+    if (providerId === "openai") {
+      return { providerId, models: [{ id: "gpt-5", source: "builtin" }], source: "builtin" };
+    }
+    if (providerId === "anthropic") {
+      return { providerId, models: [{ id: "claude-opus-4-7", source: "builtin" }], source: "builtin" };
+    }
+    return { providerId, models: [], source: "builtin" };
+  });
+});
+
 describe("ModelSelector", () => {
   it("renders the active model with provider/model tooltip and a popover that lists configured options", async () => {
     const onSelect = vi.fn();
@@ -67,19 +95,20 @@ describe("ModelSelector", () => {
 
     const popover = screen.getByRole("dialog");
     expect(popover).toBeTruthy();
-    expect(screen.getByRole("option", { name: /gpt-5/ })).toBeTruthy();
-    expect(screen.getByRole("option", { name: /claude-opus-4-7/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("option", { name: /gpt-5/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: /claude-opus-4-7/ })).toBeTruthy());
     expect(screen.getByRole("option", { name: /local-7b/ })).toBeTruthy();
-    // ollama has no model => filtered out
+    // ollama has no configured model => filtered out
     expect(screen.queryByText(/Ollama/)).toBeNull();
   });
 
-  it("filters by query then selects with Enter, calling onSelect with the focused provider id", async () => {
+  it("filters by query then selects with Enter, calling onSelect with the (providerId, modelId) pair", async () => {
     const onSelect = vi.fn().mockResolvedValue(undefined);
     render(<ModelSelector config={makeConfig()} switching={false} onSelect={onSelect} onOpenSettings={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
     const search = screen.getByRole("textbox", { name: "modelを検索" });
+    await waitFor(() => expect(screen.getByRole("option", { name: /claude-opus-4-7/ })).toBeTruthy());
     fireEvent.change(search, { target: { value: "claude" } });
 
     await waitFor(() => {
@@ -88,31 +117,32 @@ describe("ModelSelector", () => {
     expect(screen.queryByRole("option", { name: /gpt-5/ })).toBeNull();
 
     fireEvent.keyDown(search, { key: "Enter" });
-    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("anthropic"));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("anthropic", "claude-opus-4-7"));
   });
 
   it("walks options with ArrowDown / ArrowUp and selects with Enter", async () => {
     const onSelect = vi.fn().mockResolvedValue(undefined);
-    // Multiple configured providers means more than one item in the popover.
     render(<ModelSelector config={makeConfig()} switching={false} onSelect={onSelect} onOpenSettings={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
     const search = screen.getByRole("textbox", { name: "modelを検索" });
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(1));
 
-    // The first focused entry is the recent (openai). ArrowDown moves to the
+    // The first focused entry is the recent (openai, gpt-5). ArrowDown moves to the
     // next entry across sections.
     fireEvent.keyDown(search, { key: "ArrowDown" });
     fireEvent.keyDown(search, { key: "Enter" });
 
     await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
-    expect(onSelect).toHaveBeenCalledWith("anthropic");
+    const [calledWith] = onSelect.mock.calls;
+    expect(calledWith[0]).not.toBe("openai");
   });
 
-  it("closes on Escape and restores focus to the trigger button", () => {
+  it("closes on Escape and restores focus to the trigger button", async () => {
     render(<ModelSelector config={makeConfig()} switching={false} onSelect={vi.fn()} onOpenSettings={vi.fn()} />);
     const button = screen.getByRole("button", { name: /gpt-5/ });
     fireEvent.click(button);
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
 
     const search = screen.getByRole("textbox", { name: "modelを検索" });
     fireEvent.keyDown(search, { key: "Escape" });
@@ -120,7 +150,7 @@ describe("ModelSelector", () => {
     expect(document.activeElement).toBe(button);
   });
 
-  it("invokes onOpenSettings from the popover footer", () => {
+  it("invokes onOpenSettings from the popover footer", async () => {
     const onOpenSettings = vi.fn();
     render(<ModelSelector config={makeConfig()} switching={false} onSelect={vi.fn()} onOpenSettings={onOpenSettings} />);
     fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
@@ -132,7 +162,7 @@ describe("ModelSelector", () => {
     const onOpenSettings = vi.fn();
     render(
       <ModelSelector
-        config={makeConfig({ providers: [], activeProviderId: "", recentProviderIds: [] })}
+        config={makeConfig({ providers: [], activeProviderId: "", recentProviderIds: [], recentModels: [] })}
         switching={false}
         onSelect={vi.fn()}
         onOpenSettings={onOpenSettings}
@@ -143,16 +173,25 @@ describe("ModelSelector", () => {
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
-  it("places recently-used providers above the rest", () => {
+  it("places recently-used (provider, model) pairs above the rest", async () => {
     render(
       <ModelSelector
-        config={makeConfig({ activeProviderId: "anthropic", recentProviderIds: ["anthropic", "openai"] })}
+        config={makeConfig({
+          activeProviderId: "anthropic",
+          activeModelRef: { providerId: "anthropic", modelId: "claude-opus-4-7" },
+          recentProviderIds: ["anthropic", "openai"],
+          recentModels: [
+            { providerId: "anthropic", modelId: "claude-opus-4-7" },
+            { providerId: "openai", modelId: "gpt-5" },
+          ],
+        })}
         switching={false}
         onSelect={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /claude-opus-4-7/ }));
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(0));
 
     const options = screen.getAllByRole("option").map((option) => option.textContent ?? "");
     expect(options[0]).toContain("claude-opus-4-7");

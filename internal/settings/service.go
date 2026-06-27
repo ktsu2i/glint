@@ -46,6 +46,34 @@ func (service *Service) SetActiveProvider(providerID string) (LLMConfig, error) 
 	return service.manager.SetActiveProvider(service.ctx, providerID)
 }
 
+func (service *Service) SetActiveModel(providerID, modelID string) (LLMConfig, error) {
+	if service.ctx == nil {
+		return LLMConfig{}, errors.New("application is not ready")
+	}
+	return service.manager.SetActiveModel(service.ctx, providerID, modelID)
+}
+
+func (service *Service) ListProviderModels(providerID string) (ModelListingResult, error) {
+	if service.ctx == nil {
+		return ModelListingResult{}, errors.New("application is not ready")
+	}
+	return service.manager.ListProviderModels(service.ctx, providerID)
+}
+
+func (service *Service) AddCustomModel(providerID, modelID string) (LLMConfig, error) {
+	if service.ctx == nil {
+		return LLMConfig{}, errors.New("application is not ready")
+	}
+	return service.manager.AddCustomModel(service.ctx, providerID, modelID)
+}
+
+func (service *Service) RemoveCustomModel(providerID, modelID string) (LLMConfig, error) {
+	if service.ctx == nil {
+		return LLMConfig{}, errors.New("application is not ready")
+	}
+	return service.manager.RemoveCustomModel(service.ctx, providerID, modelID)
+}
+
 func (service *Service) TestProviderConnection(providerID string) (TestProviderConnectionResult, error) {
 	if service.ctx == nil {
 		return TestProviderConnectionResult{}, errors.New("application is not ready")

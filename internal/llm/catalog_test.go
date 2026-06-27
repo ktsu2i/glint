@@ -42,9 +42,9 @@ func TestRegistryResolvesOpenAICompatibleSlugToTemplate(t *testing.T) {
 
 func TestRegistryValidatesOpenRouterModel(t *testing.T) {
 	registry := NewRegistry()
-	assert.ErrorContains(t,
+	// F10: 空 model は upsert で許容（後で SetActiveModel が指定する）。
+	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderOpenRouter}),
-		"model",
 	)
 	assert.ErrorContains(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderOpenRouter, Model: "invalid"}),
@@ -113,9 +113,9 @@ func TestRegistryBuildDispatchesToAnthropicFactory(t *testing.T) {
 
 func TestRegistryValidatesAnthropicModel(t *testing.T) {
 	registry := NewRegistry()
-	assert.ErrorContains(t,
+	// F10: model 入力は SetActiveModel に移った。upsert 時の Validate は空 model を許容する。
+	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderAnthropic}),
-		"model",
 	)
 	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderAnthropic, Model: "claude-opus-4-7"}),
@@ -150,9 +150,9 @@ func TestRegistryBuildDispatchesToGoogleFactory(t *testing.T) {
 
 func TestRegistryValidatesGoogleModel(t *testing.T) {
 	registry := NewRegistry()
-	assert.ErrorContains(t,
+	// F10: empty model is now allowed at upsert time (selection moved into the composer).
+	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderGoogle}),
-		"model",
 	)
 	assert.ErrorContains(t,
 		registry.Validate(ProviderConfig{
@@ -215,7 +215,6 @@ func TestRegistryValidatesOpenAICompatibleRequiresSlug(t *testing.T) {
 	registry := NewRegistry()
 	err := registry.Validate(ProviderConfig{
 		ProviderID: ProviderOpenAICompatible,
-		Model:      "x",
 		Options:    map[string]any{"base_url": "https://example.com/v1"},
 	})
 	assert.ErrorContains(t, err, "openai_compatible:")
@@ -225,7 +224,6 @@ func TestRegistryValidatesOpenAICompatibleRequiresBaseURL(t *testing.T) {
 	registry := NewRegistry()
 	err := registry.Validate(ProviderConfig{
 		ProviderID: ProviderID("openai_compatible:groq"),
-		Model:      "model",
 	})
 	assert.ErrorContains(t, err, "base URL")
 }

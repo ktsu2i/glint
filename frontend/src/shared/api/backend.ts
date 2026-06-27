@@ -17,12 +17,16 @@ import {
 } from "../../../wailsjs/go/books/Service";
 import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
 import {
+  AddCustomModel,
   DeleteProviderSettings,
   GetAppearanceSettings,
   GetLanguageSettings,
   GetLLMConfig,
+  ListProviderModels,
+  RemoveCustomModel,
   SaveAppearanceSettings,
   SaveLanguageSettings,
+  SetActiveModel,
   SetActiveProvider,
   TestProviderConnection,
   UpsertProviderSettings,
@@ -126,32 +130,59 @@ export type ProviderSettings = {
   providerId: string;
   displayLabel?: string;
   model: string;
+  models?: string[];
   options?: Record<string, unknown>;
   hasApiKey: boolean;
   configured: boolean;
   isActive: boolean;
 };
 
+export type ActiveModelRef = {
+  providerId: string;
+  modelId: string;
+};
+
 export type LLMConfig = {
   activeProviderId: string;
+  activeModelRef?: ActiveModelRef;
   providers: ProviderSettings[];
   catalog: ProviderDescriptor[];
   recentProviderIds: string[];
+  recentModels: ActiveModelRef[];
 };
 
 export type UpsertProviderRequest = {
   providerId: string;
   displayLabel?: string;
-  model: string;
   options?: Record<string, unknown>;
   apiKey?: string;
   clearApiKey?: boolean;
-  activate?: boolean;
 };
 
 export type TestProviderConnectionResult = {
   providerId: string;
   ok: boolean;
+  error?: string;
+};
+
+export type ModelSource = "api" | "cache" | "builtin";
+
+export type ModelDescriptor = {
+  id: string;
+  displayName?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  supportsImages?: boolean;
+  source?: ModelSource;
+  notes?: string;
+};
+
+export type ModelListingResult = {
+  providerId: string;
+  models: ModelDescriptor[];
+  source: ModelSource;
+  fetchedAt?: string;
   error?: string;
 };
 
@@ -261,6 +292,22 @@ export async function deleteProviderSettings(providerId: string): Promise<LLMCon
 
 export async function setActiveProvider(providerId: string): Promise<LLMConfig> {
   return (await SetActiveProvider(providerId)) as LLMConfig;
+}
+
+export async function setActiveModel(providerId: string, modelId: string): Promise<LLMConfig> {
+  return (await SetActiveModel(providerId, modelId)) as LLMConfig;
+}
+
+export async function listProviderModels(providerId: string): Promise<ModelListingResult> {
+  return (await ListProviderModels(providerId)) as ModelListingResult;
+}
+
+export async function addCustomModel(providerId: string, modelId: string): Promise<LLMConfig> {
+  return (await AddCustomModel(providerId, modelId)) as LLMConfig;
+}
+
+export async function removeCustomModel(providerId: string, modelId: string): Promise<LLMConfig> {
+  return (await RemoveCustomModel(providerId, modelId)) as LLMConfig;
 }
 
 export async function testProviderConnection(providerId: string): Promise<TestProviderConnectionResult> {

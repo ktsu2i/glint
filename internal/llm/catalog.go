@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -83,10 +84,16 @@ type Deps struct {
 
 type gatewayFactory func(cfg ProviderConfig, deps Deps) (Gateway, error)
 
+// modelLister は provider が listing API を持つときに登録する関数。
+// builtin catalog しか持たない provider (Google など) や、ローカル設定だけで
+// 一覧を決める provider (custom OpenAI-compatible) は nil でよい。
+type modelLister func(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error)
+
 type providerEntry struct {
 	descriptor ProviderDescriptor
 	factory    gatewayFactory
 	validate   func(cfg ProviderConfig) error
+	lister     modelLister
 }
 
 // Registry は built-in provider と将来的な user-defined slot を保持する。
@@ -101,16 +108,16 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) registerBuiltins() {
-	r.register(openRouterDescriptor(), openRouterFactory, validateOpenRouter)
-	r.register(openAIDescriptor(), openAIFactory, validateOpenAI)
-	r.register(anthropicDescriptor(), anthropicFactory, validateAnthropic)
-	r.register(googleDescriptor(), googleFactory, validateGoogle)
-	r.register(ollamaDescriptor(), ollamaFactory, validateOllama)
-	r.register(openAICompatibleDescriptor(), openAICompatibleFactory, validateOpenAICompatible)
+	r.register(openRouterDescriptor(), openRouterFactory, validateOpenRouter, openRouterLister)
+	r.register(openAIDescriptor(), openAIFactory, validateOpenAI, openAIModelLister)
+	r.register(anthropicDescriptor(), anthropicFactory, validateAnthropic, anthropicModelLister)
+	r.register(googleDescriptor(), googleFactory, validateGoogle, nil)
+	r.register(ollamaDescriptor(), ollamaFactory, validateOllama, ollamaModelLister)
+	r.register(openAICompatibleDescriptor(), openAICompatibleFactory, validateOpenAICompatible, nil)
 }
 
-func (r *Registry) register(descriptor ProviderDescriptor, factory gatewayFactory, validate func(ProviderConfig) error) {
-	r.entries[descriptor.ID] = providerEntry{descriptor: descriptor, factory: factory, validate: validate}
+func (r *Registry) register(descriptor ProviderDescriptor, factory gatewayFactory, validate func(ProviderConfig) error, lister modelLister) {
+	r.entries[descriptor.ID] = providerEntry{descriptor: descriptor, factory: factory, validate: validate, lister: lister}
 }
 
 // Descriptors は frontend が UI を組むための provider 一覧を返す。
@@ -159,6 +166,31 @@ func (r *Registry) Build(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return entry.factory(cfg, deps)
 }
 
+// HasListing は provider が listing API を持つか（= ListModels が API 値を
+// 返し得るか）を返す。Manager はこれを見て api → cache → builtin の fallback
+// 順を決める。
+func (r *Registry) HasListing(id ProviderID) bool {
+	entry, ok := r.lookupEntry(id)
+	if !ok {
+		return false
+	}
+	return entry.lister != nil
+}
+
+// ListModels は provider の listing API を呼んで結果を返す。lister が登録されて
+// いない provider は nil, nil を返し、呼び出し側が builtin / cache fallback に
+// 進める。
+func (r *Registry) ListModels(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
+	entry, ok := r.lookupEntry(cfg.ProviderID)
+	if !ok {
+		return nil, fmt.Errorf("unknown LLM provider %q", cfg.ProviderID)
+	}
+	if entry.lister == nil {
+		return nil, nil
+	}
+	return entry.lister(ctx, cfg, deps)
+}
+
 func (r *Registry) lookupEntry(id ProviderID) (providerEntry, bool) {
 	if IsOpenAICompatibleID(id) {
 		entry, ok := r.entries[ProviderOpenAICompatible]
@@ -203,10 +235,13 @@ func openRouterFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 }
 
 func validateOpenRouter(cfg ProviderConfig) error {
-	if strings.TrimSpace(cfg.Model) == "" {
-		return errors.New("OpenRouterのmodelを入力してください。")
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		// F10: model id は SetActiveModel / AddCustomModel 経由で別に管理される。
+		// Upsert 時点で空のときは options だけ確認すれば良い。
+		return nil
 	}
-	if !strings.Contains(cfg.Model, "/") {
+	if !strings.Contains(model, "/") {
 		return errors.New("modelは provider/model 形式で入力してください。")
 	}
 	return nil
@@ -249,9 +284,7 @@ func openAIFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 }
 
 func validateOpenAI(cfg ProviderConfig) error {
-	if strings.TrimSpace(cfg.Model) == "" {
-		return errors.New("OpenAIのmodelを入力してください。")
-	}
+	_ = cfg
 	return nil
 }
 
@@ -293,9 +326,7 @@ func anthropicFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 }
 
 func validateAnthropic(cfg ProviderConfig) error {
-	if strings.TrimSpace(cfg.Model) == "" {
-		return errors.New("Anthropicのmodelを入力してください。")
-	}
+	_ = cfg
 	return nil
 }
 
@@ -346,9 +377,6 @@ func googleFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 }
 
 func validateGoogle(cfg ProviderConfig) error {
-	if strings.TrimSpace(cfg.Model) == "" {
-		return errors.New("Googleのmodelを入力してください。")
-	}
 	mode := strings.ToLower(strings.TrimSpace(optionString(cfg.Options, "auth_mode", "")))
 	if mode != "" && mode != GoogleAuthModeHeader && mode != GoogleAuthModeQuery {
 		return errors.New("auth_modeは `header` または `query` を指定してください。")
@@ -394,9 +422,7 @@ func ollamaFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 }
 
 func validateOllama(cfg ProviderConfig) error {
-	if strings.TrimSpace(cfg.Model) == "" {
-		return errors.New("Ollamaのmodelを入力してください。")
-	}
+	_ = cfg
 	return nil
 }
 
@@ -455,12 +481,10 @@ func validateOpenAICompatible(cfg ProviderConfig) error {
 	if !IsOpenAICompatibleID(cfg.ProviderID) {
 		return errors.New("openai_compatibleには `openai_compatible:<slug>` 形式のproviderIdを指定してください。")
 	}
-	if strings.TrimSpace(cfg.Model) == "" {
-		return errors.New("modelを入力してください。")
-	}
 	if strings.TrimSpace(optionString(cfg.Options, "base_url", "")) == "" {
 		return errors.New("base URLを入力してください。")
 	}
+	// model は AddCustomModel で別管理する（F10）。
 	return nil
 }
 

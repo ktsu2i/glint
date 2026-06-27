@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -43,6 +44,22 @@ func (manager *Manager) ensureMigration(ctx context.Context) error {
 			return err
 		}
 		if err := manager.store.SaveSetting(ctx, llmKeyCleanupDoneKey, "1"); err != nil {
+			return err
+		}
+	}
+
+	// F10: model 単独保存と active_provider を models[] + active_model_ref に
+	// 持ち上げる。`llm.providers.<id>.model` から `models[]` に1件コピーし、
+	// 同時に `llm.active_provider` を `llm.active_model_ref` に変換する。
+	modelsDone, err := manager.store.Setting(ctx, llmModelsMigrationKey)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(modelsDone) != "1" {
+		if err := manager.migrateToActiveModelRef(ctx); err != nil {
+			return err
+		}
+		if err := manager.store.SaveSetting(ctx, llmModelsMigrationKey, "1"); err != nil {
 			return err
 		}
 	}
@@ -132,4 +149,67 @@ func (manager *Manager) cleanupLegacyOpenRouterKey() error {
 		return fmt.Errorf("delete legacy OpenRouter API key: %w", err)
 	}
 	return nil
+}
+
+// migrateToActiveModelRef converts the F2 schema into the F10 one. Concretely:
+//   - llm.providers.<id>.model (single value) becomes the first entry of
+//     models[] and stays in `model` as the per-provider last-used pointer
+//   - llm.active_provider is paired with that model to populate
+//     llm.active_model_ref
+//
+// The migration is one-shot, idempotent (controlled by llm.migration_v4_done),
+// and leaves the v2 keys intact so a downgrade-and-reupgrade still works.
+func (manager *Manager) migrateToActiveModelRef(ctx context.Context) error {
+	stored, err := manager.loadStoredProviders(ctx)
+	if err != nil {
+		return err
+	}
+	mutated := false
+	for id, entry := range stored {
+		trimmedModel := strings.TrimSpace(entry.Model)
+		if trimmedModel == "" {
+			continue
+		}
+		// Already part of models[]? skip.
+		if !slices.Contains(entry.Models, trimmedModel) {
+			entry.Models = append([]string{trimmedModel}, entry.Models...)
+			stored[id] = entry
+			mutated = true
+		}
+	}
+	if mutated {
+		if err := manager.saveStoredProviders(ctx, stored); err != nil {
+			return err
+		}
+	}
+
+	// active_model_ref が既に書かれているなら何もしない。
+	existing, err := manager.store.Setting(ctx, llmActiveModelKey)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(existing) != "" {
+		return nil
+	}
+	active, err := manager.loadActiveProviderID(ctx)
+	if err != nil {
+		return err
+	}
+	if active == "" {
+		return nil
+	}
+	entry, exists := stored[active]
+	if !exists {
+		return nil
+	}
+	model := strings.TrimSpace(entry.Model)
+	if model == "" {
+		return nil
+	}
+	ref := ActiveModelRef{ProviderID: active, ModelID: model}
+	encoded, err := json.Marshal(ref)
+	if err != nil {
+		return fmt.Errorf("encode active model ref during migration: %w", err)
+	}
+	return manager.store.SaveSetting(ctx, llmActiveModelKey, string(encoded))
 }
