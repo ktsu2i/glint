@@ -9,7 +9,6 @@ frontend/package.json.md5
 
 # Wails build output
 build/bin/
-frontend/wailsjs/
 
 # Go build and test output
 coverage.out
