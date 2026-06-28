@@ -22,6 +22,8 @@ import {
   MagnifyingGlass,
   Minus,
   Plus,
+  SpeakerHigh,
+  SpeakerSlash,
   X,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
@@ -137,7 +139,7 @@ export function PdfReader({
   onPageContextChange,
   onSelectionChange,
 }: PdfReaderProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
   const textLayerLeftRef = useRef<HTMLDivElement>(null);
@@ -180,6 +182,15 @@ export function PdfReader({
   const [bookmarkError, setBookmarkError] = useState("");
   const [textLayerRevision, setTextLayerRevision] = useState(0);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
+  const [isReadingAloud, setIsReadingAloud] = useState(false);
+  const [readableText, setReadableText] = useState<{
+    pageNumber: number;
+    text: string;
+  }>({ pageNumber: 0, text: "" });
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const isReadingAloudRef = useRef(false);
+  const speechSupported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchRequestRef = useRef(0);
 
@@ -242,6 +253,11 @@ export function PdfReader({
   );
 
   useEffect(() => {
+    setIsReadingAloud(false);
+    setReadableText({ pageNumber: 0, text: "" });
+    if (speechSupported) {
+      window.speechSynthesis.cancel();
+    }
     if (!book) {
       setDocument(null);
       setPageNumber(1);
@@ -581,6 +597,7 @@ export function PdfReader({
           ),
         )
         .join("\n\n");
+      setReadableText({ pageNumber, text });
       pageContextCallbackRef.current(pageNumber, text, document!.numPages);
 
       for (let i = 0; i < pages.length; i += 1) {
@@ -762,6 +779,91 @@ export function PdfReader({
   useEffect(() => {
     selectionCallbackRef.current?.(null);
   }, [pageNumber]);
+
+  useEffect(() => {
+    isReadingAloudRef.current = isReadingAloud;
+  }, [isReadingAloud]);
+
+  useEffect(() => {
+    if (!speechSupported) {
+      return;
+    }
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, [speechSupported]);
+
+  useEffect(() => {
+    if (!speechSupported) {
+      return;
+    }
+    const synth = window.speechSynthesis;
+    const load = () => setVoices(synth.getVoices());
+    load();
+    synth.addEventListener("voiceschanged", load);
+    return () => {
+      synth.removeEventListener("voiceschanged", load);
+    };
+  }, [speechSupported]);
+
+  useEffect(() => {
+    if (!speechSupported || !isReadingAloud || !document) {
+      return;
+    }
+    if (
+      readableText.pageNumber !== pageNumber ||
+      readableText.text.trim() === ""
+    ) {
+      return;
+    }
+    const detectedLang = detectUtteranceLang(readableText.text, i18n.language);
+    const utterance = new SpeechSynthesisUtterance(readableText.text);
+    utterance.lang = detectedLang;
+    const voice = pickVoiceForLang(voices, detectedLang);
+    if (voice) {
+      utterance.voice = voice;
+    }
+    const numPages = document.numPages;
+    utterance.onend = () => {
+      if (!isReadingAloudRef.current) {
+        return;
+      }
+      if (pageNumber >= numPages) {
+        setIsReadingAloud(false);
+        return;
+      }
+      setPageNumber((current) => Math.min(numPages, current + 1));
+    };
+    utterance.onerror = () => {
+      setIsReadingAloud(false);
+    };
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, [
+    document,
+    i18n.language,
+    isReadingAloud,
+    pageNumber,
+    readableText,
+    speechSupported,
+    voices,
+  ]);
+
+  const toggleReadAloud = useCallback(() => {
+    if (!speechSupported) {
+      return;
+    }
+    setIsReadingAloud((current) => {
+      if (current) {
+        window.speechSynthesis.cancel();
+        return false;
+      }
+      return true;
+    });
+  }, [speechSupported]);
 
   useEffect(() => {
     if (!isEditingPage) {
@@ -1070,6 +1172,24 @@ export function PdfReader({
               size={15}
               weight={currentPageBookmarked ? "fill" : "regular"}
             />
+          </ToolButton>
+          <ToolButton
+            label={
+              !speechSupported
+                ? t("reader.readAloudUnsupported")
+                : isReadingAloud
+                  ? t("reader.stopReadAloud")
+                  : t("reader.startReadAloud")
+            }
+            className={isReadingAloud ? "is-active" : ""}
+            disabled={!document || !speechSupported}
+            onClick={toggleReadAloud}
+          >
+            {isReadingAloud ? (
+              <SpeakerSlash size={15} weight="bold" />
+            ) : (
+              <SpeakerHigh size={15} weight="regular" />
+            )}
           </ToolButton>
         </div>
         <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
@@ -1454,6 +1574,32 @@ export function PdfReader({
       </div>
     </section>
   );
+}
+
+function detectUtteranceLang(text: string, fallbackUiLang: string): string {
+  if (/[぀-ゟ゠-ヿ一-鿿]/.test(text)) {
+    return "ja-JP";
+  }
+  return fallbackUiLang === "ja" ? "ja-JP" : "en-US";
+}
+
+function pickVoiceForLang(
+  voices: SpeechSynthesisVoice[],
+  lang: string,
+): SpeechSynthesisVoice | null {
+  if (voices.length === 0) {
+    return null;
+  }
+  const target = lang.toLowerCase();
+  const prefix = target.slice(0, 2);
+  const exact = voices.find((voice) => voice.lang.toLowerCase() === target);
+  if (exact) {
+    return exact;
+  }
+  const sameLanguage = voices.find((voice) =>
+    voice.lang.toLowerCase().startsWith(prefix),
+  );
+  return sameLanguage ?? null;
 }
 
 function getTextOffset(root: HTMLElement, node: Node, offset: number): number {
