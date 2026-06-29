@@ -12,7 +12,11 @@ export function MarkBookCoverFailed(arg1:string):Promise<void>;
 
 export function OpenBook(arg1:string):Promise<books.BookFile>;
 
+export function OpenBookFile():Promise<books.BookFile>;
+
 export function OpenPDF():Promise<books.BookFile>;
+
+export function RelinkBook(arg1:string):Promise<books.BookFile>;
 
 export function RelinkPDF(arg1:string):Promise<books.BookFile>;
 

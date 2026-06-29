@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kaito/glint/internal/assetserver"
@@ -16,15 +17,16 @@ import (
 )
 
 type BookFile struct {
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	Name             string `json:"name"`
-	URL              string `json:"url"`
-	Format           string `json:"format"`
-	Size             int64  `json:"size"`
-	InitialPage      int    `json:"initialPage"`
-	IndexedPageCount int    `json:"indexedPageCount"`
-	CoverStatus      string `json:"coverStatus"`
+	ID               string      `json:"id"`
+	Title            string      `json:"title"`
+	Name             string      `json:"name"`
+	URL              string      `json:"url"`
+	Format           string      `json:"format"`
+	Size             int64       `json:"size"`
+	InitialPage      int         `json:"initialPage"`
+	IndexedPageCount int         `json:"indexedPageCount"`
+	CoverStatus      string      `json:"coverStatus"`
+	SpineItems       []SpineItem `json:"spineItems,omitempty"`
 }
 
 type BookPageInput struct {
@@ -93,15 +95,27 @@ func Startup(s *Service, ctx context.Context) {
 	s.ctx = ctx
 }
 
-func (s *Service) OpenPDF() (BookFile, error) {
+// OpenBookFile prompts the user for a PDF or EPUB and imports the selected
+// file. Wails binds this method to the frontend; PDF / EPUB dispatch happens by
+// extension inside selectBookFile.
+func (s *Service) OpenBookFile() (BookFile, error) {
 	if s.ctx == nil {
 		return BookFile{}, errors.New("application is not ready")
 	}
-	path, err := s.choosePDF(s.localized("Add a technical PDF to the library", "技術書 PDF を本棚へ追加"))
+	path, err := s.chooseBookFile(s.localized(
+		"Add a technical book to the library",
+		"技術書を本棚へ追加",
+	))
 	if err != nil || path == "" {
 		return BookFile{}, err
 	}
-	return s.selectPDF(path)
+	return s.selectBookFile(path)
+}
+
+// OpenPDF is retained as a thin alias so frontend code generated against the
+// E1 wails facade keeps working until callers switch to OpenBookFile.
+func (s *Service) OpenPDF() (BookFile, error) {
+	return s.OpenBookFile()
 }
 
 func (s *Service) OpenBook(id string) (BookFile, error) {
@@ -111,22 +125,31 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 	}
 	if !fileExists(book.SourcePath) {
 		return BookFile{}, errors.New(s.localized(
-			"The PDF could not be found. Choose the file again from the library.",
-			"PDFが見つかりません。本棚からファイルを再選択してください。",
+			"The book could not be found. Choose the file again from the library.",
+			"本のファイルが見つかりません。本棚からファイルを再選択してください。",
 		))
 	}
-	fileHash, size, err := inspectPDF(book.SourcePath)
+	inspection, pkg, err := inspectBook(book.SourcePath)
 	if err != nil {
-		return BookFile{}, err
+		return BookFile{}, s.translateInspectionError(err)
 	}
-	if fileHash != book.FileHash {
+	if inspection.Format != book.Format {
+		return BookFile{}, errors.New(s.localized(
+			"The selected file format no longer matches this library entry.",
+			"選択されたファイルの形式が本棚の記録と一致しません。",
+		))
+	}
+	if inspection.FileHash != book.FileHash {
 		oldCoverPath := book.CoverThumbnailPath
-		book, err = s.library.Relink(context.Background(), id, book.SourcePath, fileHash, size, time.Now())
+		book, err = s.library.Relink(context.Background(), id, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
 		if err != nil {
 			return BookFile{}, err
 		}
 		if oldCoverPath != "" {
 			_ = os.Remove(oldCoverPath)
+		}
+		if err := s.afterImport(book, pkg); err != nil {
+			return BookFile{}, err
 		}
 	}
 	if book.CoverThumbnailStatus == "ready" && !fileExists(book.CoverThumbnailPath) {
@@ -139,36 +162,59 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 	if err := s.library.MarkOpened(context.Background(), id, time.Now()); err != nil {
 		return BookFile{}, err
 	}
-	return s.bookFile(book)
+	return s.bookFile(book, pkg)
 }
 
-func (s *Service) RelinkPDF(id string) (BookFile, error) {
+// RelinkBook prompts the user to point this library entry at a new file. The
+// dialog accepts the same formats as OpenBookFile so a renamed or moved EPUB
+// can replace a PDF entry only when the format actually still matches.
+func (s *Service) RelinkBook(id string) (BookFile, error) {
 	if s.ctx == nil {
 		return BookFile{}, errors.New("application is not ready")
 	}
-	path, err := s.choosePDF(s.localized("Choose the PDF file again", "PDF ファイルを再選択"))
+	path, err := s.chooseBookFile(s.localized(
+		"Choose the book file again",
+		"ファイルを再選択",
+	))
 	if err != nil || path == "" {
 		return BookFile{}, err
 	}
-	fileHash, size, err := inspectPDF(path)
+	inspection, pkg, err := inspectBook(path)
 	if err != nil {
-		return BookFile{}, err
+		return BookFile{}, s.translateInspectionError(err)
 	}
 	oldBook, err := s.library.Get(context.Background(), id)
 	if err != nil {
 		return BookFile{}, err
 	}
-	book, err := s.library.Relink(context.Background(), id, path, fileHash, size, time.Now())
+	if inspection.Format != oldBook.Format {
+		return BookFile{}, errors.New(s.localized(
+			"The chosen file format does not match this library entry.",
+			"選択したファイルの形式が本棚の記録と一致しません。",
+		))
+	}
+	book, err := s.library.Relink(context.Background(), id, path, inspection.FileHash, inspection.SizeBytes, time.Now())
 	if err != nil {
 		return BookFile{}, err
 	}
-	if oldBook.FileHash != fileHash && oldBook.CoverThumbnailPath != "" {
+	if oldBook.FileHash != inspection.FileHash && oldBook.CoverThumbnailPath != "" {
 		_ = os.Remove(oldBook.CoverThumbnailPath)
+	}
+	if oldBook.FileHash != inspection.FileHash {
+		if err := s.afterImport(book, pkg); err != nil {
+			return BookFile{}, err
+		}
 	}
 	if err := s.library.MarkOpened(context.Background(), id, time.Now()); err != nil {
 		return BookFile{}, err
 	}
-	return s.bookFile(book)
+	return s.bookFile(book, pkg)
+}
+
+// RelinkPDF stays available so the Wails bindings emitted in Phase E1 keep
+// compiling on the frontend. The implementation simply forwards to RelinkBook.
+func (s *Service) RelinkPDF(id string) (BookFile, error) {
+	return s.RelinkBook(id)
 }
 
 func (s *Service) RenameBook(id, name string) (BookSummary, error) {
@@ -196,7 +242,7 @@ func (s *Service) RemoveBook(id string) (bool, error) {
 		response, err := runtime.MessageDialog(s.ctx, runtime.MessageDialogOptions{
 			Type:          runtime.QuestionDialog,
 			Title:         s.localized("Remove from library", "本棚から削除"),
-			Message:       s.localized(fmt.Sprintf("Remove “%s” from the library?\nThe PDF file itself will remain.", book.Display()), fmt.Sprintf("「%s」を本棚から削除しますか？\nPDFファイル自体は残ります。", book.Display())),
+			Message:       s.localized(fmt.Sprintf("Remove “%s” from the library?\nThe source file itself will remain.", book.Display()), fmt.Sprintf("「%s」を本棚から削除しますか？\n元のファイル自体は残ります。", book.Display())),
 			Buttons:       []string{removeLabel, cancelLabel},
 			DefaultButton: cancelLabel,
 			CancelButton:  cancelLabel,
@@ -248,7 +294,7 @@ func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
 		Available:   fileExists(book.SourcePath),
 	}
 	if book.CoverThumbnailStatus == "ready" && fileExists(book.CoverThumbnailPath) {
-		url, err := s.assets.Register(book.CoverThumbnailPath, "image/png")
+		url, err := s.assets.Register(book.CoverThumbnailPath, coverContentType(book.CoverThumbnailPath))
 		if err != nil {
 			return BookSummary{}, err
 		}
@@ -403,27 +449,63 @@ func (s *Service) localized(english, japanese string) string {
 	return english
 }
 
-func (s *Service) selectPDF(path string) (BookFile, error) {
-	fileHash, size, err := inspectPDF(path)
+// selectBookFile imports a freshly chosen file of either supported format.
+// PDF / EPUB paths converge once the inspection has produced a hash, size and
+// (for EPUB) the parsed package so cover + page indexing can run synchronously.
+func (s *Service) selectBookFile(filePath string) (BookFile, error) {
+	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
-		return BookFile{}, err
+		return BookFile{}, s.translateInspectionError(err)
 	}
 	id, err := randomToken()
 	if err != nil {
 		return BookFile{}, fmt.Errorf("create book id: %w", err)
 	}
-	book, err := s.library.Import(context.Background(), id, path, fileHash, library.BookFormatPDF, size, time.Now())
+	book, err := s.library.Import(
+		context.Background(), id, filePath, inspection.FileHash,
+		inspection.Format, inspection.SizeBytes, time.Now(),
+	)
+	if err != nil {
+		return BookFile{}, err
+	}
+	if err := s.afterImport(book, pkg); err != nil {
+		return BookFile{}, err
+	}
+	book, err = s.library.Get(context.Background(), book.ID)
 	if err != nil {
 		return BookFile{}, err
 	}
 	if err := s.library.MarkOpened(context.Background(), book.ID, time.Now()); err != nil {
 		return BookFile{}, err
 	}
-	return s.bookFile(book)
+	return s.bookFile(book, pkg)
 }
 
-func (s *Service) bookFile(book library.Book) (BookFile, error) {
-	url, err := s.assets.Register(book.SourcePath, "application/pdf")
+// selectPDF stays available for callers and tests that still want the PDF-only
+// import path. It dispatches through selectBookFile so all format-specific
+// logic lives in one place.
+func (s *Service) selectPDF(filePath string) (BookFile, error) {
+	return s.selectBookFile(filePath)
+}
+
+// afterImport runs format-specific work that should happen once on initial
+// import (and again when a file is relinked to a new hash). For EPUB this
+// covers cover extraction and spine indexing; PDF cover + indexing remain a
+// frontend responsibility because PDF.js drives both.
+func (s *Service) afterImport(book library.Book, pkg *epubPackage) error {
+	if book.Format != BookFormatEPUB || pkg == nil {
+		return nil
+	}
+	if err := s.extractEPUBCover(book, pkg); err != nil {
+		// Cover extraction failure should never block import; mark the book
+		// as failed so the UI can render its placeholder.
+		_ = s.library.MarkCoverFailed(context.Background(), book.ID, time.Now())
+	}
+	return s.indexEPUBSpine(book, pkg)
+}
+
+func (s *Service) bookFile(book library.Book, pkg *epubPackage) (BookFile, error) {
+	url, err := s.assets.Register(book.SourcePath, bookContentType(book.Format))
 	if err != nil {
 		return BookFile{}, err
 	}
@@ -435,7 +517,7 @@ func (s *Service) bookFile(book library.Book) (BookFile, error) {
 	if coverStatus == "failed" {
 		coverStatus = "pending"
 	}
-	return BookFile{
+	file := BookFile{
 		ID:               book.ID,
 		Title:            book.Display(),
 		Name:             book.FileName,
@@ -445,20 +527,68 @@ func (s *Service) bookFile(book library.Book) (BookFile, error) {
 		InitialPage:      max(1, book.LastPage),
 		IndexedPageCount: indexedPageCount,
 		CoverStatus:      coverStatus,
-	}, nil
+	}
+	if book.Format == BookFormatEPUB && pkg != nil {
+		file.SpineItems = pkg.Spine
+	}
+	return file, nil
 }
 
-func (s *Service) choosePDF(title string) (string, error) {
+func (s *Service) chooseBookFile(title string) (string, error) {
+	filters := []runtime.FileFilter{
+		{DisplayName: "Books (*.pdf;*.epub)", Pattern: "*.pdf;*.epub"},
+		{DisplayName: "PDF files (*.pdf)", Pattern: "*.pdf"},
+		{DisplayName: "EPUB files (*.epub)", Pattern: "*.epub"},
+	}
 	path, err := runtime.OpenFileDialog(s.ctx, runtime.OpenDialogOptions{
-		Title: title,
-		Filters: []runtime.FileFilter{
-			{DisplayName: "PDF files (*.pdf)", Pattern: "*.pdf"},
-		},
+		Title:   title,
+		Filters: filters,
 	})
 	if err != nil {
-		return "", fmt.Errorf("open PDF dialog: %w", err)
+		return "", fmt.Errorf("open book dialog: %w", err)
 	}
 	return path, nil
+}
+
+// translateInspectionError converts the typed inspector errors into a
+// localized, user-facing message. The original error is wrapped so logs still
+// carry the underlying cause.
+func (s *Service) translateInspectionError(err error) error {
+	switch {
+	case errors.Is(err, ErrEPUBDRMProtected):
+		return errors.New(s.localized(
+			"This EPUB is DRM-protected and cannot be opened.",
+			"このEPUBはDRM保護されているため開けません。",
+		))
+	case errors.Is(err, ErrUnsupportedBookFormat):
+		return errors.New(s.localized(
+			"Glint can only import PDF or EPUB files.",
+			"PDF または EPUB のみ取り込めます。",
+		))
+	default:
+		return err
+	}
+}
+
+func bookContentType(format string) string {
+	if format == BookFormatEPUB {
+		return "application/epub+zip"
+	}
+	return "application/pdf"
+}
+
+func coverContentType(path string) string {
+	switch strings.ToLower(extension(path)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	}
+	return "image/png"
 }
 
 func randomToken() (string, error) {

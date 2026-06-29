@@ -299,6 +299,44 @@ func TestServiceSearchesLibraryAcrossBooks(t *testing.T) {
 	assert.Empty(t, empty)
 }
 
+func TestServiceImportsEPUBAndIndexesSpine(t *testing.T) {
+	h := newHarness(t)
+	path := newSampleEPUB(t)
+
+	book, err := h.service.selectBookFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, BookFormatEPUB, book.Format)
+	assert.Len(t, book.SpineItems, 3)
+	assert.Equal(t, 3, book.IndexedPageCount)
+
+	results, err := h.service.SearchBook(book.ID, "retrieval pipeline")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, 2, results[0].PageNumber)
+
+	summaries, err := h.service.ListBooks()
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, BookFormatEPUB, summaries[0].Format)
+	assert.Equal(t, "ready", summaries[0].CoverStatus)
+	assert.NotEmpty(t, summaries[0].CoverURL)
+
+	covers, err := filepath.Glob(filepath.Join(h.dataDir, "covers", book.ID+"-*.png"))
+	require.NoError(t, err)
+	require.Len(t, covers, 1)
+}
+
+func TestServiceRejectsDRMProtectedEPUB(t *testing.T) {
+	h := newHarness(t)
+	path := newSampleEPUB(t, func(files map[string]string) {
+		files["META-INF/encryption.xml"] = "<encryption xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"></encryption>"
+	})
+
+	_, err := h.service.selectBookFile(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DRM")
+}
+
 func TestServicePersistsPageBookmarks(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Bookmarks.pdf", "%PDF-1.7\nfixture")

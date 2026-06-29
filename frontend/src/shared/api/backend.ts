@@ -4,7 +4,9 @@ import {
   ListBooks,
   MarkBookCoverFailed,
   OpenBook,
+  OpenBookFile,
   OpenPDF,
+  RelinkBook,
   RelinkPDF,
   RemoveBook,
   RemoveBookmark,
@@ -36,6 +38,14 @@ import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
 
 export type BookFormat = "pdf" | "epub";
 
+export type EpubSpineItem = {
+  index: number;
+  id: string;
+  href: string;
+  mediaType: string;
+  title: string;
+};
+
 export type BookFile = {
   id: string;
   title: string;
@@ -46,6 +56,7 @@ export type BookFile = {
   initialPage: number;
   indexedPageCount: number;
   coverStatus: "pending" | "ready" | "failed";
+  spineItems?: EpubSpineItem[];
 };
 
 export type BookPageInput = {
@@ -217,6 +228,13 @@ export type LanguageSettings = {
   language: LanguagePreference;
 };
 
+export async function openBookFile(): Promise<BookFile> {
+  return (await OpenBookFile()) as BookFile;
+}
+
+// openPDF stays available as a thin alias so callers that still depend on the
+// Phase E1 binding name keep compiling. New call sites should prefer
+// openBookFile, which uses the format-aware dialog filter.
 export async function openPDF(): Promise<BookFile> {
   return (await OpenPDF()) as BookFile;
 }
@@ -229,6 +247,12 @@ export async function openBook(bookId: string): Promise<BookFile> {
   return (await OpenBook(bookId)) as BookFile;
 }
 
+export async function relinkBook(bookId: string): Promise<BookFile> {
+  return (await RelinkBook(bookId)) as BookFile;
+}
+
+// relinkPDF remains for compatibility with Phase E1 wiring; it forwards to the
+// format-aware relink endpoint exposed by RelinkBook.
 export async function relinkPDF(bookId: string): Promise<BookFile> {
   return (await RelinkPDF(bookId)) as BookFile;
 }

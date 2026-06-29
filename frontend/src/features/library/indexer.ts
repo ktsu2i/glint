@@ -7,6 +7,7 @@ export type IndexableBook = {
   id: string;
   url: string;
   indexedPageCount: number;
+  format?: "pdf" | "epub";
 };
 
 export type IndexProgressCallback = (current: number, total: number) => void;

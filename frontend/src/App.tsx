@@ -7,6 +7,7 @@ import { generateCoverThumbnail } from "./features/library/generateCover";
 import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
 import { Library } from "./features/library/Library";
 import { LibrarySearch, type LibrarySearchStatus } from "./features/library/LibrarySearch";
+import { EpubReaderPlaceholder } from "./features/reader/EpubReaderPlaceholder";
 import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
 import { LLMSettingsPage } from "./features/settings/LLMSettingsPage";
 import { syncDocumentTheme } from "./features/settings/theme";
@@ -16,8 +17,8 @@ import {
   listBooks,
   markBookCoverFailed,
   openBook,
-  openPDF,
-  relinkPDF,
+  openBookFile,
+  relinkBook,
   removeBook,
   renameBook,
   saveBookCover,
@@ -142,6 +143,9 @@ function AppContent() {
     if (!target.url || !target.id) {
       return;
     }
+    if (target.format === "epub") {
+      return;
+    }
     if (indexAbortersRef.current.has(target.id)) {
       return;
     }
@@ -184,7 +188,9 @@ function AppContent() {
     setSelection(null);
     setBook(selected);
     setView("reader");
-    void ensureCover(selected);
+    if (selected.format !== "epub") {
+      void ensureCover(selected);
+    }
     ensureBookIndexed(selected);
   }, [ensureCover, ensureBookIndexed]);
 
@@ -196,7 +202,7 @@ function AppContent() {
     setOpening(true);
     setLibraryError("");
     try {
-      const selected = await openPDF();
+      const selected = await openBookFile();
       if (selected.url) {
         showReader(selected);
         await refreshLibrary();
@@ -318,7 +324,7 @@ function AppContent() {
     setBusyBookId(summary.id);
     setLibraryError("");
     try {
-      const selected = await relinkPDF(summary.id);
+      const selected = await relinkBook(summary.id);
       if (selected.url) {
         showReader(selected);
         await refreshLibrary();
@@ -552,13 +558,17 @@ function AppContent() {
                 className={assistantVisible ? "workspace" : "workspace is-assistant-hidden"}
                 style={workspaceStyle}
               >
-                <PdfReader
-                  book={book}
-                  initialPage={book?.initialPage ?? 1}
-                  selection={selection}
-                  onPageContextChange={handlePageContextChange}
-                  onSelectionChange={handleSelectionChange}
-                />
+                {book?.format === "epub" ? (
+                  <EpubReaderPlaceholder book={book} />
+                ) : (
+                  <PdfReader
+                    book={book}
+                    initialPage={book?.initialPage ?? 1}
+                    selection={selection}
+                    onPageContextChange={handlePageContextChange}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                )}
 
                 {assistantVisible && (
                   <>

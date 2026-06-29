@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   listBooks: vi.fn(),
   markBookCoverFailed: vi.fn(),
   openBook: vi.fn(),
+  openBookFile: vi.fn(),
   openPDF: vi.fn(),
+  relinkBook: vi.fn(),
   relinkPDF: vi.fn(),
   removeBook: vi.fn(),
   renameBook: vi.fn(),
@@ -30,7 +32,9 @@ vi.mock("./shared/api/backend", () => ({
   listBooks: mocks.listBooks,
   markBookCoverFailed: mocks.markBookCoverFailed,
   openBook: mocks.openBook,
+  openBookFile: mocks.openBookFile,
   openPDF: mocks.openPDF,
+  relinkBook: mocks.relinkBook,
   relinkPDF: mocks.relinkPDF,
   removeBook: mocks.removeBook,
   renameBook: mocks.renameBook,
@@ -220,7 +224,7 @@ describe("App", () => {
 
   it("starts in the library, imports a PDF, saves page context, and returns", async () => {
     let resolveEmpty!: (value: typeof openedBook) => void;
-    mocks.openPDF.mockReturnValueOnce(new Promise((resolve) => {
+    mocks.openBookFile.mockReturnValueOnce(new Promise((resolve) => {
       resolveEmpty = resolve;
     }));
     const { unmount } = render(<App />);
@@ -237,7 +241,7 @@ describe("App", () => {
     resolveEmpty({ ...openedBook, id: "", url: "" });
     await waitFor(() => expect(screen.getByRole("button", { name: "PDFを追加" })).toBeTruthy());
 
-    mocks.openPDF.mockResolvedValueOnce(openedBook);
+    mocks.openBookFile.mockResolvedValueOnce(openedBook);
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     await waitFor(() => expect(screen.getByText("initial-3")).toBeTruthy());
     expect(screen.getByRole("button", { name: "読書" }).getAttribute("aria-current")).toBe("page");
@@ -286,7 +290,7 @@ describe("App", () => {
   });
 
   it("keeps the reader highlight synchronized with the attached chat context", async () => {
-    mocks.openPDF.mockResolvedValueOnce(openedBook);
+    mocks.openBookFile.mockResolvedValueOnce(openedBook);
     render(<App />);
 
     fireEvent.click(await screen.findByRole("button", { name: "PDFを追加" }));
@@ -365,7 +369,7 @@ describe("App", () => {
   });
 
   it("generates a pending cover without blocking the reader", async () => {
-    mocks.openPDF.mockResolvedValue({ ...openedBook, coverStatus: "pending" });
+    mocks.openBookFile.mockResolvedValue({ ...openedBook, coverStatus: "pending" });
     render(<App />);
     await screen.findByText("最初の一冊を、本棚へ。");
 
@@ -381,7 +385,7 @@ describe("App", () => {
     [new Error("dialog failed"), "dialog failed"],
     ["unknown", "PDFを追加できませんでした。"],
   ])("shows PDF selection errors", async (reason, message) => {
-    mocks.openPDF.mockRejectedValueOnce(reason);
+    mocks.openBookFile.mockRejectedValueOnce(reason);
     render(<App />);
     await screen.findByText("最初の一冊を、本棚へ。");
 

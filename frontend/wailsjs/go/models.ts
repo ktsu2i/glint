@@ -14,6 +14,26 @@ export namespace books {
 	        this.createdAt = source["createdAt"];
 	    }
 	}
+	export class SpineItem {
+	    index: number;
+	    id: string;
+	    href: string;
+	    mediaType: string;
+	    title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SpineItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.id = source["id"];
+	        this.href = source["href"];
+	        this.mediaType = source["mediaType"];
+	        this.title = source["title"];
+	    }
+	}
 	export class BookFile {
 	    id: string;
 	    title: string;
@@ -24,6 +44,7 @@ export namespace books {
 	    initialPage: number;
 	    indexedPageCount: number;
 	    coverStatus: string;
+	    spineItems?: SpineItem[];
 	
 	    static createFrom(source: any = {}) {
 	        return new BookFile(source);
@@ -40,7 +61,26 @@ export namespace books {
 	        this.initialPage = source["initialPage"];
 	        this.indexedPageCount = source["indexedPageCount"];
 	        this.coverStatus = source["coverStatus"];
+	        this.spineItems = this.convertValues(source["spineItems"], SpineItem);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class BookPageInput {
 	    pageNumber: number;

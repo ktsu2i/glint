@@ -61,10 +61,14 @@ func (s *Server) Register(path, contentType string) (string, error) {
 }
 
 func routeFor(contentType, token string) string {
-	if contentType == "application/pdf" {
+	if isBookContentType(contentType) {
 		return BookRoutePrefix + token
 	}
 	return CoverRoutePrefix + token
+}
+
+func isBookContentType(contentType string) bool {
+	return contentType == "application/pdf" || contentType == "application/epub+zip"
 }
 
 func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -99,7 +103,7 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	response.Header().Set("Content-Type", resource.contentType)
-	if resource.contentType == "application/pdf" {
+	if isBookContentType(resource.contentType) {
 		response.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", info.Name()))
 		response.Header().Set("Cache-Control", "no-store")
 	} else {
