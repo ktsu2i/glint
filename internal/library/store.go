@@ -21,6 +21,13 @@ type Store struct {
 	db *gorm.DB
 }
 
+// BookFormat enumerates the supported book file formats. The library treats
+// "pdf" as the default for legacy rows imported before EPUB support landed.
+const (
+	BookFormatPDF  = "pdf"
+	BookFormatEPUB = "epub"
+)
+
 type Book struct {
 	ID                   string
 	Title                string
@@ -28,6 +35,7 @@ type Book struct {
 	FileName             string
 	SourcePath           string
 	FileHash             string
+	Format               string
 	SizeBytes            int64
 	PageCount            int
 	CoverThumbnailPath   string
@@ -54,6 +62,7 @@ type bookRecord struct {
 	FileName             string `gorm:"column:file_name"`
 	SourcePath           string `gorm:"column:source_path"`
 	FileHash             string `gorm:"column:file_hash"`
+	Format               string `gorm:"column:format"`
 	SizeBytes            int64  `gorm:"column:size_bytes"`
 	PageCount            int    `gorm:"column:page_count"`
 	CoverThumbnailPath   string `gorm:"column:cover_thumbnail_path"`
@@ -149,9 +158,12 @@ func (store *Store) Close() error {
 	return sqlDB.Close()
 }
 
-func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash string, size int64, now time.Time) (Book, error) {
+func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash, format string, size int64, now time.Time) (Book, error) {
 	if id == "" || sourcePath == "" || fileHash == "" {
 		return Book{}, errors.New("book id, source path, and file hash are required")
+	}
+	if format != BookFormatPDF && format != BookFormatEPUB {
+		return Book{}, fmt.Errorf("unsupported book format %q", format)
 	}
 	fileName := filepath.Base(sourcePath)
 	title := strings.TrimSuffix(fileName, filepath.Ext(fileName))
@@ -163,6 +175,7 @@ func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash string,
 		FileName:             fileName,
 		SourcePath:           sourcePath,
 		FileHash:             fileHash,
+		Format:               format,
 		SizeBytes:            size,
 		CoverThumbnailStatus: "pending",
 		ImportedAt:           timestamp,
@@ -181,7 +194,7 @@ func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash string,
 }
 
 const selectBookColumns = `b.id, b.title, b.display_name, b.file_name, b.source_path, b.file_hash,
-       b.size_bytes, b.page_count, b.cover_thumbnail_path,
+       b.format, b.size_bytes, b.page_count, b.cover_thumbnail_path,
        b.cover_thumbnail_status, b.imported_at, b.last_opened_at,
        COALESCE(r.page_number, 1) AS last_page`
 

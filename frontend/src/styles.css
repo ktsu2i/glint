@@ -942,6 +942,20 @@ input:focus-visible,
   background: var(--signal-deep);
 }
 
+.book-format-badge {
+  position: absolute;
+  z-index: 2;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 5px;
+  border-radius: 2px;
+  background: rgb(32 37 42 / 62%);
+  color: var(--paper);
+  font-family: var(--utility-font);
+  font-size: 7px;
+  letter-spacing: 0.14em;
+}
+
 .missing-cover-state {
   position: absolute;
   z-index: 3;

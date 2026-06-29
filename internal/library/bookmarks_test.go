@@ -15,7 +15,7 @@ func TestStorePersistsUniqueBookmarksAndDeletesThem(t *testing.T) {
 	now := time.Date(2026, 6, 23, 9, 0, 0, 0, time.UTC)
 	store, err := Open(path)
 	require.NoError(t, err)
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 
 	first, err := store.SaveBookmark(context.Background(), book.ID, 7, 20, now)
@@ -48,7 +48,7 @@ func TestStoreValidatesAndClearsStaleBookmarks(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 
 	_, err = store.SaveBookmark(context.Background(), book.ID, 0, 10, now)
@@ -65,7 +65,7 @@ func TestStoreClearsBookmarksWhenPDFContentChanges(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 	_, err = store.SaveBookmark(context.Background(), book.ID, 4, 10, now)
 	require.NoError(t, err)

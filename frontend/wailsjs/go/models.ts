@@ -19,6 +19,7 @@ export namespace books {
 	    title: string;
 	    name: string;
 	    url: string;
+	    format: string;
 	    size: number;
 	    initialPage: number;
 	    indexedPageCount: number;
@@ -34,6 +35,7 @@ export namespace books {
 	        this.title = source["title"];
 	        this.name = source["name"];
 	        this.url = source["url"];
+	        this.format = source["format"];
 	        this.size = source["size"];
 	        this.initialPage = source["initialPage"];
 	        this.indexedPageCount = source["indexedPageCount"];
@@ -78,6 +80,7 @@ export namespace books {
 	    id: string;
 	    title: string;
 	    fileName: string;
+	    format: string;
 	    size: number;
 	    pageCount: number;
 	    lastPage: number;
@@ -96,6 +99,7 @@ export namespace books {
 	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.fileName = source["fileName"];
+	        this.format = source["format"];
 	        this.size = source["size"];
 	        this.pageCount = source["pageCount"];
 	        this.lastPage = source["lastPage"];

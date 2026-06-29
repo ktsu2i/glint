@@ -9,9 +9,13 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
-import type { BookSummary } from "../../shared/api/backend";
+import type { BookFormat, BookSummary } from "../../shared/api/backend";
 
 const MAX_DISPLAY_NAME_LENGTH = 200;
+
+function formatBadgeLabel(format: BookFormat | undefined): string {
+  return format === "epub" ? "EPUB" : "PDF";
+}
 
 type LibraryProps = {
   books: BookSummary[];
@@ -151,13 +155,16 @@ export function Library({
                       <img src={book.coverUrl} alt="" />
                     ) : (
                       <span className="placeholder-cover" aria-hidden="true">
-                        <span className="placeholder-kicker">GLINT / PDF</span>
+                        <span className="placeholder-kicker">GLINT / {formatBadgeLabel(book.format)}</span>
                         <strong>{book.title}</strong>
                         <BookOpenText size={25} weight="thin" />
                       </span>
                     )}
                     <span className="reading-progress" aria-hidden="true">
                       <span style={{ height: `${progress}%` }} />
+                    </span>
+                    <span className="book-format-badge" aria-hidden="true">
+                      {formatBadgeLabel(book.format)}
                     </span>
                     {!book.available && (
                       <span className="missing-cover-state">

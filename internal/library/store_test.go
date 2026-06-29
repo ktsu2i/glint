@@ -20,11 +20,12 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 5, version)
+	assert.Equal(t, 6, version)
 
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", 120, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", "pdf", 120, now)
 	require.NoError(t, err)
 	assert.Equal(t, "Go Guide", book.Title)
+	assert.Equal(t, "pdf", book.Format)
 	assert.Equal(t, 1, book.LastPage)
 	assert.Equal(t, "pending", book.CoverThumbnailStatus)
 	require.NoError(t, store.MarkOpened(context.Background(), book.ID, now.Add(time.Minute)))
@@ -104,7 +105,7 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 5, version)
+	assert.Equal(t, 6, version)
 	var settingsTable string
 	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
 	assert.Equal(t, "app_settings", settingsTable)
@@ -116,9 +117,9 @@ func TestStoreDeduplicatesByFileHashAndUpdatesLocation(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
 
-	first, err := store.Import(context.Background(), "book-1", "/old/Guide.pdf", "same-hash", 10, now)
+	first, err := store.Import(context.Background(), "book-1", "/old/Guide.pdf", "same-hash", "pdf", 10, now)
 	require.NoError(t, err)
-	second, err := store.Import(context.Background(), "book-2", "/new/Guide.pdf", "same-hash", 11, now.Add(time.Minute))
+	second, err := store.Import(context.Background(), "book-2", "/new/Guide.pdf", "same-hash", "pdf", 11, now.Add(time.Minute))
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, second.ID)
 	assert.Equal(t, "/new/Guide.pdf", second.SourcePath)
@@ -134,7 +135,7 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
 
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 	require.NoError(t, store.SaveReadingPosition(context.Background(), book.ID, 4, 10, now))
 	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{{
@@ -159,7 +160,7 @@ func TestStoreSavesAndSearchesBookPages(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Search.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Search.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 
 	count, err := store.SaveBookPages(context.Background(), book.ID, []BookPage{
@@ -203,7 +204,7 @@ func TestStorePersistsBookPagesAcrossRestart(t *testing.T) {
 	now := time.Now()
 	store, err := Open(path)
 	require.NoError(t, err)
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Persistent Search.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Persistent Search.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{
 		{PageNumber: 1, Text: "Persistent lexical evidence.", Width: 612, Height: 792},
@@ -228,7 +229,7 @@ func TestStoreClearsIndexedPagesWhenPDFContentChanges(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 	_, err = store.SaveBookPages(context.Background(), book.ID, []BookPage{
 		{PageNumber: 1, Text: "stale index", Width: 612, Height: 792},
@@ -249,11 +250,11 @@ func TestStoreSearchesLibraryAcrossBooks(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
 
-	guide, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, now)
+	guide, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
-	cookbook, err := store.Import(context.Background(), "book-2", "/tmp/Cookbook.pdf", "hash-2", 10, now)
+	cookbook, err := store.Import(context.Background(), "book-2", "/tmp/Cookbook.pdf", "hash-2", "pdf", 10, now)
 	require.NoError(t, err)
-	notes, err := store.Import(context.Background(), "book-3", "/tmp/Notes.pdf", "hash-3", 10, now)
+	notes, err := store.Import(context.Background(), "book-3", "/tmp/Notes.pdf", "hash-3", "pdf", 10, now)
 	require.NoError(t, err)
 
 	_, err = store.SaveBookPages(context.Background(), guide.ID, []BookPage{
@@ -300,7 +301,7 @@ func TestStoreValidatesBookPageAndSearchInputs(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", 10, time.Now())
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, time.Now())
 	require.NoError(t, err)
 
 	_, err = store.SaveBookPages(context.Background(), book.ID, nil, 1, time.Now())
@@ -319,7 +320,7 @@ func TestStoreRenamesBookDisplayNameIndependentlyOfFileName(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	now := time.Now()
 
-	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", 10, now)
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Go Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 	assert.Equal(t, "Go Guide", book.Display())
 	assert.Empty(t, book.DisplayName)
@@ -353,4 +354,48 @@ func TestStoreValidatesUpdatesAndMissingBooks(t *testing.T) {
 	assert.ErrorIs(t, err, ErrBookNotFound)
 	assert.Error(t, store.SaveReadingPosition(context.Background(), "missing", 0, 0, time.Now()))
 	assert.ErrorIs(t, store.MarkCoverFailed(context.Background(), "missing", time.Now()), ErrBookNotFound)
+}
+
+func TestStorePersistsBookFormatAndRejectsUnknownFormat(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+
+	book, err := store.Import(context.Background(), "book-1", "/tmp/Guide.pdf", "hash-1", BookFormatPDF, 10, now)
+	require.NoError(t, err)
+	assert.Equal(t, BookFormatPDF, book.Format)
+
+	fetched, err := store.Get(context.Background(), book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, BookFormatPDF, fetched.Format)
+
+	books, err := store.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, books, 1)
+	assert.Equal(t, BookFormatPDF, books[0].Format)
+
+	_, err = store.Import(context.Background(), "book-2", "/tmp/Other.bin", "hash-2", "mobi", 10, now)
+	assert.Error(t, err)
+}
+
+func TestStoreReopeningAppliesFormatMigrationIdempotently(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	store, err := Open(path)
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	store, err = Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	var version int
+	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
+	assert.Equal(t, 6, version)
+
+	var defaultValue string
+	require.NoError(t, store.db.Raw(
+		"SELECT dflt_value FROM pragma_table_info('books') WHERE name = 'format'",
+	).Row().Scan(&defaultValue))
+	assert.Contains(t, defaultValue, "pdf", "format column must default to pdf so legacy rows remain readable")
 }

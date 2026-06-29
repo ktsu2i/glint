@@ -20,6 +20,7 @@ type BookFile struct {
 	Title            string `json:"title"`
 	Name             string `json:"name"`
 	URL              string `json:"url"`
+	Format           string `json:"format"`
 	Size             int64  `json:"size"`
 	InitialPage      int    `json:"initialPage"`
 	IndexedPageCount int    `json:"indexedPageCount"`
@@ -48,6 +49,7 @@ type BookSummary struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	FileName    string `json:"fileName"`
+	Format      string `json:"format"`
 	Size        int64  `json:"size"`
 	PageCount   int    `json:"pageCount"`
 	LastPage    int    `json:"lastPage"`
@@ -236,6 +238,7 @@ func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
 		ID:          book.ID,
 		Title:       book.Display(),
 		FileName:    book.FileName,
+		Format:      book.Format,
 		Size:        book.SizeBytes,
 		PageCount:   book.PageCount,
 		LastPage:    book.LastPage,
@@ -409,7 +412,7 @@ func (s *Service) selectPDF(path string) (BookFile, error) {
 	if err != nil {
 		return BookFile{}, fmt.Errorf("create book id: %w", err)
 	}
-	book, err := s.library.Import(context.Background(), id, path, fileHash, size, time.Now())
+	book, err := s.library.Import(context.Background(), id, path, fileHash, library.BookFormatPDF, size, time.Now())
 	if err != nil {
 		return BookFile{}, err
 	}
@@ -437,6 +440,7 @@ func (s *Service) bookFile(book library.Book) (BookFile, error) {
 		Title:            book.Display(),
 		Name:             book.FileName,
 		URL:              url,
+		Format:           book.Format,
 		Size:             book.SizeBytes,
 		InitialPage:      max(1, book.LastPage),
 		IndexedPageCount: indexedPageCount,

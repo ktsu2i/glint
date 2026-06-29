@@ -34,11 +34,14 @@ import {
 } from "../../../wailsjs/go/settings/Service";
 import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
 
+export type BookFormat = "pdf" | "epub";
+
 export type BookFile = {
   id: string;
   title: string;
   name: string;
   url: string;
+  format?: BookFormat;
   size: number;
   initialPage: number;
   indexedPageCount: number;
@@ -67,6 +70,7 @@ export type BookSummary = {
   id: string;
   title: string;
   fileName: string;
+  format?: BookFormat;
   size: number;
   pageCount: number;
   lastPage: number;
