@@ -538,7 +538,7 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 				ProviderID: providerID,
 				Models:     merged,
 				Source:     llm.ModelSourceCache,
-				FetchedAt:  pointer(cachedAt),
+				FetchedAt:  new(cachedAt),
 			}, nil
 		}
 		fresh, apiErr := manager.listModels(ctx, cfg, deps)
@@ -563,7 +563,7 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 				ProviderID: providerID,
 				Models:     merged,
 				Source:     llm.ModelSourceCache,
-				FetchedAt:  pointer(cachedAt),
+				FetchedAt:  new(cachedAt),
 				Error:      apiErrorMessage(apiErr),
 			}, nil
 		}
@@ -585,7 +585,7 @@ func (manager *Manager) ListProviderModels(ctx context.Context, providerID strin
 			ProviderID: providerID,
 			Models:     merged,
 			Source:     llm.ModelSourceCache,
-			FetchedAt:  pointer(cachedAt),
+			FetchedAt:  new(cachedAt),
 		}, nil
 	}
 	builtin := llm.BuiltinModels(llm.ProviderID(providerID))
@@ -1182,7 +1182,8 @@ func providerRequiresAPIKey(descriptor llm.ProviderDescriptor, cfg llm.ProviderC
 	return descriptor.RequiresAPIKey()
 }
 
-func pointer[T any](value T) *T { return &value }
+//go:fix inline
+func pointer[T any](value T) *T { return new(value) }
 
 func apiErrorMessage(err error) string {
 	if err == nil {

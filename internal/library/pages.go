@@ -15,14 +15,14 @@ import (
 )
 
 const (
-	maxBookPageBatchSize       = 50
-	maxBookPageTextBytes       = 4 * 1024 * 1024
-	maxBookSearchRunes         = 200
-	maxBookSearchTerms         = 12
-	searchExcerptRunes         = 180
-	defaultLibrarySearchBooks  = 30
-	defaultLibrarySearchPages  = 3
-	libraryMatchRowCeiling     = 5_000
+	maxBookPageBatchSize      = 50
+	maxBookPageTextBytes      = 4 * 1024 * 1024
+	maxBookSearchRunes        = 200
+	maxBookSearchTerms        = 12
+	searchExcerptRunes        = 180
+	defaultLibrarySearchBooks = 30
+	defaultLibrarySearchPages = 3
+	libraryMatchRowCeiling    = 5_000
 )
 
 var (
@@ -356,10 +356,7 @@ func searchExcerpt(text string, matchByteIndex int) string {
 	if matchByteIndex > 0 && matchByteIndex <= len(text) {
 		matchRuneIndex = utf8.RuneCountInString(text[:matchByteIndex])
 	}
-	start := matchRuneIndex - 55
-	if start < 0 {
-		start = 0
-	}
+	start := max(matchRuneIndex-55, 0)
 	end := start + searchExcerptRunes
 	if end > len(characters) {
 		end = len(characters)
