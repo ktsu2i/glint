@@ -6,9 +6,13 @@ Glint is a desktop reading app for technical books. Open a PDF, read it the way 
 
 Your books, your reading positions, and your API keys stay on your machine. Nothing is sent to an AI provider unless you attach it to a question yourself.
 
+![Reading a technical book in Glint, with a selected passage attached to the assistant as context](assets/reader-en.png)
+
 ## What you can do
 
 ### Keep a local library
+
+![The Glint library, showing imported books as covers with reading progress](assets/library-en.png)
 
 - Add technical books from your Mac with the native file picker (PDF, and EPUB for search).
 - See every imported book on a shelf with its cover, and pick up exactly where you stopped.
