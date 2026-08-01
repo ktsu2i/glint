@@ -1,5 +1,7 @@
 # Glint
 
+**English** | [日本語](README.ja.md)
+
 Glint is a desktop reading app for technical books. Open a PDF, read it the way you would in a proper reader — table of contents, bookmarks, spreads, full-text search — and ask an AI assistant about the page in front of you without leaving the book.
 
 Your books, your reading positions, and your API keys stay on your machine. Nothing is sent to an AI provider unless you attach it to a question yourself.
