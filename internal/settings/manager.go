@@ -795,6 +795,15 @@ func (manager *Manager) buildConfig(ctx context.Context, active *ActiveModelRef,
 			CredentialSource: source,
 		})
 	}
+	// 初回起動では recent の setting が存在せず nil slice のままになる。nil は JSON
+	// で null になり、非 nullable な array を期待する frontend が落ちるため、ここで
+	// 空 slice に正規化する。
+	if recent == nil {
+		recent = []string{}
+	}
+	if recentModels == nil {
+		recentModels = []ActiveModelRef{}
+	}
 	return LLMConfig{
 		ActiveProviderID:  activeProviderID,
 		ActiveModel:       active,

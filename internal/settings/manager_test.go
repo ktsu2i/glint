@@ -73,6 +73,24 @@ func TestGetLLMConfigReturnsEmptyButCatalogOnFreshInstall(t *testing.T) {
 	assert.Contains(t, ids, "openai_compatible")
 }
 
+// frontend の LLMConfig 型は recentModels / recentProviderIds を非 nullable な
+// array として宣言している。nil slice をそのまま返すと JSON が null になり、
+// ModelSelector が初回起動で throw して app 全体が blank になる。
+func TestGetLLMConfigSerializesEmptyRecentsAsArraysOnFreshInstall(t *testing.T) {
+	manager, _, _ := newTestManager()
+	config, err := manager.GetLLMConfig(context.Background())
+	require.NoError(t, err)
+	assert.NotNil(t, config.RecentModels)
+	assert.NotNil(t, config.RecentProviderIDs)
+
+	encoded, err := json.Marshal(config)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"recentModels":[]`)
+	assert.Contains(t, string(encoded), `"recentProviderIds":[]`)
+	assert.NotContains(t, string(encoded), `"recentModels":null`)
+	assert.NotContains(t, string(encoded), `"recentProviderIds":null`)
+}
+
 func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
 	manager, settingStore, secretStore := newTestManager()
 	config, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{

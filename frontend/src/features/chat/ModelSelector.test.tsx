@@ -184,6 +184,26 @@ describe("ModelSelector", () => {
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
+  // 初回起動の backend は recentModels を null で返しうる。ここで throw すると
+  // error boundary がないため app 全体が blank になる。
+  it("renders when the backend returns null recents on a fresh install", () => {
+    const config = makeConfig({
+      providers: [],
+      activeProviderId: "",
+      activeModelRef: undefined,
+    });
+    // 型上は非 nullable なので、backend が実際に返す null を明示的に再現する。
+    (config as unknown as { recentModels: unknown }).recentModels = null;
+    (config as unknown as { recentProviderIds: unknown }).recentProviderIds = null;
+
+    expect(() =>
+      render(
+        <ModelSelector config={config} switching={false} onSelect={vi.fn()} onOpenSettings={vi.fn()} />,
+      ),
+    ).not.toThrow();
+    expect(screen.getByRole("button", { name: "modelを選択" })).toBeTruthy();
+  });
+
   it("places recently-used (provider, model) pairs above the rest", async () => {
     render(
       <ModelSelector
