@@ -1,53 +1,67 @@
 # Glint
 
-Glint は、技術書PDFを読みながら、その内容を自分のコードベースへ接続して理解するためのdesktop appです。現在は最初のvertical sliceとして、local library、PDF reader、複数provider対応のAI chat sidebarを実装しています。
+Glint is a desktop reading app for technical books. Open a PDF, read it the way you would in a proper reader — table of contents, bookmarks, spreads, full-text search — and ask an AI assistant about the page in front of you without leaving the book.
 
-## 現在できること
+Your books, your reading positions, and your API keys stay on your machine. Nothing is sent to an AI provider unless you attach it to a question yourself.
 
-- native file dialogから検索可能なPDFを本棚へimportする
-- import済みPDFをSQLiteに保存し、再起動後も表紙cardで一覧する
-- PDF先頭ページのlocal thumbnail生成とplaceholder cover
-- 本棚からreaderを開き、前回の読書ページから再開する
-- source PDFが移動・削除された場合の再選択導線
-- PDF.jsでページを表示する
-- 前後ページ移動とzoom
-- current page textの抽出と送信前preview
-- current page textを明示的に含める／含めないchat操作
-- PDFを開いたままpage textをbackgroundでlocal indexへ保存する
-- `⌘F` / `Ctrl+F`またはReader toolbarから1冊内を全文検索し、結果pageへ移動する
-- Goのprovider-neutral gatewayを通したstreaming answer
-- OpenRouter / OpenAI / Anthropic / Google Gemini / Ollama / OpenAI互換endpointの設定UI
-- 保存済みprovider設定の接続テスト
-- light / dark / system theme切替と、選択内容のlocal保存
-- API keyのOS credential store保存。SQLiteにはmodel選択とCustom providerの接続設定だけを保存
-- token付きlocal endpointによるPDF配信。frontendへlocal pathは渡さない
+## What you can do
 
-section / chunk抽出、Library横断検索、repo indexing、book-to-repo mappingはまだ含みません。
+### Keep a local library
 
-## LLM provider設定
+- Add technical books from your Mac with the native file picker (PDF, and EPUB for search).
+- See every imported book on a shelf with its cover, and pick up exactly where you stopped.
+- Rename a book to whatever you actually call it, or remove it from the shelf.
+- If you move or delete the original file, Glint tells you and lets you point it at the file again.
 
-1. Reader右上の`設定する`を開く。
-2. 組み込みremote providerにはAPI keyだけを保存する。Ollamaは既定のlocal endpointを使う。
-3. Custom OpenAI-compatible providerを使う場合だけ、Base URL、任意のAPI key、custom headersを設定する。
-4. Chat composerのmodel selectorから利用するprovider / modelを選ぶ。
-5. `接続をテスト`でcredential、Glint管理のendpoint、modelを確認する。
+### Read
 
-API keyはproviderごとにOS credential storeへ保存し、通常のSQLite rowには保存しません。組み込みproviderのBase URL、API version、認証方式はGlintが管理し、Settingsには表示しません。OpenRouter requestは常に`provider.zdr = true`を指定し、ZDR endpointだけにroutingを制限します。
+- Read PDFs page by page, or as two-page spreads.
+- Switch between left-side and right-side binding, so Japanese books turn the right way.
+- Zoom in and out, or fit the page to the window.
+- Jump around with the table of contents, the page slider, or by typing a page number.
+- Bookmark pages and return to them from the bookmarks panel.
+- Have the current page read aloud, with automatic advance to the next page.
+- Read in light or dark mode, or follow your system setting. The page itself stays as the author made it.
+- Use Glint in English or Japanese.
 
-質問とユーザーが明示的に添付したPDF textは、選択したproviderまたはユーザー指定endpointへ送信されます。providerが未設定でもLibraryとPDF readerは利用できます。
+### Search
 
-## 技術構成
+- Search inside the book you are reading with `⌘F` and jump to any matching page.
+- Search across every book you have imported and open the right book at the right page.
 
-- Wails v2.12.0
-- Go
-- React 19 + TypeScript + Vite
-- PDF.js
-- SQLite（modernc.org/sqlite）
+### Ask about what you are reading
 
-## 必要な環境
+- A chat sidebar sits next to the page, so a question never takes you out of the book.
+- Select text on the page and attach it to your question — or ask with no context at all.
+- Attached context is shown to you before you send it, so you always know what leaves your machine.
+- Answers stream in as they are generated, and you can cancel a response mid-flight.
+- Switch models per conversation from the composer without opening settings.
 
-- Go 1.23以上
-- Node.js 20.19以上、または22.12以上
+### Bring your own model
+
+Glint talks to the provider you choose:
+
+- OpenRouter
+- OpenAI
+- Anthropic
+- Google Gemini
+- Ollama (runs locally, no API key)
+- Any OpenAI-compatible endpoint you add yourself
+
+The library, reader, and search all work with no provider configured. AI features are the only part that needs one.
+
+### EPUB, for now
+
+EPUB files can be imported and searched from the library, and they appear on your shelf like any other book. The EPUB reading view is still being built, so opening one shows a placeholder for the moment. PDFs are fully readable today.
+
+## Getting started
+
+Glint runs on macOS. There is no prebuilt download yet, so you build it once from source.
+
+You need:
+
+- Go 1.23 or newer
+- Node.js 20.19+ or 22.12+
 - pnpm 10.30.2
 - Wails CLI v2.12.0
 
@@ -55,11 +69,42 @@ API keyはproviderごとにOS credential storeへ保存し、通常のSQLite row
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 ```
 
-OSごとの追加要件は[Wails installation guide](https://wails.io/docs/gettingstarted/installation)を確認してください。
+Wails may need a few extra system tools; see the [Wails installation guide](https://wails.io/docs/gettingstarted/installation) if the build complains.
 
-frontendのpackage managerはpnpm 10.30.2に固定しています。`npm install`と`npm run`は`package.json`のguardにより失敗します。
+Then build the app:
 
-## 開発起動
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+cd ..
+wails build
+```
+
+The finished app lands at `build/bin/glint.app`. Move it to your Applications folder and open it like any other Mac app.
+
+## Setting up an AI provider
+
+1. Open **Settings** from the sidebar.
+2. Under **LLM Providers**, pick a provider and paste its API key. Ollama needs no key — it uses your local endpoint.
+3. To use a service that speaks the OpenAI API but isn't listed, choose **Add OpenAI-compatible endpoint** and enter its base URL, an optional API key, and any custom headers.
+4. Press **Test connection** to confirm the key and model work before you rely on them.
+5. Back in the reader, choose the provider and model you want from the model selector in the chat composer.
+
+## What leaves your machine
+
+- **Your books never leave.** PDFs, EPUBs, covers, reading positions, and bookmarks are stored locally on your Mac.
+- **Only what you send.** Your question and any page text you explicitly attach go to the provider you selected. Nothing else is transmitted, and nothing is sent at all until you press send.
+- **Keys are kept in the OS credential store,** not in Glint's own database. Once saved, a key is never read back into the interface.
+- **OpenRouter requests are pinned to zero-data-retention endpoints**, so they are not routed through providers that retain your prompts.
+- Glint manages the endpoint, API version, and authentication for the built-in providers, so there is nothing to misconfigure.
+
+## Where Glint is going
+
+Reading and asking questions is the foundation. The goal is a reader that connects a book to your own code: point Glint at one of your repositories, and go from a chapter you are reading to the files, symbols, and patterns in your codebase that it describes — with citations back to both the book and the code. That work is in progress and not part of the app yet.
+
+## Working on Glint
+
+Glint is built with Wails v2, Go, React 19 + TypeScript, PDF.js, and SQLite. To run it from source with live reload, install the prerequisites above, then:
 
 ```bash
 cd frontend
@@ -68,7 +113,9 @@ cd ..
 wails dev
 ```
 
-## Test
+The frontend is pinned to pnpm 10.30.2; `npm install` and `npm run` fail by design.
+
+Tests:
 
 ```bash
 go test ./...
@@ -76,11 +123,3 @@ cd frontend
 pnpm test
 pnpm run build
 ```
-
-## Production build
-
-```bash
-wails build
-```
-
-macOSでは`build/bin/glint.app`が生成されます。
