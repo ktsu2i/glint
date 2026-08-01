@@ -6,9 +6,13 @@ Glint は技術書を読むための desktop app です。PDF を開き、目次
 
 本も読書位置も API key も、すべて手元のマシンに残ります。自分で質問に添付しない限り、AI provider へは何も送られません。
 
+![技術書を読みながら、選択した箇所を context として assistant に添付している画面](assets/reader-ja.png)
+
 ## できること
 
 ### 手元の本棚に置く
+
+![import した本を表紙と読書位置つきで並べた Glint の本棚](assets/library-ja.png)
 
 - macOS の file picker から技術書を追加する（PDF、および検索用の EPUB）。
 - import した本を表紙付きで本棚に並べ、前回読んでいたページから再開する。
