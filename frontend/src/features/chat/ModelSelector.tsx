@@ -80,7 +80,9 @@ function buildGroups(
 ): ProviderGroup[] {
   if (!config) return [];
   const active = config.activeModelRef;
-  const recents = new Set(config.recentModels.map((ref) => `${ref.providerId} ${ref.modelId}`));
+  const recents = new Set(
+    (config.recentModels ?? []).map((ref) => `${ref.providerId} ${ref.modelId}`),
+  );
   const groups: ProviderGroup[] = [];
 
   for (const provider of config.providers) {
