@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "packageManager": "pnpm@10.30.2",
+  "packageManager": "pnpm@12.21.0",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "10.30.2",
+      "version": "12.21.0",
       "onFail": "error"
     }
   },
@@ -24,26 +24,26 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@base-ui/react": "1.6.0",
+    "@base-ui/react": "1.9.0",
     "@phosphor-icons/react": "2.1.10",
-    "i18next": "26.3.1",
-    "pdfjs-dist": "6.0.227",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "react-i18next": "17.0.8",
+    "i18next": "27.2.3",
+    "pdfjs-dist": "6.5.438",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-i18next": "18.0.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.2",
-    "@types/node": "^26.0.0",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitest/coverage-v8": "^4.1.9",
-    "jsdom": "^28.1.0",
-    "typescript": "6.0.3",
-    "vite": "8.0.16",
-    "vitest": "4.1.9"
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "@vitest/coverage-v8": "^5.1.1",
+    "jsdom": "^31.0.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
   }
 }

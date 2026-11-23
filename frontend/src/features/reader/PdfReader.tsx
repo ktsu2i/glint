@@ -44,7 +44,7 @@ import {
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
-import { LocalizedError } from "../../shared/i18n/error";
+import { LocalizedError, translateLocalizedError } from "../../shared/i18n/error";
 import {
   createPdfLoadingTask,
   createPdfTextLayer,
@@ -331,7 +331,7 @@ export function PdfReader({
             timedOut
               ? t("error.pdfTimeout")
               : reason instanceof LocalizedError
-                ? t(reason.translationKey, reason.values)
+                ? translateLocalizedError(reason, t)
                 : reason instanceof Error
                   ? reason.message
                   : t("error.openPdf"),

@@ -66,13 +66,13 @@ Glint は macOS で動きます。配布用のビルド済みアプリはまだ�
 
 必要なもの:
 
-- Go 1.23 以上
-- Node.js 20.19 以上、または 22.12 以上
-- pnpm 10.30.2
-- Wails CLI v2.12.0
+- Go 1.26 以上
+- Node.js 22.22 以上、24.15 以上、または 26 以上
+- pnpm 12.21.0
+- Wails CLI v2.17.1
 
 ```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
 ```
 
 Wails が追加のツールを要求することがあります。build が失敗する場合は [Wails installation guide](https://wails.io/docs/gettingstarted/installation) を確認してください。
@@ -119,7 +119,7 @@ cd ..
 wails dev
 ```
 
-frontend の package manager は pnpm 10.30.2 に固定しています。`npm install` と `npm run` は意図的に失敗します。
+frontend の package manager は pnpm 12.21.0 に固定しています。`npm install` と `npm run` は意図的に失敗します。
 
 テスト:
 
