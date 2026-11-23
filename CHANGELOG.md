@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.1.4](https://github.com/ktsu2i/glint/compare/v0.1.3...v0.1.4) - 2026-11-23
+
+### Other Changes
+- fix(release): make generate-appcast.sh executable by @ktsu2i in https://github.com/ktsu2i/glint/pull/15
+
 ## [v0.1.3](https://github.com/ktsu2i/glint/compare/v0.1.2...v0.1.3) - 2026-11-23
 
 ### Other Changes
