@@ -78,6 +78,12 @@ xattr -dr com.apple.quarantine /Applications/Glint.app
 
 You can also download the zip from [GitHub Releases](https://github.com/ktsu2i/glint/releases).
 
+### Updates
+
+Glint checks for updates once a day with [Sparkle](https://sparkle-project.org/). When a new version is out, a window offers to install it, and Glint restarts on the new version. You can also choose Glint > Check for Updates… from the menu bar. The check only asks GitHub for the latest release and sends nothing about your books or repositories.
+
+Updates are verified with an EdDSA signature before they are installed. If Glint was opened with "Open Anyway" and still carries the quarantine attribute, macOS may run it from a read-only location where it cannot update itself. Run the `xattr` command above once to fix this.
+
 ### Build from source
 
 You need:
@@ -151,5 +157,7 @@ pnpm run build
 ### Releasing
 
 Releases are managed by [tagpr](https://github.com/Songmu/tagpr). After each merge to `main`, tagpr opens or updates a release PR. The PR bumps the version in `wails.json` and `frontend/package.json` and adds the merged pull requests to `CHANGELOG.md`. Merging the release PR tags the release, builds the universal macOS app, attaches it to the GitHub release, and publishes the release. The workflow then triggers the update workflow in [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap), which bumps the cask, checks that it installs, and merges the change, so `brew upgrade --cask glint` sees the new version within a few minutes. This needs the `HOMEBREW_TAP_TOKEN` secret, a fine-grained PAT with Actions: write on `ktsu2i/homebrew-tap`. Without it, the tap still picks up the release on its scheduled run twice a day.
+
+The release workflow also builds Glint with [Sparkle](https://sparkle-project.org/) (the `sparkle` build tag), signs the zip with the EdDSA key in the `SPARKLE_ED_PRIVATE_KEY` secret, and attaches `appcast.xml` to the release. Installed copies read `appcast.xml` from the latest release and verify the signature with the public key in `build/darwin/Info.plist`. Keep a backup of the private key: without it, installed copies cannot be updated from inside the app.
 
 The next version is a patch bump by default. Label a pull request `enhancement` (or `minor`) for a minor bump, or `major` for a major bump. You can also add `tagpr:minor` / `tagpr:major` to the release PR, or edit the version in `wails.json` on the release PR directly.
