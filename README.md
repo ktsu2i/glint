@@ -147,3 +147,9 @@ cd frontend
 pnpm test
 pnpm run build
 ```
+
+### Releasing
+
+Releases are managed by [release-please](https://github.com/googleapis/release-please). Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, ...). After each merge to `main`, release-please opens or updates a release PR that bumps the version (`wails.json`, `frontend/package.json`) and updates `CHANGELOG.md`. Merging that PR tags the release, builds the universal macOS app, and attaches it to the GitHub release. The Homebrew tap picks up the new version on its own.
+
+While Glint is below 1.0, `feat:` bumps the minor version and `fix:` bumps the patch version.
