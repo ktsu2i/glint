@@ -78,6 +78,12 @@ xattr -dr com.apple.quarantine /Applications/Glint.app
 
 [GitHub Releases](https://github.com/ktsu2i/glint/releases) から zip を直接ダウンロードすることもできます。
 
+### アップデート
+
+Glint は [Sparkle](https://sparkle-project.org/) を使って、1日1回アップデートを確認します。新しいバージョンがあるとインストールを案内するウィンドウが開き、インストールすると新しいバージョンで再起動します。メニューバーの Glint > Check for Updates… から手動で確認することもできます。確認のときに GitHub に問い合わせるのは最新のリリースだけで、本やリポジトリの情報は送りません。
+
+アップデートは、インストールする前に EdDSA 署名で検証されます。「このまま開く」で起動して quarantine 属性が残っている場合、macOS が Glint を読み取り専用の場所から起動し、自分でアップデートできないことがあります。その場合は、上の `xattr` コマンドを一度実行してください。
+
 ### source から build する
 
 必要なもの:
@@ -151,5 +157,7 @@ pnpm run build
 ### リリース
 
 リリースは [tagpr](https://github.com/Songmu/tagpr) で管理しています。`main` に merge するたびに、tagpr がリリース PR を作成・更新します。この PR で `wails.json` と `frontend/package.json` のバージョンが上がり、merge された PR の一覧が `CHANGELOG.md` に追記されます。リリース PR を merge すると、tag が作られ、macOS の universal app がビルドされて GitHub Release に添付され、Release が公開されます。続けて [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap) の update workflow を起動します。この workflow が cask のバージョンを上げ、インストールできることを確認してから merge するので、数分後には `brew upgrade --cask glint` で新しいバージョンが入ります。これには `HOMEBREW_TAP_TOKEN` secret (`ktsu2i/homebrew-tap` の Actions: write を持つ fine-grained PAT) が必要です。未設定の場合も、tap 側の定期実行 (1日2回) で取り込まれます。
+
+release workflow は、[Sparkle](https://sparkle-project.org/) を組み込んで (`sparkle` build tag) Glint をビルドし、`SPARKLE_ED_PRIVATE_KEY` secret の EdDSA 鍵で zip に署名して、`appcast.xml` を Release に添付します。インストール済みの Glint は最新 Release の `appcast.xml` を読み、`build/darwin/Info.plist` の公開鍵で署名を検証します。秘密鍵は必ずバックアップしてください。失うと、インストール済みの Glint をアプリ内から更新できなくなります。
 
 次のバージョンは、デフォルトでは patch が上がります。minor を上げたいときは PR に `enhancement`（または `minor`）ラベルを、major を上げたいときは `major` ラベルを付けてください。リリース PR に `tagpr:minor` / `tagpr:major` ラベルを付けるか、リリース PR 上で `wails.json` のバージョンを直接書き換えることもできます。

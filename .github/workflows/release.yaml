@@ -72,25 +72,75 @@ jobs:
             echo "::error::wails.json productVersion (${product_version}) does not match ${TAG}"
             exit 1
           fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
           echo "ASSET=Glint-${version}-darwin-universal.zip" >> "$GITHUB_ENV"
 
-      - name: Build universal app
+      # 自己更新に使う Sparkle を取得する。バージョンを上げるときは SHA256 も更新する。
+      - name: Download Sparkle
         env:
+          SPARKLE_VERSION: 2.10.1
+          SPARKLE_SHA256: 1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27
+        run: |
+          archive="Sparkle-${SPARKLE_VERSION}.tar.xz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/${archive}"
+          echo "${SPARKLE_SHA256}  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/sparkle"
+          echo "SPARKLE_DIR=$RUNNER_TEMP/sparkle" >> "$GITHUB_ENV"
+
+      # sparkle build tag で Sparkle.framework にリンクする (internal/update)。
+      # Wails の bindings 生成は一時バイナリを実行するが、そこから Sparkle.framework を
+      # 読み込めずに失敗するため -skipbindings を付ける。bindings は frontend/wailsjs に
+      # commit 済みのものを使う。
+      - name: Build universal app
+        run: |
           # Go 1.27 は macOS 13 以上が前提。cgo 部分の deployment target も揃える。
-          CGO_CFLAGS: -mmacosx-version-min=13.0
-          CGO_LDFLAGS: -mmacosx-version-min=13.0
-        run: wails build -platform darwin/universal -clean
+          export CGO_CFLAGS="-mmacosx-version-min=13.0 -F${SPARKLE_DIR}"
+          export CGO_LDFLAGS="-mmacosx-version-min=13.0 -F${SPARKLE_DIR} -Wl,-rpath,@executable_path/../Frameworks"
+          wails build -platform darwin/universal -clean -tags sparkle -skipbindings
+
+      # Sparkle.framework を app に同梱し、app 全体を ad-hoc 署名し直す。
+      - name: Embed Sparkle.framework
+        run: |
+          app=build/bin/Glint.app
+          mkdir -p "$app/Contents/Frameworks"
+          ditto "$SPARKLE_DIR/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict "$app"
+          otool -L "$app/Contents/MacOS/Glint" | grep -q '@rpath/Sparkle.framework'
 
       - name: Package app
         run: |
           ditto -c -k --keepParent build/bin/Glint.app "$ASSET"
           shasum -a 256 "$ASSET" > "$ASSET.sha256"
 
+      # zip を Sparkle の EdDSA 鍵で署名し、appcast.xml を作る。
+      # アプリは Info.plist の SUFeedURL (releases/latest/download/appcast.xml) を見て、
+      # SUPublicEDKey で署名を検証してから更新する。
+      - name: Sign update and generate appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$SPARKLE_ED_PRIVATE_KEY" ]]; then
+            echo "::error::SPARKLE_ED_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          key_file="$RUNNER_TEMP/sparkle_ed_private.key"
+          trap 'rm -f "$key_file"' EXIT
+          (umask 077 && printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$key_file")
+          signature="$("$SPARKLE_DIR/bin/sign_update" --ed-key-file "$key_file" "$ASSET")"
+          scripts/generate-appcast.sh "$VERSION" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
+            "$signature" > appcast.xml
+          xmllint --noout appcast.xml
+
       - name: Attach assets and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" "$ASSET" "$ASSET.sha256" appcast.xml --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
 
       # 公開した Release を Homebrew tap にすぐ取り込ませる。tap の update workflow が

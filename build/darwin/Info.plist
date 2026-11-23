@@ -23,6 +23,14 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
+        <!-- Sparkle による自己更新。sparkle build tag 付きのビルドでだけ使われる。 -->
+        <!-- 公開鍵に対応する秘密鍵は GitHub Actions secret の SPARKLE_ED_PRIVATE_KEY。 -->
+        <key>SUFeedURL</key>
+        <string>https://github.com/ktsu2i/glint/releases/latest/download/appcast.xml</string>
+        <key>SUPublicEDKey</key>
+        <string>LsDF8ORtBRzRJ5pmY3SBJMv2oHy5yppAUXMEODhwJAo=</string>
+        <key>SUEnableAutomaticChecks</key>
+        <true/>
         {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>

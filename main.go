@@ -13,6 +13,7 @@ import (
 	"github.com/kaito/glint/internal/chat"
 	"github.com/kaito/glint/internal/library"
 	"github.com/kaito/glint/internal/settings"
+	"github.com/kaito/glint/internal/update"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -60,6 +61,7 @@ func main() {
 			books.Startup(booksSvc, ctx)
 			chat.Startup(chatSvc, ctx)
 			settings.Startup(settingsSvc, ctx)
+			update.Start()
 		},
 		Bind: []any{
 			booksSvc,
