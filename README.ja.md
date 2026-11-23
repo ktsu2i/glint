@@ -71,6 +71,8 @@ Glint は macOS で動きます。配布用のビルド済みアプリはまだ�
 - pnpm 12.21.0
 - Wails CLI v2.17.1
 
+これらのバージョンは `mise.toml` で固定しています。[mise](https://mise.jdx.dev) を使う場合は `mise install` でまとめて入ります。使わない場合は Wails CLI を自分で install します。
+
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
 ```
@@ -86,7 +88,7 @@ cd ..
 wails build
 ```
 
-`build/bin/glint.app` が生成されます。アプリケーションフォルダへ移動すれば、通常の Mac アプリと同じように開けます。
+`build/bin/Glint.app` が生成されます。アプリケーションフォルダへ移動すれば、通常の Mac アプリと同じように開けます。
 
 ## AI provider を設定する
 

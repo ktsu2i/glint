@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish macOS app
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up toolchain (mise.toml)
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          cache: true
+
+      - name: Resolve version from tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag must look like v1.2.3 (got ${GITHUB_REF_NAME})"
+            exit 1
+          fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          echo "ASSET=Glint-${version}-darwin-universal.zip" >> "$GITHUB_ENV"
+          # Info.plist の CFBundleShortVersionString は wails.json の productVersion から入る。
+          jq --arg v "$version" '.info.productVersion = $v' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
+
+      - name: Build universal app
+        env:
+          # Go 1.27 は macOS 13 以上が前提。cgo 部分の deployment target も揃える。
+          CGO_CFLAGS: -mmacosx-version-min=13.0
+          CGO_LDFLAGS: -mmacosx-version-min=13.0
+        run: wails build -platform darwin/universal -clean
+
+      - name: Package app
+        run: |
+          ditto -c -k --keepParent build/bin/Glint.app "$ASSET"
+          shasum -a 256 "$ASSET" > "$ASSET.sha256"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sha256" \
+            --title "Glint ${VERSION}" \
+            --generate-notes \
+            --verify-tag

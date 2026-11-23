@@ -71,6 +71,8 @@ You need:
 - pnpm 12.21.0
 - Wails CLI v2.17.1
 
+These versions are pinned in `mise.toml`. With [mise](https://mise.jdx.dev), `mise install` sets up all of them. Otherwise, install the Wails CLI yourself:
+
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
 ```
@@ -86,7 +88,7 @@ cd ..
 wails build
 ```
 
-The finished app lands at `build/bin/glint.app`. Move it to your Applications folder and open it like any other Mac app.
+The finished app lands at `build/bin/Glint.app`. Move it to your Applications folder and open it like any other Mac app.
 
 ## Setting up an AI provider
 
