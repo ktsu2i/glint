@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.1.3](https://github.com/ktsu2i/glint/compare/v0.1.2...v0.1.3) - 2026-11-23
+
+### Other Changes
+- feat(update): add in-app updates with Sparkle by @ktsu2i in https://github.com/ktsu2i/glint/pull/13
+
 ## [v0.1.2](https://github.com/ktsu2i/glint/compare/v0.1.1...v0.1.2) - 2026-11-23
 
 ### Other Changes
