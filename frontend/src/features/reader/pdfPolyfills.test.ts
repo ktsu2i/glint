@@ -4,9 +4,16 @@ describe("PDF compatibility polyfills", () => {
   it("installs and exercises PDF.js compatibility methods", async () => {
     const computedDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "getOrInsertComputed");
     const insertDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "getOrInsert");
+    const weakComputedDescriptor = Object.getOwnPropertyDescriptor(
+      WeakMap.prototype,
+      "getOrInsertComputed",
+    );
+    const weakInsertDescriptor = Object.getOwnPropertyDescriptor(WeakMap.prototype, "getOrInsert");
     const toHexDescriptor = Object.getOwnPropertyDescriptor(Uint8Array.prototype, "toHex");
     Reflect.deleteProperty(Map.prototype, "getOrInsertComputed");
     Reflect.deleteProperty(Map.prototype, "getOrInsert");
+    Reflect.deleteProperty(WeakMap.prototype, "getOrInsertComputed");
+    Reflect.deleteProperty(WeakMap.prototype, "getOrInsert");
     Reflect.deleteProperty(Uint8Array.prototype, "toHex");
 
     class TestReadableStream<R> {
@@ -28,6 +35,16 @@ describe("PDF compatibility polyfills", () => {
       expect(compute).toHaveBeenCalledOnce();
       expect(map.getOrInsert("b", 4)).toBe(4);
       expect(map.getOrInsert("b", 5)).toBe(4);
+
+      const weakMap = new WeakMap<object, number>();
+      const weakKey = {};
+      const weakCompute = vi.fn(() => 6);
+      expect(weakMap.getOrInsertComputed(weakKey, weakCompute)).toBe(6);
+      expect(weakMap.getOrInsertComputed(weakKey, weakCompute)).toBe(6);
+      expect(weakCompute).toHaveBeenCalledOnce();
+      const otherWeakKey = {};
+      expect(weakMap.getOrInsert(otherWeakKey, 7)).toBe(7);
+      expect(weakMap.getOrInsert(otherWeakKey, 8)).toBe(7);
       expect(new Uint8Array([0, 15, 16, 255]).toHex()).toBe("000f10ff");
 
       const reader = {
@@ -99,6 +116,16 @@ describe("PDF compatibility polyfills", () => {
         Object.defineProperty(Map.prototype, "getOrInsert", insertDescriptor);
       } else {
         Reflect.deleteProperty(Map.prototype, "getOrInsert");
+      }
+      for (const [name, descriptor] of [
+        ["getOrInsertComputed", weakComputedDescriptor],
+        ["getOrInsert", weakInsertDescriptor],
+      ] as const) {
+        if (descriptor) {
+          Object.defineProperty(WeakMap.prototype, name, descriptor);
+        } else {
+          Reflect.deleteProperty(WeakMap.prototype, name);
+        }
       }
       if (toHexDescriptor) {
         Object.defineProperty(Uint8Array.prototype, "toHex", toHexDescriptor);
