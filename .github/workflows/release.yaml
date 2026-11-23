@@ -92,3 +92,18 @@ jobs:
         run: |
           gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+
+      # 公開した Release を Homebrew tap にすぐ取り込ませる。tap の update workflow が
+      # cask を更新・検証して merge する。GITHUB_TOKEN では別リポジトリの workflow を
+      # 起動できないため、ktsu2i/homebrew-tap の Actions: write だけを持つ
+      # fine-grained PAT を HOMEBREW_TAP_TOKEN に入れておく。
+      # 未設定でも tap 側の cron (1日2回) で取り込まれるので、Release 自体は失敗させない。
+      - name: Trigger Homebrew tap update
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set; the tap will pick up ${TAG} on its next scheduled run"
+            exit 0
+          fi
+          gh workflow run update.yml --repo ktsu2i/homebrew-tap --ref main
