@@ -1,0 +1,19 @@
+# GitHub の自動リリースノート (tagpr の CHANGELOG と GitHub Release) の分類。
+changelog:
+  exclude:
+    labels:
+      - tagpr
+  categories:
+    - title: Breaking Changes
+      labels:
+        - major
+    - title: New Features
+      labels:
+        - minor
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - bug
+    - title: Other Changes
+      labels:
+        - "*"

@@ -1,9 +1,9 @@
 name: Release
 
-# main への push ごとに release-please がリリース PR を作成・更新する。
-# リリース PR を merge すると tag と GitHub Release が作られ、同じ workflow で
-# macOS app をビルドして asset を添付する。GITHUB_TOKEN で作った tag は別の
-# workflow を起動しないため、ビルドもこの workflow 内で行う。
+# main への push ごとに tagpr がリリース PR を作成・更新する。
+# リリース PR を merge すると tag と draft の GitHub Release が作られ、同じ workflow で
+# macOS app をビルドして asset を添付してから Release を公開する。
+# GITHUB_TOKEN で作った tag は別の workflow を起動しないため、ビルドもこの workflow 内で行う。
 on:
   push:
     branches:
@@ -16,37 +16,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-please:
+  tagpr:
     name: Release PR
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
+      issues: read
       pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.tagpr.outputs.tag }}
     steps:
-      - name: Run release-please
-        id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run tagpr
+        id: tagpr
+        uses: Songmu/tagpr@047aec4b6c0ce166f52958b5a97f5a3d927fd65b # v1.22.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
-    name: Build and attach macOS app
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    name: Build and publish macOS app
+    needs: tagpr
+    if: needs.tagpr.outputs.tag != ''
     runs-on: macos-15
     permissions:
       contents: write
     env:
-      TAG: ${{ needs.release-please.outputs.tag_name }}
-      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG: ${{ needs.tagpr.outputs.tag }}
     steps:
       - name: Check out release tag
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.tagpr.outputs.tag }}
+          persist-credentials: false
 
       - name: Set up toolchain (mise.toml)
         uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
@@ -55,18 +60,19 @@ jobs:
 
       - name: Check version
         run: |
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Unexpected release version: ${VERSION}"
+          version="${TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected release tag: ${TAG}"
             exit 1
           fi
           # Info.plist の CFBundleShortVersionString は wails.json の productVersion から入る。
-          # release-please が extra-files で更新しているはずなので、ずれていたら止める。
+          # tagpr が versionFile として更新しているはずなので、ずれていたら止める。
           product_version="$(jq -r '.info.productVersion' wails.json)"
-          if [[ "$product_version" != "$VERSION" ]]; then
-            echo "::error::wails.json productVersion (${product_version}) does not match ${VERSION}"
+          if [[ "$product_version" != "$version" ]]; then
+            echo "::error::wails.json productVersion (${product_version}) does not match ${TAG}"
             exit 1
           fi
-          echo "ASSET=Glint-${VERSION}-darwin-universal.zip" >> "$GITHUB_ENV"
+          echo "ASSET=Glint-${version}-darwin-universal.zip" >> "$GITHUB_ENV"
 
       - name: Build universal app
         env:
@@ -80,7 +86,9 @@ jobs:
           ditto -c -k --keepParent build/bin/Glint.app "$ASSET"
           shasum -a 256 "$ASSET" > "$ASSET.sha256"
 
-      - name: Attach assets to the release
+      - name: Attach assets and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
+        run: |
+          gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"

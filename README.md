@@ -150,6 +150,6 @@ pnpm run build
 
 ### Releasing
 
-Releases are managed by [release-please](https://github.com/googleapis/release-please). Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, ...). After each merge to `main`, release-please opens or updates a release PR that bumps the version (`wails.json`, `frontend/package.json`) and updates `CHANGELOG.md`. Merging that PR tags the release, builds the universal macOS app, and attaches it to the GitHub release. The Homebrew tap picks up the new version on its own.
+Releases are managed by [tagpr](https://github.com/Songmu/tagpr). After each merge to `main`, tagpr opens or updates a release PR. The PR bumps the version in `wails.json` and `frontend/package.json` and adds the merged pull requests to `CHANGELOG.md`. Merging the release PR tags the release, builds the universal macOS app, attaches it to the GitHub release, and publishes the release. The Homebrew tap picks up the new version on its own.
 
-While Glint is below 1.0, `feat:` bumps the minor version and `fix:` bumps the patch version.
+The next version is a patch bump by default. Label a pull request `enhancement` (or `minor`) for a minor bump, or `major` for a major bump. You can also add `tagpr:minor` / `tagpr:major` to the release PR, or edit the version in `wails.json` on the release PR directly.
