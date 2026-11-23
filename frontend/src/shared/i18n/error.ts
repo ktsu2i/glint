@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 import type { TranslationKey } from "./i18n";
 
 export class LocalizedError extends Error {
@@ -16,6 +18,18 @@ type Translate = (
   key: TranslationKey,
   values?: Record<string, string | number>,
 ) => string;
+
+// i18next v27 の strictInterpolationChecks は、静的な key に対して interpolation 変数を必須にする。
+// ここで扱う key は実行時に決まるため型で絞れない。型の緩和はこのファイル内に閉じ込める。
+type DynamicTranslate = Translate | TFunction;
+
+function asTranslate(translate: DynamicTranslate): Translate {
+  return translate as Translate;
+}
+
+export function translateLocalizedError(error: LocalizedError, translate: DynamicTranslate) {
+  return asTranslate(translate)(error.translationKey, error.values);
+}
 
 type ErrorPattern = {
   pattern: RegExp;
@@ -109,8 +123,9 @@ const backendErrorPatterns: ErrorPattern[] = [
 
 export function localizeBackendError(
   message: string,
-  translate: Translate,
+  dynamicTranslate: DynamicTranslate,
 ) {
+  const translate = asTranslate(dynamicTranslate);
   const key = backendErrorKeys[message];
   if (key) return translate(key);
   for (const candidate of backendErrorPatterns) {

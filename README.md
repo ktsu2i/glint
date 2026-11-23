@@ -66,13 +66,13 @@ Glint runs on macOS. There is no prebuilt download yet, so you build it once fro
 
 You need:
 
-- Go 1.23 or newer
-- Node.js 20.19+ or 22.12+
-- pnpm 10.30.2
-- Wails CLI v2.12.0
+- Go 1.27.4 or newer
+- Node.js 26 (26.13.1 or newer)
+- pnpm 12.21.0
+- Wails CLI v2.17.1
 
 ```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
 ```
 
 Wails may need a few extra system tools; see the [Wails installation guide](https://wails.io/docs/gettingstarted/installation) if the build complains.
@@ -119,7 +119,7 @@ cd ..
 wails dev
 ```
 
-The frontend is pinned to pnpm 10.30.2; `npm install` and `npm run` fail by design.
+The frontend is pinned to pnpm 12.21.0; `npm install` and `npm run` fail by design.
 
 Tests:
 
