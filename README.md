@@ -67,7 +67,7 @@ Glint runs on macOS. There is no prebuilt download yet, so you build it once fro
 You need:
 
 - Go 1.27.4 or newer
-- Node.js 22.23.5+, 24.22.3+, or 26.13.1+
+- Node.js 26 (26.13.1 or newer)
 - pnpm 12.21.0
 - Wails CLI v2.17.1
 
