@@ -150,6 +150,6 @@ pnpm run build
 
 ### リリース
 
-リリースは [release-please](https://github.com/googleapis/release-please) で管理しています。commit message は [Conventional Commits](https://www.conventionalcommits.org/)（`feat:`、`fix:` など）で書いてください。`main` に merge するたびに、release-please がリリース PR を作成・更新します。この PR で、バージョン（`wails.json`、`frontend/package.json`）と `CHANGELOG.md` が更新されます。リリース PR を merge すると、tag と GitHub Release が作られ、macOS の universal app がビルドされて添付されます。Homebrew tap は新しいバージョンを自動で取り込みます。
+リリースは [tagpr](https://github.com/Songmu/tagpr) で管理しています。`main` に merge するたびに、tagpr がリリース PR を作成・更新します。この PR で `wails.json` と `frontend/package.json` のバージョンが上がり、merge された PR の一覧が `CHANGELOG.md` に追記されます。リリース PR を merge すると、tag が作られ、macOS の universal app がビルドされて GitHub Release に添付され、Release が公開されます。Homebrew tap は新しいバージョンを自動で取り込みます。
 
-1.0 未満の間は、`feat:` で minor、`fix:` で patch が上がります。
+次のバージョンは、デフォルトでは patch が上がります。minor を上げたいときは PR に `enhancement`（または `minor`）ラベルを、major を上げたいときは `major` ラベルを付けてください。リリース PR に `tagpr:minor` / `tagpr:major` ラベルを付けるか、リリース PR 上で `wails.json` のバージョンを直接書き換えることもできます。
