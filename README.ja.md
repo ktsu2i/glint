@@ -62,7 +62,23 @@ EPUB は import と検索ができ、他の本と同じように本棚へ並び�
 
 ## 使い始める
 
-Glint は macOS で動きます。配布用のビルド済みアプリはまだないため、最初に一度だけ source から build します。
+Glint は macOS 13 以降で動きます。
+
+### Homebrew でインストールする
+
+```bash
+brew install --cask ktsu2i/tap/glint
+```
+
+Glint はまだ Apple の notarization を受けていないため、初回起動は macOS にブロックされます。システム設定 > プライバシーとセキュリティ で「このまま開く」を押すか、次を実行してください。
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Glint.app
+```
+
+[GitHub Releases](https://github.com/ktsu2i/glint/releases) から zip を直接ダウンロードすることもできます。
+
+### source から build する
 
 必要なもの:
 
