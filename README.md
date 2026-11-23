@@ -62,7 +62,23 @@ EPUB files can be imported and searched from the library, and they appear on you
 
 ## Getting started
 
-Glint runs on macOS. There is no prebuilt download yet, so you build it once from source.
+Glint runs on macOS 13 or later.
+
+### Install with Homebrew
+
+```bash
+brew install --cask ktsu2i/tap/glint
+```
+
+Glint is not notarized by Apple yet, so macOS blocks the first launch. Open System Settings > Privacy & Security and click "Open Anyway", or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Glint.app
+```
+
+You can also download the zip from [GitHub Releases](https://github.com/ktsu2i/glint/releases).
+
+### Build from source
 
 You need:
 
