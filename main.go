@@ -28,10 +28,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	store, err := library.Open(filepath.Join(dataDirectory, "library.sqlite3"))
-	if err != nil {
-		log.Fatal(err)
-	}
+	store := library.New(filepath.Join(dataDirectory, "library.sqlite3"))
 	defer func() { _ = store.Close() }()
 
 	assetSrv := assetserver.New()
@@ -56,6 +53,9 @@ func main() {
 			TitleBar: mac.TitleBarHiddenInset(),
 		},
 		OnStartup: func(ctx context.Context) {
+			if err := store.Connect(); err != nil {
+				log.Fatal(err)
+			}
 			books.Startup(booksSvc, ctx)
 			settings.Startup(settingsSvc, ctx)
 			update.Start()
@@ -75,9 +75,5 @@ func resolveDataDirectory() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve user config directory: %w", err)
 	}
-	directory := filepath.Join(base, "Glint")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return "", fmt.Errorf("create app data directory: %w", err)
-	}
-	return directory, nil
+	return filepath.Join(base, "Glint"), nil
 }

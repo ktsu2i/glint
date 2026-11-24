@@ -18,7 +18,8 @@ import (
 )
 
 type Store struct {
-	db *gorm.DB
+	path string
+	db   *gorm.DB
 }
 
 const (
@@ -85,28 +86,44 @@ type appSettingRecord struct {
 
 func (appSettingRecord) TableName() string { return "app_settings" }
 
-func Open(path string) (*Store, error) {
-	if err := ensureParentDirectory(path); err != nil {
-		return nil, err
-	}
-	db, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("open library database: %w", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("open library database: %w", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
+func New(path string) *Store {
+	return &Store{path: path}
+}
 
-	store := &Store{db: db}
-	if err := store.migrate(context.Background()); err != nil {
-		_ = sqlDB.Close()
+func Open(path string) (*Store, error) {
+	store := New(path)
+	if err := store.Connect(); err != nil {
 		return nil, err
 	}
 	return store, nil
+}
+
+func (store *Store) Connect() error {
+	if store.db != nil {
+		return nil
+	}
+	if err := ensureParentDirectory(store.path); err != nil {
+		return err
+	}
+	db, err := gorm.Open(gormsqlite.Open(store.path), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		return fmt.Errorf("open library database: %w", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("open library database: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+
+	store.db = db
+	if err := store.migrate(context.Background()); err != nil {
+		store.db = nil
+		_ = sqlDB.Close()
+		return err
+	}
+	return nil
 }
 
 func ensureParentDirectory(path string) error {
