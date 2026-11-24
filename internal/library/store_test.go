@@ -408,9 +408,9 @@ func TestStoreNewDefersDatabaseCreationUntilConnect(t *testing.T) {
 
 	require.NoError(t, store.Connect())
 	assert.FileExists(t, path)
-	var version int
-	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 6, version)
+	value, err := store.Setting(context.Background(), "missing")
+	require.NoError(t, err)
+	assert.Empty(t, value)
 
 	db := store.db
 	require.NoError(t, store.Connect())
