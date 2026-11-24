@@ -67,7 +67,7 @@ func run() error {
 		MinWidth:         1024,
 		MinHeight:        700,
 		URL:              "/",
-		BackgroundColour: application.NewRGB(243, 239, 231),
+		BackgroundColour: application.NewRGB(221, 230, 227),
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInset,
 		},
