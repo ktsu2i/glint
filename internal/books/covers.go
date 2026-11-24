@@ -68,7 +68,7 @@ func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
 	if err != nil {
 		return fmt.Errorf("open EPUB archive: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	data, mediaType, err := pkg.extractCover(&reader.Reader)
 	if err != nil {
 		return err

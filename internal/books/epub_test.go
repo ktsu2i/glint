@@ -92,7 +92,7 @@ func TestInspectEPUBParsesMetadataAndSpine(t *testing.T) {
 
 	assert.Equal(t, BookFormatEPUB, inspection.Format)
 	assert.NotEmpty(t, inspection.FileHash)
-	assert.Greater(t, inspection.SizeBytes, int64(0))
+	assert.Positive(t, inspection.SizeBytes)
 	assert.False(t, inspection.Metadata.HasEncryption)
 	assert.Equal(t, "Sample Technical Book", inspection.Metadata.Title)
 	assert.Equal(t, []string{"Author One", "Author Two"}, inspection.Metadata.Authors)

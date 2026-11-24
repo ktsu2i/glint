@@ -10,11 +10,12 @@ import (
 	"time"
 
 	gormsqlite "github.com/glebarez/sqlite"
-	"github.com/kaito/glint/internal/sqlite"
-	"github.com/kaito/glint/migrations"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
+
+	"github.com/kaito/glint/internal/sqlite"
+	"github.com/kaito/glint/migrations"
 )
 
 type Store struct {

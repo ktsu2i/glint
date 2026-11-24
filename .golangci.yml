@@ -1,0 +1,59 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errname
+    - errorlint
+    - forbidigo
+    - gocritic
+    - intrange
+    - misspell
+    - modernize
+    - noctx
+    - nolintlint
+    - perfsprint
+    - rowserrcheck
+    - sqlclosecheck
+    - testifylint
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^(t|b|tb)\.(Error|Errorf|Fatal|Fatalf|Fail|FailNow)$
+          msg: use testify assert / require instead
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -S1016
+    testifylint:
+      disable:
+        - require-error
+    usetesting:
+      context-background: true
+      context-todo: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/kaito/glint

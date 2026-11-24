@@ -17,7 +17,7 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 	if err != nil {
 		return fmt.Errorf("open EPUB archive: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	total := len(pkg.Spine)
 	batch := make([]library.BookPage, 0, epubIndexBatchSize)
