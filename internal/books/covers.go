@@ -2,6 +2,7 @@ package books
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 
 const maxCoverBytes = 4 << 20
 
-func (s *Service) SaveBookCover(bookID, dataURL string) error {
+func (l *Library) SaveBookCover(ctx context.Context, bookID, dataURL string) error {
 	const prefix = "data:image/png;base64,"
 	if len(dataURL) < len(prefix) || dataURL[:len(prefix)] != prefix {
 		return errors.New("cover must be a PNG data URL")
@@ -31,11 +32,11 @@ func (s *Service) SaveBookCover(bookID, dataURL string) error {
 	if len(content) < 8 || string(content[:8]) != "\x89PNG\r\n\x1a\n" {
 		return errors.New("cover image is not a PNG")
 	}
-	book, err := s.library.Get(s.appContext(), bookID)
+	book, err := l.store.Get(ctx, bookID)
 	if err != nil {
 		return err
 	}
-	coverDirectory := filepath.Join(s.dataDirectory, "covers")
+	coverDirectory := filepath.Join(l.dataDirectory, "covers")
 	if err := os.MkdirAll(coverDirectory, 0o700); err != nil {
 		return fmt.Errorf("create cover directory: %w", err)
 	}
@@ -52,14 +53,14 @@ func (s *Service) SaveBookCover(bookID, dataURL string) error {
 		_ = os.Remove(temporaryPath)
 		return fmt.Errorf("store cover image: %w", err)
 	}
-	return s.library.SaveCover(s.appContext(), bookID, path, time.Now())
+	return l.store.SaveCover(ctx, bookID, path, time.Now())
 }
 
-func (s *Service) MarkBookCoverFailed(bookID string) error {
-	return s.library.MarkCoverFailed(s.appContext(), bookID, time.Now())
+func (l *Library) MarkBookCoverFailed(ctx context.Context, bookID string) error {
+	return l.store.MarkCoverFailed(ctx, bookID, time.Now())
 }
 
-func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
+func (l *Library) extractEPUBCover(ctx context.Context, book library.Book, pkg *epubPackage) error {
 	if pkg == nil || pkg.CoverItemHref == "" {
 		return errors.New("EPUB has no cover image")
 	}
@@ -78,7 +79,7 @@ func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
 	if int64(len(data)) > maxCoverBytes*4 {
 		return errors.New("EPUB cover image is too large")
 	}
-	coverDirectory := filepath.Join(s.dataDirectory, "covers")
+	coverDirectory := filepath.Join(l.dataDirectory, "covers")
 	if err := os.MkdirAll(coverDirectory, 0o700); err != nil {
 		return fmt.Errorf("create cover directory: %w", err)
 	}
@@ -96,7 +97,7 @@ func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
 		_ = os.Remove(temporary)
 		return fmt.Errorf("store EPUB cover: %w", err)
 	}
-	return s.library.SaveCover(s.appContext(), book.ID, target, time.Now())
+	return l.store.SaveCover(ctx, book.ID, target, time.Now())
 }
 
 func coverExtension(mediaType, href string) string {

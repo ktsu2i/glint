@@ -38,7 +38,7 @@ Glint は技術書を読むための macOS desktop app です。最終的には�
 
 ```text
 main.go                    Wails app の起動、service の bind
-internal/books             Wails に bind する books.Service（import、open、relink、検索、表紙、しおり）
+internal/books             本の use case。books.Library（本体）と、Wails に bind する books.Service（薄い層）
 internal/library           SQLite store（books、読書位置、page index、しおり、app settings）
 internal/library/queries   sqlc の query（`*.sql`）
 internal/library/librarydb sqlc が生成する Go コード（手で編集しない）
@@ -51,6 +51,12 @@ frontend/src/features      library / reader / settings の UI
 frontend/src/shared        Wails binding のラッパー、i18n、共通 component
 frontend/wailsjs           Wails が生成する binding（手で編集しない）
 ```
+
+機能ごとに package を分け、各 package の中を 2 段に分けます。
+
+- Wails に bind する `Service` は薄い層にする。ネイティブのダイアログ、app の context、UI 言語に合わせた error message だけを扱う。
+- 本体のロジック（例: `books.Library`）は `context.Context` を引数で受け取り、Wails の runtime や UI 言語に依存させない。利用者に見せる失敗は sentinel error で返し、`Service` が文言に変換する。
+- 永続化は `internal/library` の store（sqlc）に置く。差し替えが必要になる場所（将来の LLM provider など）以外では interface を作らない。
 
 PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。
 

@@ -2,13 +2,14 @@ package books
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/kaito/glint/internal/library"
 )
 
-func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
+func (l *Library) indexEPUBSpine(ctx context.Context, book library.Book, pkg *epubPackage) error {
 	if pkg == nil || len(pkg.Spine) == 0 {
 		return nil
 	}
@@ -33,8 +34,8 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 			Text:        content.Text,
 		})
 		if len(batch) >= epubIndexBatchSize {
-			if _, err := s.library.SaveBookSegments(
-				s.appContext(), book.ID, batch, total, time.Now(),
+			if _, err := l.store.SaveBookSegments(
+				ctx, book.ID, batch, total, time.Now(),
 			); err != nil {
 				return fmt.Errorf("save EPUB spine batch: %w", err)
 			}
@@ -42,8 +43,8 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 		}
 	}
 	if len(batch) > 0 {
-		if _, err := s.library.SaveBookSegments(
-			s.appContext(), book.ID, batch, total, time.Now(),
+		if _, err := l.store.SaveBookSegments(
+			ctx, book.ID, batch, total, time.Now(),
 		); err != nil {
 			return fmt.Errorf("save EPUB spine batch: %w", err)
 		}
