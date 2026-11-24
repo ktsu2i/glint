@@ -25,13 +25,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # lint 用の tool だけを mise.toml の版で入れる。release workflow と cache key を
-      # 共有して不完全な tool set を cache しないよう、cache は使わない。
-      - name: Set up lint tools (mise.toml)
-        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+      # aqua.yaml の版で lint 用の tool を入れる。aqua-checksums.json で検証する。
+      - name: Set up lint tools (aqua.yaml)
+        uses: aquaproj/aqua-installer@b8be739961814ee66b9e0d505f4d5de0d2eff047 # v4.1.2
         with:
-          install_args: actionlint jactionlint ghalint zizmor shellcheck
-          cache: false
+          aqua_version: v2.66.1
 
       - name: Run actionlint
         run: actionlint

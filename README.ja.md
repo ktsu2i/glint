@@ -89,15 +89,13 @@ Glint は [Sparkle](https://sparkle-project.org/) を使って、1日1回アッ�
 必要なもの:
 
 - Go 1.27.4 以上
-- Node.js 26（26.13.1 以上）
 - pnpm 12.21.0
-- Wails CLI v2.17.1
 
-これらのバージョンは `mise.toml` で固定しています。[mise](https://mise.jdx.dev) を使う場合は `mise install` でまとめて入ります。使わない場合は Wails CLI を自分で install します。
+ほかのツールはリポジトリで版を固定しているので、自分で install する必要はありません。
 
-```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
-```
+- 手元の Go が古い場合は、Go が `go.mod` の版の toolchain を自動で取得します。
+- Wails CLI（v2.17.1）は `go.mod` の tool 依存です。`go tool wails` で実行します。
+- frontend 用の Node.js 26.13.1 は、`frontend/package.json` の `devEngines.runtime` に従って pnpm が取得します。
 
 Wails が追加のツールを要求することがあります。build が失敗する場合は [Wails installation guide](https://wails.io/docs/gettingstarted/installation) を確認してください。
 
@@ -107,10 +105,19 @@ build します。
 cd frontend
 pnpm install --frozen-lockfile
 cd ..
-wails build
+go tool wails build
 ```
 
 `build/bin/Glint.app` が生成されます。アプリケーションフォルダへ移動すれば、通常の Mac アプリと同じように開けます。
+
+`.github/workflows` 配下の workflow を変更した場合は、CI と同じ検査を実行してください。ツールの版は `aqua.yaml` で固定しています。[aqua](https://aquaproj.github.io/) を使う場合は `aqua i -l` でまとめて入ります。
+
+```bash
+actionlint
+jactionlint
+ghalint run
+zizmor .
+```
 
 ## AI provider を設定する
 

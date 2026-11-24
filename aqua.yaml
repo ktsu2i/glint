@@ -1,0 +1,21 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/aqua-yaml.json
+# GitHub Actions workflow の lint に使う CLI を固定する。
+# CI (.github/workflows/lint-actions.yaml) もこのファイルの版で入れる。
+# Go / Node.js / pnpm / Wails CLI は go.mod と frontend/package.json で固定している。
+# actionlint は run: の script 検査に shellcheck を使う。
+checksum:
+  enabled: true
+  require_checksum: true
+  supported_envs:
+    - darwin
+    - linux
+registries:
+  - type: standard
+    ref: v4.592.0 # renovate: depName=aquaproj/aqua-registry
+packages:
+  - name: rhysd/actionlint@v1.7.12
+  - name: jdx/jactionlint@v2.6.0
+  - name: suzuki-shunsuke/ghalint@v1.6.0
+  - name: zizmorcore/zizmor@v1.33.1
+  - name: koalaman/shellcheck@v0.11.0

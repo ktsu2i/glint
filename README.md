@@ -89,15 +89,13 @@ Updates are verified with an EdDSA signature before they are installed. If Glint
 You need:
 
 - Go 1.27.4 or newer
-- Node.js 26 (26.13.1 or newer)
 - pnpm 12.21.0
-- Wails CLI v2.17.1
 
-These versions are pinned in `mise.toml`. With [mise](https://mise.jdx.dev), `mise install` sets up all of them. Otherwise, install the Wails CLI yourself:
+The other tools are pinned in the repository, so you don't install them yourself:
 
-```bash
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.1
-```
+- Go fetches the toolchain version in `go.mod` when yours is older.
+- The Wails CLI (v2.17.1) is a tool dependency in `go.mod`. Run it with `go tool wails`.
+- pnpm downloads Node.js 26.13.1 for the frontend, as `devEngines.runtime` in `frontend/package.json` asks.
 
 Wails may need a few extra system tools; see the [Wails installation guide](https://wails.io/docs/gettingstarted/installation) if the build complains.
 
@@ -107,12 +105,12 @@ Then build the app:
 cd frontend
 pnpm install --frozen-lockfile
 cd ..
-wails build
+go tool wails build
 ```
 
 The finished app lands at `build/bin/Glint.app`. Move it to your Applications folder and open it like any other Mac app.
 
-If you change the workflows under `.github/workflows`, run the same checks as CI. `mise install` also sets up these tools:
+If you change the workflows under `.github/workflows`, run the same checks as CI. The tools are pinned in `aqua.yaml`; with [aqua](https://aquaproj.github.io/), `aqua i -l` sets them up:
 
 ```bash
 actionlint
