@@ -9,31 +9,22 @@ import (
 	"context"
 	"errors"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"github.com/kaito/glint/internal/settings"
 )
 
 var errNotReady = errors.New("application is not ready")
-
-// starter is implemented by every bound service. The method is unexported so
-// that Wails does not expose it to the frontend.
-type starter interface {
-	startup(ctx context.Context)
-}
-
-// Startup hands the Wails application context to the bound services.
-func Startup(ctx context.Context, services ...starter) {
-	for _, service := range services {
-		service.startup(ctx)
-	}
-}
 
 // base holds the Wails application context shared by the bound services.
 type base struct {
 	ctx context.Context
 }
 
-func (b *base) startup(ctx context.Context) {
+// ServiceStartup is a Wails lifecycle hook, excluded from frontend bindings.
+func (b *base) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	b.ctx = ctx
+	return nil
 }
 
 func (b *base) context() context.Context {

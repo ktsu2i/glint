@@ -1,18 +1,15 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/logger"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	wailsassetserver "github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/kaito/glint/internal/app"
 	"github.com/kaito/glint/internal/assetserver"
@@ -38,40 +35,44 @@ func run() error {
 	}
 	store := library.New(filepath.Join(dataDirectory, "library.sqlite3"))
 	defer func() { _ = store.Close() }()
+	if err := store.Connect(); err != nil {
+		return err
+	}
 
 	assetSrv := assetserver.New()
 	settingsManager := settings.NewManager(store)
-	booksSvc := app.NewBooksService(books.New(store, dataDirectory), assetSrv, settingsManager)
-	settingsSvc := app.NewSettingsService(settingsManager)
-
-	return wails.Run(&options.App{
-		Title:     "Glint",
-		Width:     1440,
-		Height:    900,
-		MinWidth:  1024,
-		MinHeight: 700,
-		AssetServer: &wailsassetserver.Options{
-			Assets:     assets,
-			Handler:    assetSrv,
+	desktop := application.New(application.Options{
+		Name: "Glint",
+		Assets: application.AssetOptions{
+			Handler:    application.AssetFileServerFS(assets),
 			Middleware: assetSrv.Middleware,
 		},
-		BackgroundColour: &options.RGBA{R: 243, G: 239, B: 231, A: 1},
-		LogLevel:         logger.WARNING,
-		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHiddenInset(),
+		LogLevel: slog.LevelWarn,
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		OnStartup: func(ctx context.Context) {
-			if err := store.Connect(); err != nil {
-				log.Fatal(err)
-			}
-			app.Startup(ctx, booksSvc, settingsSvc)
-			update.Start()
-		},
-		Bind: []any{
-			booksSvc,
-			settingsSvc,
+		OnShutdown: func() { _ = store.Close() },
+	})
+	booksSvc := app.NewBooksService(books.New(store, dataDirectory), assetSrv, settingsManager, desktop)
+	settingsSvc := app.NewSettingsService(settingsManager)
+	desktop.RegisterService(application.NewService(booksSvc))
+	desktop.RegisterService(application.NewService(settingsSvc))
+	desktop.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
+		update.Start()
+	})
+	desktop.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "Glint",
+		Width:            1440,
+		Height:           900,
+		MinWidth:         1024,
+		MinHeight:        700,
+		URL:              "/",
+		BackgroundColour: application.NewRGB(243, 239, 231),
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBarHiddenInset,
 		},
 	})
+	return desktop.Run()
 }
 
 func resolveDataDirectory() (string, error) {

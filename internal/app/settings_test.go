@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func TestSettingsServiceRoundTripsAndLocalizesErrors(t *testing.T) {
@@ -12,7 +13,7 @@ func TestSettingsServiceRoundTripsAndLocalizesErrors(t *testing.T) {
 	service := NewSettingsService(h.settings)
 	_, err := service.GetLanguageSettings()
 	require.ErrorIs(t, err, errNotReady)
-	Startup(t.Context(), service)
+	require.NoError(t, service.ServiceStartup(t.Context(), application.ServiceOptions{}))
 
 	appearance, err := service.SaveAppearanceSettings(SaveAppearanceSettingsRequest{Theme: "dark"})
 	require.NoError(t, err)

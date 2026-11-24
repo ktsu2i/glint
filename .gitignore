@@ -25,3 +25,7 @@ coverage.out
 
 # docs
 docs
+
+# Wails v3 generated bindings and task cache
+frontend/bindings/
+.task/

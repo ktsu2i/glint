@@ -1,0 +1,28 @@
+version: '3'
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - build/bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+    watched_extension:
+      - '*.go'
+    git_ignore: true
+  executes:
+    - cmd: go tool wails3 task frontend:install
+      type: once
+    - cmd: go tool wails3 task frontend:dev
+      type: background
+    - cmd: go tool wails3 task build DEV=true
+      type: blocking
+    - cmd: go tool wails3 task run
+      type: primary

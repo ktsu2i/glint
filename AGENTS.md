@@ -50,7 +50,7 @@ internal/update            Sparkle（`sparkle` build tag のときだけ有効�
 migrations/                連番の SQL migration
 frontend/src/features      library / reader / settings の UI
 frontend/src/shared        Wails binding のラッパー、i18n、共通 component
-frontend/wailsjs           Wails が生成する binding（手で編集しない）
+frontend/bindings           Wails が生成する binding（手で編集・commit しない）
 ```
 
 PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。
@@ -69,7 +69,7 @@ main.go ─→ internal/app ─→ 機能 package（books、settings、将来の
 
 - 逆向きの import は禁止です。機能 package から `internal/app` を、`internal/library` から機能 package を import しないでください。
 - 機能 package 同士の依存は最小限にし、循環させないでください。
-- `github.com/wailsapp/wails/v2/pkg/runtime` を import してよいのは `internal/app` だけです。`main.go` は `wails.Run` と `options` だけを使います。
+- Wails v3 の `application` / `events` を import してよいのは `main.go` と `internal/app` だけです。`main.go` はアプリ・window・service の組み立てと lifecycle 管理を行います。
 
 ### `internal/app`（Wails の bind 層）
 
@@ -78,7 +78,7 @@ frontend に公開する API です。bind した struct の exported method は
 - **ここで行うこと:** native dialog（ファイル選択、確認）、エラーをユーザーの言語に訳すこと、DTO への変換、asset server への URL 登録、Wails の events の送信。
 - **ここで行わないこと:** 業務ロジック、SQL、ファイルの解析。処理は機能 package の usecase を呼んで任せてください。
 - 返り値は `internal/app` に定義した DTO（json tag 付き）にします。domain の型（`library.Book` など）を直接返さないでください。
-- frontend に公開しない method は unexported にします。Wails の context は `app.Startup` で渡し、`startup` などの exported method を bind 対象の struct に生やさないでください。
+- frontend に公開しない method は unexported にします。Wails の context は共通の `base.ServiceStartup` で受け取ります。`ServiceStartup` は v3 が bindings から除外する lifecycle hook です。それ以外の内部処理を exported method にしないでください。
 - dialog を開く method は、起動前に呼ばれたら `errNotReady` を返します。
 - エラーの翻訳は `errors.Is` で sentinel error を判定し、英語と日本語の両方を書きます（`localizer`）。翻訳しないエラーはそのまま返します。
 - frontend から受け取った値は信用せず、usecase 側で検証します。data URL のような転送用の形式は、`internal/app` で decode してから usecase に渡します。
@@ -109,7 +109,7 @@ frontend に公開する API です。bind した struct の exported method は
 repo の index のように時間のかかる処理は、次のように作ります。
 
 - usecase は `ctx` を受け取り、cancel されたら途中で止まるようにします。
-- 起動と終了は `main.go` の `OnStartup` / `OnShutdown` から管理し、終了時に止めます。
+- 起動と終了は service の `ServiceStartup` / `ServiceShutdown` と `main.go` の `OnShutdown` から管理し、終了時に止めます。
 - 進捗や完了は `internal/app` から Wails の events で frontend に push します。frontend に polling させないでください。
 
 ### 新しい機能を追加するとき
@@ -118,9 +118,9 @@ repo の index のように時間のかかる処理は、次のように作り�
 
 1. `internal/<feature>` に usecase と domain の型、sentinel error を書き、test する。
 2. 永続化が必要なら `migrations/` に migration を追加し、`internal/library/queries` に query を書いて `go tool sqlc generate` する。
-3. `internal/app` に bind する service と DTO を追加し、dialog や翻訳、DTO 変換を書く。`app.Startup` に service を渡す。
-4. `main.go` で組み立て、`Bind` に追加する。
-5. `go tool wails generate module` で `frontend/wailsjs` を再生成し、`frontend/src/shared/api` の wrapper から呼ぶ。
+3. `internal/app` に bind する service と DTO を追加し、dialog や翻訳、DTO 変換を書く。service に共通の `base` を埋め込み、`ServiceStartup` で context を受け取る。
+4. `main.go` で組み立て、`application.NewService` と `RegisterService` で登録する。
+5. `go tool wails3 generate bindings -ts -i` で `frontend/bindings` を再生成し、`frontend/src/shared/api` の wrapper から呼ぶ。
 
 ### test の分け方
 
@@ -146,7 +146,7 @@ repo の index のように時間のかかる処理は、次のように作り�
 
 ## 技術スタック
 
-- Desktop shell: Wails v2（macOS 13 以降）
+- Desktop shell: Wails v3（macOS 13 以降）
 - Frontend: React 19 + TypeScript + Vite、pnpm（`npm` は意図的に失敗する）
 - Backend: Go
 - PDF 表示 / 抽出: PDF.js
@@ -159,6 +159,7 @@ repo の index のように時間のかかる処理は、次のように作り�
 
 ```bash
 go test ./...
+go tool wails3 generate bindings -ts -i
 golangci-lint run ./...
 golangci-lint fmt ./...
 go tool sqlc generate   # queries / migrations を変更したとき
@@ -170,7 +171,7 @@ pnpm check   # typecheck + oxlint + oxfmt --check + knip
 pnpm run build
 ```
 
-Go の service の公開メソッドを変更した場合は、`go tool wails build` または `wails dev` で `frontend/wailsjs` を再生成してください。`.github/workflows` を変更した場合は README に記載の actionlint などを実行してください。
+Go の service の公開メソッドを変更した場合は、`go tool wails3 build` または `go tool wails3 generate bindings -ts -i` で `frontend/bindings` を再生成してください。`.github/workflows` を変更した場合は README に記載の actionlint などを実行してください。
 
 ## セキュリティ / プライバシー
 

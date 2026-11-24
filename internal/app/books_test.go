@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/books"
@@ -61,10 +62,10 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() { _ = store.Close() })
 	assets := assetserver.New()
 	manager := settings.NewManager(store)
-	service := NewBooksService(books.New(store, dataDir), assets, manager)
+	service := NewBooksService(books.New(store, dataDir), assets, manager, nil)
 	dialogs := &fakeDialogs{}
 	service.dialogs = dialogs
-	Startup(t.Context(), service)
+	require.NoError(t, service.ServiceStartup(t.Context(), application.ServiceOptions{}))
 	return &harness{t: t, root: root, assets: assets, settings: manager, dialogs: dialogs, service: service}
 }
 
@@ -121,7 +122,7 @@ func TestOpenBookFileDoesNothingWhenDialogIsCancelled(t *testing.T) {
 }
 
 func TestDialogMethodsRequireStartup(t *testing.T) {
-	service := NewBooksService(nil, nil, nil)
+	service := NewBooksService(nil, nil, nil, nil)
 	_, err := service.OpenBookFile()
 	assert.ErrorIs(t, err, errNotReady)
 	_, err = service.RelinkBook("id")

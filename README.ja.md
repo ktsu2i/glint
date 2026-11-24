@@ -71,11 +71,11 @@ Glint は [Sparkle](https://sparkle-project.org/) を使って、1日1回アッ�
 ほかのツールはリポジトリで版を固定しているので、自分で install する必要はありません。
 
 - 手元の Go が古い場合は、Go が `go.mod` の版の toolchain を自動で取得します。
-- Wails CLI（v2.17.1）は `go.mod` の tool 依存です。`go tool wails` で実行します。
+- Wails CLI（v3.1.0）は `go.mod` の tool 依存です。`go tool wails3` で実行します。
 - sqlc（v1.31.1）も `go.mod` の tool 依存です。`go tool sqlc` で実行します。
 - frontend 用の Node.js 26.13.1 は、`frontend/package.json` の `devEngines.runtime` に従って pnpm が取得します。
 
-Wails が追加のツールを要求することがあります。build が失敗する場合は [Wails installation guide](https://wails.io/docs/gettingstarted/installation) を確認してください。
+Wails が追加のツールを要求することがあります。build が失敗する場合は [Wails installation guide](https://wails.io/getting-started/installation/) を確認してください。
 
 build します。
 
@@ -83,8 +83,10 @@ build します。
 cd frontend
 pnpm install --frozen-lockfile
 cd ..
-go tool wails build
+go tool wails3 build
 ```
+
+ビルドは `Taskfile.yml` に従い、frontend の依存取得、bindings 生成、frontend のビルド、macOS app の作成・署名を行います。Apple Silicon / Intel の両方に対応するには `go tool wails3 task build ARCH=universal` を実行します。bundle のバージョンは `frontend/package.json` から設定し、Sparkle の設定と bundle identifier は `build/darwin/Info.plist` に保持します。
 
 `build/bin/Glint.app` が生成されます。アプリケーションフォルダへ移動すれば、通常の Mac アプリと同じように開けます。
 
@@ -121,14 +123,16 @@ go tool sqlc generate
 
 ## 開発する
 
-Glint は Wails v2、Go、React 19 + TypeScript、PDF.js、SQLite で作られています。source から live reload 付きで起動するには、上記の必要環境を入れたうえで次を実行します。
+Glint は Wails v3、Go、React 19 + TypeScript、PDF.js、SQLite で作られています。source から live reload 付きで起動するには、上記の必要環境を入れたうえで次を実行します。
 
 ```bash
 cd frontend
 pnpm install --frozen-lockfile
 cd ..
-wails dev
+go tool wails3 dev
 ```
+
+開発モードは `build/config.yml` を使い、Vite server と `build/bin/Glint.dev.app` を起動します。生成した bindings は `frontend/bindings` に置き、commit しません。新しい checkout で frontend の検査を行う前に生成してください（CI でも生成します）。
 
 frontend の package manager は pnpm 12.21.0 に固定しています。`npm install` と `npm run` は意図的に失敗します。
 
@@ -136,6 +140,7 @@ frontend の package manager は pnpm 12.21.0 に固定しています。`npm in
 
 ```bash
 go test ./...
+go tool wails3 generate bindings -ts -i
 cd frontend
 pnpm test
 pnpm run build
@@ -152,8 +157,8 @@ pnpm format     # oxfmt で整形する
 
 ### リリース
 
-リリースは [tagpr](https://github.com/Songmu/tagpr) で管理しています。`main` に merge するたびに、tagpr がリリース PR を作成・更新します。この PR で `wails.json` と `frontend/package.json` のバージョンが上がり、merge された PR の一覧が `CHANGELOG.md` に追記されます。リリース PR を merge すると、tag が作られ、macOS の universal app がビルドされて GitHub Release に添付され、Release が公開されます。続けて [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap) の update workflow を起動します。この workflow が cask のバージョンを上げ、インストールできることを確認してから merge するので、数分後には `brew upgrade --cask glint` で新しいバージョンが入ります。これには `HOMEBREW_TAP_TOKEN` secret (`ktsu2i/homebrew-tap` の Actions: write を持つ fine-grained PAT) が必要です。未設定の場合も、tap 側の定期実行 (1日2回) で取り込まれます。
+リリースは [tagpr](https://github.com/Songmu/tagpr) で管理しています。`main` に merge するたびに、tagpr がリリース PR を作成・更新します。この PR で `frontend/package.json` のバージョンが上がり、merge された PR の一覧が `CHANGELOG.md` に追記されます。リリース PR を merge すると、tag が作られ、macOS の universal app がビルドされて GitHub Release に添付され、Release が公開されます。続けて [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap) の update workflow を起動します。この workflow が cask のバージョンを上げ、インストールできることを確認してから merge するので、数分後には `brew upgrade --cask glint` で新しいバージョンが入ります。これには `HOMEBREW_TAP_TOKEN` secret (`ktsu2i/homebrew-tap` の Actions: write を持つ fine-grained PAT) が必要です。未設定の場合も、tap 側の定期実行 (1日2回) で取り込まれます。
 
 release workflow は、[Sparkle](https://sparkle-project.org/) を組み込んで (`sparkle` build tag) Glint をビルドし、`SPARKLE_ED_PRIVATE_KEY` secret の EdDSA 鍵で zip に署名して、`appcast.xml` を Release に添付します。インストール済みの Glint は最新 Release の `appcast.xml` を読み、`build/darwin/Info.plist` の公開鍵で署名を検証します。秘密鍵は必ずバックアップしてください。失うと、インストール済みの Glint をアプリ内から更新できなくなります。
 
-次のバージョンは、デフォルトでは patch が上がります。minor を上げたいときは PR に `enhancement`（または `minor`）ラベルを、major を上げたいときは `major` ラベルを付けてください。リリース PR に `tagpr:minor` / `tagpr:major` ラベルを付けるか、リリース PR 上で `wails.json` のバージョンを直接書き換えることもできます。
+次のバージョンは、デフォルトでは patch が上がります。minor を上げたいときは PR に `enhancement`（または `minor`）ラベルを、major を上げたいときは `major` ラベルを付けてください。リリース PR に `tagpr:minor` / `tagpr:major` ラベルを付けるか、リリース PR 上で `frontend/package.json` のバージョンを直接書き換えることもできます。

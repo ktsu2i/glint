@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/books"
 	"github.com/kaito/glint/internal/library"
@@ -22,11 +24,11 @@ type BooksService struct {
 	text    localizer
 }
 
-func NewBooksService(bookService *books.Service, assets *assetserver.Server, settingsManager *settings.Manager) *BooksService {
+func NewBooksService(bookService *books.Service, assets *assetserver.Server, settingsManager *settings.Manager, desktop *application.App) *BooksService {
 	return &BooksService{
 		books:   bookService,
 		assets:  assets,
-		dialogs: wailsDialogs{},
+		dialogs: wailsDialogs{app: desktop},
 		text:    localizer{settings: settingsManager},
 	}
 }
