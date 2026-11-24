@@ -102,6 +102,8 @@ export namespace books {
 	}
 	export class BookSearchResult {
 	    pageNumber: number;
+	    location: string;
+	    headingPath: string;
 	    excerpt: string;
 	    matchCount: number;
 	
@@ -112,6 +114,8 @@ export namespace books {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pageNumber = source["pageNumber"];
+	        this.location = source["location"];
+	        this.headingPath = source["headingPath"];
 	        this.excerpt = source["excerpt"];
 	        this.matchCount = source["matchCount"];
 	    }

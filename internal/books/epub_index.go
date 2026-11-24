@@ -19,18 +19,20 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 	defer func() { _ = reader.Close() }()
 
 	total := len(pkg.Spine)
-	batch := make([]library.BookPage, 0, epubIndexBatchSize)
+	batch := make([]library.BookSegment, 0, epubIndexBatchSize)
 	for index, item := range pkg.Spine {
 		text, err := pkg.extractSpineItemText(&reader.Reader, item)
 		if err != nil {
 			text = ""
 		}
-		batch = append(batch, library.BookPage{
-			PageNumber: index + 1,
-			Text:       text,
+		batch = append(batch, library.BookSegment{
+			Ordinal:  index + 1,
+			Kind:     library.SegmentKindSection,
+			Location: library.SpineLocation(index),
+			Text:     text,
 		})
 		if len(batch) >= epubIndexBatchSize {
-			if _, err := s.library.SaveBookPages(
+			if _, err := s.library.SaveBookSegments(
 				s.appContext(), book.ID, batch, total, time.Now(),
 			); err != nil {
 				return fmt.Errorf("save EPUB spine batch: %w", err)
@@ -39,7 +41,7 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 		}
 	}
 	if len(batch) > 0 {
-		if _, err := s.library.SaveBookPages(
+		if _, err := s.library.SaveBookSegments(
 			s.appContext(), book.ID, batch, total, time.Now(),
 		); err != nil {
 			return fmt.Errorf("save EPUB spine batch: %w", err)
