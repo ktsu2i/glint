@@ -3,12 +3,9 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
-  listener: undefined as ((delta: {
-    requestId: string;
-    content?: string;
-    done: boolean;
-    error?: string;
-  }) => void) | undefined,
+  listener: undefined as
+    | ((delta: { requestId: string; content?: string; done: boolean; error?: string }) => void)
+    | undefined,
   unsubscribe: vi.fn(),
   cancelChat: vi.fn(),
   getLLMConfig: vi.fn(),
@@ -33,7 +30,9 @@ import { ChatSidebar } from "./ChatSidebar";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
-  return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
+  return renderBase(ui, {
+    wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider>,
+  });
 }
 
 beforeEach(() => {
@@ -46,44 +45,52 @@ beforeEach(() => {
   backend.getLLMConfig.mockResolvedValue({
     activeProviderId: "openrouter",
     activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
-    providers: [{
-      providerId: "openrouter",
-      model: "provider/model",
-      models: [],
-      options: { zdr: true },
-      hasApiKey: true,
-      configured: true,
-      isActive: true,
-    }],
-    catalog: [{
-      id: "openrouter",
-      displayName: "OpenRouter",
-      authKind: "bearer",
-      optionSchema: [],
-      capabilities: { streaming: true, tools: false, images: false },
-    }],
+    providers: [
+      {
+        providerId: "openrouter",
+        model: "provider/model",
+        models: [],
+        options: { zdr: true },
+        hasApiKey: true,
+        configured: true,
+        isActive: true,
+      },
+    ],
+    catalog: [
+      {
+        id: "openrouter",
+        displayName: "OpenRouter",
+        authKind: "bearer",
+        optionSchema: [],
+        capabilities: { streaming: true, tools: false, images: false },
+      },
+    ],
     recentProviderIds: ["openrouter"],
     recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
   });
   backend.setActiveModel.mockImplementation(async (providerId: string, modelId: string) => ({
     activeProviderId: providerId,
     activeModelRef: { providerId, modelId },
-    providers: [{
-      providerId,
-      model: modelId,
-      models: [],
-      options: {},
-      hasApiKey: true,
-      configured: true,
-      isActive: true,
-    }],
-    catalog: [{
-      id: providerId,
-      displayName: providerId,
-      authKind: "bearer",
-      optionSchema: [],
-      capabilities: { streaming: true, tools: false, images: false },
-    }],
+    providers: [
+      {
+        providerId,
+        model: modelId,
+        models: [],
+        options: {},
+        hasApiKey: true,
+        configured: true,
+        isActive: true,
+      },
+    ],
+    catalog: [
+      {
+        id: providerId,
+        displayName: providerId,
+        authKind: "bearer",
+        optionSchema: [],
+        capabilities: { streaming: true, tools: false, images: false },
+      },
+    ],
     recentProviderIds: [providerId],
     recentModels: [{ providerId, modelId }],
   }));
@@ -102,7 +109,10 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} />);
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
-    const selector = await screen.findByRole("button", { expanded: false, name: /provider\/model/ });
+    const selector = await screen.findByRole("button", {
+      expanded: false,
+      name: /provider\/model/,
+    });
     expect(selector.title).toBe("openrouter / provider/model");
     expect(selector.textContent).toContain("provider/model");
   });
@@ -131,8 +141,20 @@ describe("ChatSidebar", () => {
         },
       ],
       catalog: [
-        { id: "openrouter", displayName: "OpenRouter", authKind: "bearer", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
-        { id: "anthropic", displayName: "Anthropic", authKind: "x-api-key", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
+        {
+          id: "openrouter",
+          displayName: "OpenRouter",
+          authKind: "bearer",
+          optionSchema: [],
+          capabilities: { streaming: true, tools: false, images: false },
+        },
+        {
+          id: "anthropic",
+          displayName: "Anthropic",
+          authKind: "x-api-key",
+          optionSchema: [],
+          capabilities: { streaming: true, tools: false, images: false },
+        },
       ],
       recentProviderIds: ["openrouter"],
       recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
@@ -145,7 +167,11 @@ describe("ChatSidebar", () => {
           source: "builtin",
         };
       }
-      return { providerId, models: [{ id: "provider/model", source: "builtin" }], source: "builtin" };
+      return {
+        providerId,
+        models: [{ id: "provider/model", source: "builtin" }],
+        source: "builtin",
+      };
     });
     backend.setActiveModel.mockResolvedValueOnce({
       activeProviderId: "anthropic",
@@ -170,8 +196,20 @@ describe("ChatSidebar", () => {
         },
       ],
       catalog: [
-        { id: "openrouter", displayName: "OpenRouter", authKind: "bearer", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
-        { id: "anthropic", displayName: "Anthropic", authKind: "x-api-key", optionSchema: [], capabilities: { streaming: true, tools: false, images: false } },
+        {
+          id: "openrouter",
+          displayName: "OpenRouter",
+          authKind: "bearer",
+          optionSchema: [],
+          capabilities: { streaming: true, tools: false, images: false },
+        },
+        {
+          id: "anthropic",
+          displayName: "Anthropic",
+          authKind: "x-api-key",
+          optionSchema: [],
+          capabilities: { streaming: true, tools: false, images: false },
+        },
       ],
       recentProviderIds: ["anthropic", "openrouter"],
       recentModels: [
@@ -187,28 +225,36 @@ describe("ChatSidebar", () => {
     fireEvent.click(selector);
     fireEvent.click(await screen.findByRole("option", { name: /claude-opus-4-7/ }));
 
-    await waitFor(() => expect(backend.setActiveModel).toHaveBeenCalledWith("anthropic", "claude-opus-4-7"));
-    await waitFor(() => expect(
-      screen.getByRole("button", { name: /claude-opus-4-7/ }).title,
-    ).toBe("anthropic / claude-opus-4-7"));
+    await waitFor(() =>
+      expect(backend.setActiveModel).toHaveBeenCalledWith("anthropic", "claude-opus-4-7"),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /claude-opus-4-7/ }).title).toBe(
+        "anthropic / claude-opus-4-7",
+      ),
+    );
   });
 
   it("renders a 'choose a model' setup CTA when no provider is configured", async () => {
     backend.getLLMConfig.mockResolvedValue({
       activeProviderId: "",
       providers: [],
-      catalog: [{
-        id: "openrouter",
-        displayName: "OpenRouter",
-        authKind: "bearer",
-        optionSchema: [],
-        capabilities: { streaming: true, tools: false, images: false },
-      }],
+      catalog: [
+        {
+          id: "openrouter",
+          displayName: "OpenRouter",
+          authKind: "bearer",
+          optionSchema: [],
+          capabilities: { streaming: true, tools: false, images: false },
+        },
+      ],
       recentProviderIds: [],
       recentModels: [],
     });
     const onOpenSettings = vi.fn();
-    render(<ChatSidebar context={{ bookName: "", pageNumber: 0 }} onOpenSettings={onOpenSettings} />);
+    render(
+      <ChatSidebar context={{ bookName: "", pageNumber: 0 }} onOpenSettings={onOpenSettings} />,
+    );
     await waitFor(() => expect(backend.getLLMConfig).toHaveBeenCalledOnce());
 
     const cta = await screen.findByRole("button", { name: "modelを選択" });
@@ -245,11 +291,13 @@ describe("ChatSidebar", () => {
 
     fireEvent.change(textarea, { target: { value: "  Explain this  " } });
     expect(fireEvent.keyDown(textarea, { key: "Enter" })).toBe(true);
-    expect(fireEvent.keyDown(textarea, {
-      key: "Enter",
-      metaKey: true,
-      isComposing: true,
-    })).toBe(true);
+    expect(
+      fireEvent.keyDown(textarea, {
+        key: "Enter",
+        metaKey: true,
+        isComposing: true,
+      }),
+    ).toBe(true);
     expect(backend.startChat).not.toHaveBeenCalled();
     expect(fireEvent.keyDown(textarea, { key: "Enter", metaKey: true })).toBe(false);
 
@@ -268,12 +316,14 @@ describe("ChatSidebar", () => {
     act(() => backend.listener?.({ requestId: "other", content: "ignored", done: false }));
     act(() => backend.listener?.({ requestId: "request-1", done: false }));
     act(() => backend.listener?.({ requestId: "request-1", content: "First", done: false }));
-    act(() => backend.listener?.({
-      requestId: "request-1",
-      content: " second",
-      error: "provider failed",
-      done: true,
-    }));
+    act(() =>
+      backend.listener?.({
+        requestId: "request-1",
+        content: " second",
+        error: "provider failed",
+        done: true,
+      }),
+    );
 
     expect(screen.getByText("First second")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toBe("provider failed");
@@ -292,8 +342,9 @@ describe("ChatSidebar", () => {
     const chip = container.querySelector(".context-chip");
     expect(chip).not.toBeNull();
     expect(chip!.textContent).toContain("Page 6 の選択範囲");
-    expect(container.querySelector(".context-chip-preview")?.textContent)
-      .toBe("highlighted phrase from book");
+    expect(container.querySelector(".context-chip-preview")?.textContent).toBe(
+      "highlighted phrase from book",
+    );
     expect(screen.getByText("Page 6 の選択範囲を添付")).toBeTruthy();
   });
 
@@ -326,13 +377,15 @@ describe("ChatSidebar", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "explain" } });
     fireEvent.submit(container.querySelector("form")!);
 
-    await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
-      requestId: "request-1",
-      question: "explain",
-      contextText: "highlighted phrase",
-      bookName: "Guide.pdf",
-      pageNumber: 4,
-    }));
+    await waitFor(() =>
+      expect(backend.startChat).toHaveBeenCalledWith({
+        requestId: "request-1",
+        question: "explain",
+        contextText: "highlighted phrase",
+        bookName: "Guide.pdf",
+        pageNumber: 4,
+      }),
+    );
     expect(onClearSelection).toHaveBeenCalledOnce();
   });
 
@@ -355,9 +408,11 @@ describe("ChatSidebar", () => {
 
   it("blocks a second request while sending", async () => {
     let resolveRequest!: () => void;
-    backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
-      resolveRequest = resolve;
-    }));
+    backend.startChat.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
     const { container } = render(
       <ChatSidebar
         context={{ bookName: "Guide.pdf", pageNumber: 2 }}
@@ -409,20 +464,24 @@ describe("ChatSidebar", () => {
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "what is this" } });
     fireEvent.submit(container.querySelector("form")!);
-    await waitFor(() => expect(backend.startChat).toHaveBeenCalledWith({
-      requestId: "request-1",
-      question: "what is this",
-      contextText: "",
-      bookName: "Guide.pdf",
-      pageNumber: 5,
-    }));
+    await waitFor(() =>
+      expect(backend.startChat).toHaveBeenCalledWith({
+        requestId: "request-1",
+        question: "what is this",
+        contextText: "",
+        bookName: "Guide.pdf",
+        pageNumber: 5,
+      }),
+    );
   });
 
   it("lets the user cancel an in-flight request and ignores its later deltas", async () => {
     let resolveRequest!: () => void;
-    backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
-      resolveRequest = resolve;
-    }));
+    backend.startChat.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
     const { container } = render(
       <ChatSidebar
         context={{ bookName: "Guide.pdf", pageNumber: 2 }}
@@ -472,9 +531,11 @@ describe("ChatSidebar", () => {
 
   it("surfaces an error when cancel itself fails", async () => {
     let resolveRequest!: () => void;
-    backend.startChat.mockReturnValue(new Promise<void>((resolve) => {
-      resolveRequest = resolve;
-    }));
+    backend.startChat.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
     backend.cancelChat.mockRejectedValue(new Error("backend down"));
     const { container } = render(
       <ChatSidebar

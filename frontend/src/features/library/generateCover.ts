@@ -16,7 +16,9 @@ export async function generateCoverThumbnail(url: string): Promise<string> {
       throw new Error("表紙サイズを取得できませんでした。");
     }
     const outputScale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    const viewport = page.getViewport({ scale: (coverWidth / naturalViewport.width) * outputScale });
+    const viewport = page.getViewport({
+      scale: (coverWidth / naturalViewport.width) * outputScale,
+    });
     const canvas = globalThis.document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) {

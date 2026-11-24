@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 describe("PDF compatibility polyfills", () => {
   it("installs and exercises PDF.js compatibility methods", async () => {
-    const computedDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "getOrInsertComputed");
+    const computedDescriptor = Object.getOwnPropertyDescriptor(
+      Map.prototype,
+      "getOrInsertComputed",
+    );
     const insertDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, "getOrInsert");
     const weakComputedDescriptor = Object.getOwnPropertyDescriptor(
       WeakMap.prototype,
@@ -16,7 +19,7 @@ describe("PDF compatibility polyfills", () => {
     Reflect.deleteProperty(WeakMap.prototype, "getOrInsert");
     Reflect.deleteProperty(Uint8Array.prototype, "toHex");
 
-    class TestReadableStream<R> {
+    class TestReadableStream {
       constructor(private readonly reader: object) {}
       getReader() {
         return this.reader;
@@ -48,11 +51,12 @@ describe("PDF compatibility polyfills", () => {
       expect(new Uint8Array([0, 15, 16, 255]).toHex()).toBe("000f10ff");
 
       const reader = {
-        read: vi.fn()
+        read: vi
+          .fn()
           .mockResolvedValueOnce({ value: "first", done: false })
           .mockResolvedValueOnce({ value: undefined, done: true }),
         releaseLock: vi.fn(),
-        cancel: vi.fn(async () => undefined),
+        cancel: vi.fn(async () => {}),
       };
       const stream = new TestReadableStream(reader) as unknown as ReadableStream<string>;
       const iterator = stream[Symbol.asyncIterator]();
@@ -64,7 +68,7 @@ describe("PDF compatibility polyfills", () => {
       const returnReader = {
         read: vi.fn(),
         releaseLock: vi.fn(),
-        cancel: vi.fn(async () => undefined),
+        cancel: vi.fn(async () => {}),
       };
       const returnIterator = (
         new TestReadableStream(returnReader) as unknown as ReadableStream<string>
@@ -82,16 +86,17 @@ describe("PDF compatibility polyfills", () => {
           this: ReadableStream<string>,
           options: { preventCancel: boolean },
         ) => AsyncIterableIterator<string>
-      ).call(
-        new TestReadableStream(retainedReader) as unknown as ReadableStream<string>,
-        { preventCancel: true },
-      );
+      ).call(new TestReadableStream(retainedReader) as unknown as ReadableStream<string>, {
+        preventCancel: true,
+      });
       await retainedIterator.return?.();
       expect(retainedReader.cancel).not.toHaveBeenCalled();
       expect(retainedReader.releaseLock).toHaveBeenCalledOnce();
 
       const failedReader = {
-        read: vi.fn(async () => Promise.reject(new Error("read failed"))),
+        read: vi.fn(async () => {
+          throw new Error("read failed");
+        }),
         releaseLock: vi.fn(),
         cancel: vi.fn(),
       };

@@ -8,9 +8,7 @@ export function syncDocumentTheme(
   mediaQuery: MediaQueryList = window.matchMedia(SYSTEM_DARK_THEME_QUERY),
 ): () => void {
   const apply = () => {
-    const resolved = preference === "system"
-      ? mediaQuery.matches ? "dark" : "light"
-      : preference;
+    const resolved = preference === "system" ? (mediaQuery.matches ? "dark" : "light") : preference;
     root.dataset.theme = resolved;
     root.dataset.themePreference = preference;
     root.style.colorScheme = resolved;

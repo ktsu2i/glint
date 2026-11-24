@@ -19,7 +19,7 @@ describe("frontend entrypoint", () => {
   it("mounts the application into the root element", async () => {
     await import("./main");
 
-    expect(reactRoot.createRoot).toHaveBeenCalledWith(document.getElementById("root"));
+    expect(reactRoot.createRoot).toHaveBeenCalledWith(document.querySelector("#root"));
     expect(reactRoot.render).toHaveBeenCalledOnce();
   });
 });

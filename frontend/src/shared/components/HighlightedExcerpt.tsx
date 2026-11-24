@@ -1,22 +1,34 @@
 import { Fragment, type ReactNode } from "react";
 
 export function HighlightedExcerpt({ text, query }: { text: string; query: string }): ReactNode {
-  const terms = [...new Set(query.trim().split(/\s+/).filter(Boolean))]
-    .sort((left, right) => right.length - left.length);
+  const terms = [...new Set(query.trim().split(/\s+/).filter(Boolean))].toSorted(
+    (left, right) => right.length - left.length,
+  );
   if (terms.length === 0) {
     return text;
   }
   const expression = new RegExp(
-    `(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
+    `(${terms.map((term) => term.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
     "giu",
   );
   const foldedTerms = new Set(terms.map((term) => term.toLocaleLowerCase()));
+  // 空文字の断片を除いた上で、text 内の開始 offset を key にする。
+  const segments: Array<{ part: string; start: number }> = [];
+  let offset = 0;
+  for (const part of text.split(expression)) {
+    if (part !== "") {
+      segments.push({ part, start: offset });
+    }
+    offset += part.length;
+  }
   return (
     <>
-      {text.split(expression).map((part, index) =>
-        foldedTerms.has(part.toLocaleLowerCase())
-          ? <mark key={`${index}-${part}`}>{part}</mark>
-          : <Fragment key={`${index}-${part}`}>{part}</Fragment>,
+      {segments.map(({ part, start }) =>
+        foldedTerms.has(part.toLocaleLowerCase()) ? (
+          <mark key={start}>{part}</mark>
+        ) : (
+          <Fragment key={start}>{part}</Fragment>
+        ),
       )}
     </>
   );

@@ -18,17 +18,14 @@ vi.mock("../reader/loadPdf", () => ({
 import { indexBookPages, isAbortError } from "./indexer";
 
 function mockDocument(numPages: number) {
-  const destroy = vi.fn(async () => undefined);
-  return { numPages, destroy };
+  return { numPages };
 }
 
 function mockLoadingTask(numPages: number) {
   const doc = mockDocument(numPages);
-  loader.createPdfLoadingTask.mockResolvedValue({
-    promise: Promise.resolve(doc),
-    destroy: vi.fn(),
-  });
-  return doc;
+  const task = { promise: Promise.resolve(doc), destroy: vi.fn(async () => {}) };
+  loader.createPdfLoadingTask.mockResolvedValue(task);
+  return task;
 }
 
 beforeEach(() => {
@@ -43,10 +40,12 @@ beforeEach(() => {
 
 describe("indexBookPages", () => {
   it("extracts missing pages in 16-page batches and persists each batch", async () => {
-    const doc = mockLoadingTask(18);
-    backend.saveBookPages.mockImplementation(async (_id: string, batch: { pageNumber: number }[]) => {
-      return batch.at(-1)?.pageNumber ?? 0;
-    });
+    const task = mockLoadingTask(18);
+    backend.saveBookPages.mockImplementation(
+      async (_id: string, batch: { pageNumber: number }[]) => {
+        return batch.at(-1)?.pageNumber ?? 0;
+      },
+    );
     const progress: Array<[number, number]> = [];
 
     const result = await indexBookPages(
@@ -58,13 +57,14 @@ describe("indexBookPages", () => {
     );
 
     expect(backend.saveBookPages).toHaveBeenCalledTimes(2);
-    expect(backend.saveBookPages.mock.calls[0][1]).toHaveLength(16);
-    expect(backend.saveBookPages.mock.calls[1][1]).toHaveLength(2);
-    expect(backend.saveBookPages.mock.calls[1][1].map((p: { pageNumber: number }) => p.pageNumber))
-      .toEqual([17, 18]);
+    expect(backend.saveBookPages.mock.calls[0]![1]).toHaveLength(16);
+    expect(backend.saveBookPages.mock.calls[1]![1]).toHaveLength(2);
+    expect(
+      backend.saveBookPages.mock.calls[1]![1].map((p: { pageNumber: number }) => p.pageNumber),
+    ).toEqual([17, 18]);
     expect(progress.at(-1)).toEqual([18, 18]);
     expect(result).toEqual({ pageCount: 18, persistedCount: 18 });
-    expect(doc.destroy).toHaveBeenCalled();
+    expect(task.destroy).toHaveBeenCalled();
   });
 
   it("resumes from the existing indexedPageCount without re-extracting earlier pages", async () => {
@@ -82,7 +82,7 @@ describe("indexBookPages", () => {
   });
 
   it("returns without persisting when the book is already fully indexed", async () => {
-    const doc = mockLoadingTask(5);
+    const task = mockLoadingTask(5);
     const result = await indexBookPages(
       { id: "book-1", url: "/asset/book-1", indexedPageCount: 5 },
       { signal: new AbortController().signal },
@@ -90,7 +90,7 @@ describe("indexBookPages", () => {
     expect(loader.extractPdfPage).not.toHaveBeenCalled();
     expect(backend.saveBookPages).not.toHaveBeenCalled();
     expect(result).toEqual({ pageCount: 5, persistedCount: 5 });
-    expect(doc.destroy).toHaveBeenCalled();
+    expect(task.destroy).toHaveBeenCalled();
   });
 
   it("stops mid-batch and rejects with an abort error when the signal fires", async () => {

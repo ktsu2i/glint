@@ -33,20 +33,24 @@ function copyDir(src: string, dest: string) {
 
 function serveFolder(urlPrefix: string, dir: string) {
   return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    if (!req.url || !req.url.startsWith(urlPrefix)) {
-      return next();
+    if (req.url === undefined || !req.url.startsWith(urlPrefix)) {
+      next();
+      return;
     }
-    const relative = decodeURIComponent(req.url.slice(urlPrefix.length).split("?")[0]);
-    const target = resolve(dir, "." + (relative.startsWith("/") ? relative : `/${relative}`));
+    const relative = decodeURIComponent(req.url.slice(urlPrefix.length).split("?")[0] ?? "");
+    const target = resolve(dir, `.${relative.startsWith("/") ? relative : `/${relative}`}`);
     if (!target.startsWith(dir)) {
-      return next();
+      next();
+      return;
     }
     try {
       if (!statSync(target).isFile()) {
-        return next();
+        next();
+        return;
       }
     } catch {
-      return next();
+      next();
+      return;
     }
     res.setHeader("Content-Type", mimeMap[extname(target)] ?? "application/octet-stream");
     createReadStream(target).pipe(res);

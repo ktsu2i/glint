@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { BookOpenText, MagnifyingGlass, X } from "@phosphor-icons/react";
+import { BookOpenTextIcon, MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { BookSummary, LibrarySearchHit } from "../../shared/api/backend";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
@@ -16,9 +16,9 @@ type LibrarySearchProps = {
   searchStatus: LibrarySearchStatus;
   searchError: string;
   onSearchInputChange: (value: string) => void;
-  onSearchSubmit: () => void;
+  onSearchSubmit: () => Promise<void>;
   onSearchClear: () => void;
-  onOpenAtPage: (book: BookSummary, pageNumber: number) => void;
+  onOpenAtPage: (book: BookSummary, pageNumber: number) => Promise<void>;
 };
 
 export function LibrarySearch({
@@ -63,12 +63,12 @@ export function LibrarySearch({
         onSubmit={(event) => {
           event.preventDefault();
           if (canSubmit) {
-            onSearchSubmit();
+            void onSearchSubmit();
           }
         }}
       >
         <div className="library-search-input">
-          <MagnifyingGlass size={15} weight="regular" aria-hidden="true" />
+          <MagnifyingGlassIcon size={15} weight="regular" aria-hidden="true" />
           <input
             ref={inputRef}
             type="search"
@@ -91,7 +91,7 @@ export function LibrarySearch({
               onClick={onSearchClear}
               aria-label={t("librarySearch.clear")}
             >
-              <X size={13} weight="bold" />
+              <XIcon size={13} weight="bold" />
             </button>
           )}
         </div>
@@ -104,16 +104,14 @@ export function LibrarySearch({
         {!hasSubmitted && !searchError ? (
           <p className="library-search-message">{t("librarySearch.prompt")}</p>
         ) : searchError ? (
-          <p className="library-search-message is-error" role="alert">{searchError}</p>
+          <p className="library-search-message is-error" role="alert">
+            {searchError}
+          </p>
         ) : isSearching ? (
           <p className="library-search-message">
             {t("librarySearch.searchingFor", { query: searchQuery || searchInput })}
           </p>
-        ) : !hasResults ? (
-          <p className="library-search-message">
-            {t("librarySearch.noResults", { query: searchQuery })}
-          </p>
-        ) : (
+        ) : hasResults ? (
           <>
             <p className="library-search-count">
               {t("librarySearch.hitCount", { count: searchResults.length })}
@@ -126,7 +124,7 @@ export function LibrarySearch({
                       {hit.book.coverUrl ? (
                         <img src={hit.book.coverUrl} alt="" />
                       ) : (
-                        <BookOpenText size={18} weight="thin" />
+                        <BookOpenTextIcon size={18} weight="thin" />
                       )}
                     </span>
                     <div className="library-search-hit-meta">
@@ -140,7 +138,7 @@ export function LibrarySearch({
                         <button
                           type="button"
                           disabled={!hit.book.available || busyBookId === hit.book.id}
-                          onClick={() => onOpenAtPage(hit.book, page.pageNumber)}
+                          onClick={() => void onOpenAtPage(hit.book, page.pageNumber)}
                           aria-label={t("librarySearch.goTo", {
                             title: hit.book.title,
                             page: page.pageNumber,
@@ -164,6 +162,10 @@ export function LibrarySearch({
               ))}
             </ul>
           </>
+        ) : (
+          <p className="library-search-message">
+            {t("librarySearch.noResults", { query: searchQuery })}
+          </p>
         )}
       </div>
     </section>

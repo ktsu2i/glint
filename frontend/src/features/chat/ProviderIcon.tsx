@@ -1,11 +1,11 @@
 import {
-  Brain,
-  Circle,
-  Cube,
-  Eye,
-  Hexagon,
-  Sparkle,
-  Terminal,
+  BrainIcon,
+  CircleIcon,
+  CubeIcon,
+  EyeIcon,
+  HexagonIcon,
+  SparkleIcon,
+  TerminalIcon,
 } from "@phosphor-icons/react";
 
 type ProviderIconProps = {
@@ -19,7 +19,7 @@ const OPENAI_COMPATIBLE_PREFIX = "openai_compatible:";
 function customGlyph(displayLabel: string, providerId: string): string {
   const source = displayLabel.trim() || providerId.replace(OPENAI_COMPATIBLE_PREFIX, "").trim();
   if (!source) return "·";
-  return source[0]!.toUpperCase();
+  return source.charAt(0).toUpperCase();
 }
 
 // ProviderIcon renders a monochrome glyph for a provider so the composer's
@@ -41,18 +41,18 @@ export function ProviderIcon({ providerId, displayLabel = "", size = 12 }: Provi
   const iconProps = { size, weight: "regular" as const };
   switch (providerId) {
     case "openai":
-      return <Sparkle {...iconProps} aria-hidden="true" />;
+      return <SparkleIcon {...iconProps} aria-hidden="true" />;
     case "anthropic":
-      return <Hexagon {...iconProps} aria-hidden="true" />;
+      return <HexagonIcon {...iconProps} aria-hidden="true" />;
     case "google":
-      return <Cube {...iconProps} aria-hidden="true" />;
+      return <CubeIcon {...iconProps} aria-hidden="true" />;
     case "openrouter":
-      return <Brain {...iconProps} aria-hidden="true" />;
+      return <BrainIcon {...iconProps} aria-hidden="true" />;
     case "ollama":
-      return <Terminal {...iconProps} aria-hidden="true" />;
+      return <TerminalIcon {...iconProps} aria-hidden="true" />;
     case "openai_compatible":
-      return <Eye {...iconProps} aria-hidden="true" />;
+      return <EyeIcon {...iconProps} aria-hidden="true" />;
     default:
-      return <Circle {...iconProps} aria-hidden="true" />;
+      return <CircleIcon {...iconProps} aria-hidden="true" />;
   }
 }

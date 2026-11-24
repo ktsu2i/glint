@@ -258,7 +258,7 @@ export async function relinkPDF(bookId: string): Promise<BookFile> {
 }
 
 export async function removeBook(bookId: string): Promise<boolean> {
-  return await RemoveBook(bookId);
+  return RemoveBook(bookId);
 }
 
 export async function renameBook(bookId: string, name: string): Promise<BookSummary> {
@@ -274,7 +274,7 @@ export async function saveReadingPosition(
 }
 
 export async function listBookmarks(bookId: string): Promise<BookBookmark[]> {
-  return (await ListBookmarks(bookId)) as BookBookmark[];
+  return ListBookmarks(bookId);
 }
 
 export async function addBookmark(
@@ -282,7 +282,7 @@ export async function addBookmark(
   pageNumber: number,
   pageCount: number,
 ): Promise<BookBookmark> {
-  return (await AddBookmark(bookId, pageNumber, pageCount)) as BookBookmark;
+  return AddBookmark(bookId, pageNumber, pageCount);
 }
 
 export async function removeBookmark(bookId: string, pageNumber: number): Promise<void> {
@@ -294,11 +294,11 @@ export async function saveBookPages(
   pages: BookPageInput[],
   pageCount: number,
 ): Promise<number> {
-  return await SaveBookPages(bookId, pages, pageCount);
+  return SaveBookPages(bookId, pages, pageCount);
 }
 
 export async function searchBook(bookId: string, query: string): Promise<BookSearchResult[]> {
-  return (await SearchBook(bookId, query)) as BookSearchResult[];
+  return SearchBook(bookId, query);
 }
 
 export async function searchLibrary(query: string): Promise<LibrarySearchHit[]> {
@@ -356,8 +356,10 @@ export async function removeCustomModel(providerId: string, modelId: string): Pr
   return (await RemoveCustomModel(providerId, modelId)) as LLMConfig;
 }
 
-export async function testProviderConnection(providerId: string): Promise<TestProviderConnectionResult> {
-  return (await TestProviderConnection(providerId)) as TestProviderConnectionResult;
+export async function testProviderConnection(
+  providerId: string,
+): Promise<TestProviderConnectionResult> {
+  return TestProviderConnection(providerId);
 }
 
 export async function getAppearanceSettings(): Promise<AppearanceSettings> {
@@ -372,7 +374,9 @@ export async function getLanguageSettings(): Promise<LanguageSettings> {
   return (await GetLanguageSettings()) as LanguageSettings;
 }
 
-export async function saveLanguageSettings(language: LanguagePreference): Promise<LanguageSettings> {
+export async function saveLanguageSettings(
+  language: LanguagePreference,
+): Promise<LanguageSettings> {
   return (await SaveLanguageSettings({ language })) as LanguageSettings;
 }
 

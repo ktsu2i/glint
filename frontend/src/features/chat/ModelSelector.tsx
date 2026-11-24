@@ -1,22 +1,13 @@
-import {
-  KeyboardEvent,
-  ReactElement,
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { KeyboardEvent, ReactElement } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import {
-  ArrowsClockwise,
-  CaretDown,
-  Check,
-  GearSix,
-  Plus,
-  X,
+  ArrowsClockwiseIcon,
+  CaretDownIcon,
+  CheckIcon,
+  GearSixIcon,
+  PlusIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -56,12 +47,17 @@ function isCustomProviderId(providerId: string): boolean {
 
 function providerDisplayLabel(config: LLMConfig | null, provider: ProviderSettings): string {
   if (provider.displayLabel) return provider.displayLabel;
-  const descriptor = config?.catalog.find((entry) => entry.id === provider.providerId)
-    ?? config?.catalog.find((entry) => entry.id === "openai_compatible");
+  const descriptor =
+    config?.catalog.find((entry) => entry.id === provider.providerId) ??
+    config?.catalog.find((entry) => entry.id === "openai_compatible");
   return descriptor?.displayName ?? provider.providerId;
 }
 
-function refsMatch(a: ActiveModelRef | undefined | null, providerId: string, modelId: string): boolean {
+function refsMatch(
+  a: ActiveModelRef | undefined | null,
+  providerId: string,
+  modelId: string,
+): boolean {
   if (!a) return false;
   return a.providerId === providerId && a.modelId === modelId;
 }
@@ -109,12 +105,10 @@ function buildGroups(
 
     if (isCustom) {
       for (const id of provider.models ?? []) push(id, true);
-    } else {
-      if (listing && listing.models.length > 0) {
-        for (const model of listing.models) push(model.id, false);
-      } else if (provider.model) {
-        push(provider.model, false);
-      }
+    } else if (listing && listing.models.length > 0) {
+      for (const model of listing.models) push(model.id, false);
+    } else if (provider.model) {
+      push(provider.model, false);
     }
 
     groups.push({
@@ -135,10 +129,12 @@ function filterGroups(groups: ProviderGroup[], query: string): ProviderGroup[] {
   return groups
     .map((group) => ({
       ...group,
-      entries: group.entries.filter((entry) =>
-        entry.modelId.toLowerCase().includes(trimmed)
-          || entry.providerLabel.toLowerCase().includes(trimmed)
-          || entry.providerId.toLowerCase().includes(trimmed)),
+      entries: group.entries.filter(
+        (entry) =>
+          entry.modelId.toLowerCase().includes(trimmed) ||
+          entry.providerLabel.toLowerCase().includes(trimmed) ||
+          entry.providerId.toLowerCase().includes(trimmed),
+      ),
     }))
     .filter((group) => group.entries.length > 0);
 }
@@ -199,7 +195,13 @@ function formatRelativeTime(now: Date, fetchedAt: string | undefined, locale: st
   return formatter.format(-days, "day");
 }
 
-export function ModelSelector({ config, switching, onSelect, onOpenSettings, onConfigChange }: ModelSelectorProps) {
+export function ModelSelector({
+  config,
+  switching,
+  onSelect,
+  onOpenSettings,
+  onConfigChange,
+}: ModelSelectorProps) {
   const { t, i18n } = useTranslation();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -223,7 +225,7 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
   );
   const flatItems = useMemo<SelectableEntry[]>(() => {
     const items: SelectableEntry[] = [...recentEntries];
-    const recentKeys = new Set(recentEntries.map(entryKey));
+    const recentKeys = new Set(recentEntries.map((entry) => entryKey(entry)));
     for (const group of filteredGroups) {
       for (const entry of group.entries) {
         if (recentKeys.has(entryKey(entry))) continue;
@@ -247,7 +249,7 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
     if (!open) return;
     function handlePointer(event: MouseEvent) {
       if (!wrapperRef.current) return;
-      if (wrapperRef.current.contains(event.target as Node)) return;
+      if (event.target instanceof Node && wrapperRef.current.contains(event.target)) return;
       close();
     }
     document.addEventListener("mousedown", handlePointer);
@@ -269,23 +271,28 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
       .filter((provider) => !isCustomProviderId(provider.providerId))
       .filter((provider) => !listings.has(provider.providerId));
     if (targets.length === 0) return;
-    void Promise.all(targets.map(async (provider) => {
-      try {
-        const result = await listProviderModels(provider.providerId);
-        if (cancelled) return;
-        setListings((current) => {
-          const next = new Map(current);
-          next.set(provider.providerId, result);
-          return next;
-        });
-      } catch {
-        // listing failure は致命ではない。fallback は provider.model 単独表示。
-      }
-    }));
-    return () => { cancelled = true; };
+    void Promise.all(
+      targets.map(async (provider) => {
+        try {
+          const result = await listProviderModels(provider.providerId);
+          if (cancelled) return;
+          setListings((current) => {
+            const next = new Map(current);
+            next.set(provider.providerId, result);
+            return next;
+          });
+        } catch {
+          // listing failure は致命ではない。fallback は provider.model 単独表示。
+        }
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [open, config, listings]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 候補数の変化に合わせて focus index を clamp する。
     setFocusIndex((current) => {
       if (flatItems.length === 0) return 0;
       return Math.min(current, flatItems.length - 1);
@@ -298,88 +305,103 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
     node?.scrollIntoView({ block: "nearest" });
   }, [open, focusIndex]);
 
-  const handleSelect = useCallback(async (providerId: string, modelId: string) => {
-    close();
-    buttonRef.current?.focus();
-    await onSelect(providerId, modelId);
-  }, [close, onSelect]);
+  const handleSelect = useCallback(
+    async (providerId: string, modelId: string) => {
+      close();
+      buttonRef.current?.focus();
+      await onSelect(providerId, modelId);
+    },
+    [close, onSelect],
+  );
 
-  const refreshListing = useCallback(async (providerId: string) => {
-    setActionError("");
-    setRefreshing((current) => {
-      const next = new Set(current);
-      next.add(providerId);
-      return next;
-    });
-    try {
-      const result = await listProviderModels(providerId, { force: true });
-      setListings((current) => {
-        const next = new Map(current);
-        next.set(providerId, result);
-        return next;
-      });
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : t("chat.modelSelector.refreshFailed");
-      setActionError(message);
-    } finally {
+  const refreshListing = useCallback(
+    async (providerId: string) => {
+      setActionError("");
       setRefreshing((current) => {
         const next = new Set(current);
-        next.delete(providerId);
+        next.add(providerId);
         return next;
       });
-    }
-  }, [t]);
+      try {
+        const result = await listProviderModels(providerId, { force: true });
+        setListings((current) => {
+          const next = new Map(current);
+          next.set(providerId, result);
+          return next;
+        });
+      } catch (reason) {
+        const message =
+          reason instanceof Error ? reason.message : t("chat.modelSelector.refreshFailed");
+        setActionError(message);
+      } finally {
+        setRefreshing((current) => {
+          const next = new Set(current);
+          next.delete(providerId);
+          return next;
+        });
+      }
+    },
+    [t],
+  );
 
   const beginCustomDraft = useCallback((providerId: string, value: string) => {
     setCustomDraftByProvider((current) => ({ ...current, [providerId]: value }));
   }, []);
 
-  const handleAddCustom = useCallback(async (providerId: string) => {
-    const draft = (customDraftByProvider[providerId] ?? "").trim();
-    if (!draft) return;
-    setActionError("");
-    setMutatingCustom((current) => {
-      const next = new Set(current);
-      next.add(providerId);
-      return next;
-    });
-    try {
-      const nextConfig = await addCustomModel(providerId, draft);
-      onConfigChange?.(nextConfig);
-      setCustomDraftByProvider((current) => ({ ...current, [providerId]: "" }));
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : t("chat.modelSelector.addFailed");
-      setActionError(message);
-    } finally {
+  const handleAddCustom = useCallback(
+    async (providerId: string) => {
+      const draft = (customDraftByProvider[providerId] ?? "").trim();
+      if (!draft) return;
+      setActionError("");
       setMutatingCustom((current) => {
         const next = new Set(current);
-        next.delete(providerId);
+        next.add(providerId);
         return next;
       });
-    }
-  }, [customDraftByProvider, onConfigChange, t]);
+      try {
+        const nextConfig = await addCustomModel(providerId, draft);
+        onConfigChange?.(nextConfig);
+        setCustomDraftByProvider((current) => ({ ...current, [providerId]: "" }));
+      } catch (reason) {
+        const message =
+          reason instanceof Error ? reason.message : t("chat.modelSelector.addFailed");
+        setActionError(message);
+      } finally {
+        setMutatingCustom((current) => {
+          const next = new Set(current);
+          next.delete(providerId);
+          return next;
+        });
+      }
+    },
+    [customDraftByProvider, onConfigChange, t],
+  );
 
-  const handleRemoveCustom = useCallback(async (providerId: string, modelId: string) => {
-    setActionError("");
-    setMutatingCustom((current) => {
-      const next = new Set(current);
-      next.add(providerId);
-      return next;
-    });
-    try {
-      const nextConfig = await removeCustomModel(providerId, modelId);
-      onConfigChange?.(nextConfig);
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : t("chat.modelSelector.removeFailed");
-      setActionError(message);
-    } finally {
+  const handleRemoveCustom = useCallback(
+    async (providerId: string, modelId: string) => {
+      setActionError("");
       setMutatingCustom((current) => {
         const next = new Set(current);
-        next.delete(providerId);
+        next.add(providerId);
         return next;
       });
-    }
-  }, [onConfigChange, t]);
+      try {
+        const nextConfig = await removeCustomModel(providerId, modelId);
+        onConfigChange?.(nextConfig);
+      } catch (reason) {
+        const message =
+          reason instanceof Error ? reason.message : t("chat.modelSelector.removeFailed");
+        setActionError(message);
+      } finally {
+        setMutatingCustom((current) => {
+          const next = new Set(current);
+          next.delete(providerId);
+          return next;
+        });
+      }
+    },
+    [onConfigChange, t],
+  );
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -405,8 +427,8 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
     if (event.key === "Enter") {
       // Enter は search input の場合のみ option を選択。
       // Refresh/Add などの button 上では default 動作（click）を許可。
-      const target = event.target as HTMLElement;
-      if (target.tagName !== "INPUT" || (target as HTMLInputElement).type !== "text") {
+      const { target } = event;
+      if (!(target instanceof HTMLInputElement) || target.type !== "text") {
         return;
       }
       if (target !== searchRef.current) return;
@@ -424,7 +446,7 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
         onClick={onOpenSettings}
         aria-label={t("chat.chooseModel")}
       >
-        <GearSix size={12} weight="regular" />
+        <GearSixIcon size={12} weight="regular" />
         <span>{t("chat.chooseModel")}</span>
       </button>
     );
@@ -435,25 +457,31 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
     : t("chat.modelConnectionRequired");
   const tooltip = active ? `${active.providerId} / ${active.modelId}` : activeLabel;
 
+  // oxlint-disable-next-line react/purity -- 相対時刻表示用。描画ごとに現在時刻を取る。
   const now = new Date();
   // flatItems の index を追跡しながら描画する。recent → groups の順で並べる。
   let cursor = 0;
-  const recentKeys = new Set(recentEntries.map(entryKey));
+  const recentKeys = new Set(recentEntries.map((entry) => entryKey(entry)));
 
   const renderOption = (entry: SelectableEntry, sectionKey: string) => {
     const index = cursor;
+    // oxlint-disable-next-line react/immutability -- flatItems の index を描画順に振るための render 内ローカル counter。
     cursor += 1;
     const focused = index === focusIndex;
     const key = `${sectionKey}-${entryKey(entry)}`;
     const isMutating = mutatingCustom.has(entry.providerId);
     return (
+      // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- keyboard 操作は popover の onKeyDown と aria-activedescendant で扱う。
       <li
         key={key}
         id={`${listboxId}-option-${index}`}
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- listbox の option。
         role="option"
         aria-selected={entry.isActive}
         className={focused ? "model-selector-option is-focused" : "model-selector-option"}
-        ref={(node) => { optionRefs.current[index] = node; }}
+        ref={(node) => {
+          optionRefs.current[index] = node;
+        }}
         onMouseMove={() => setFocusIndex(index)}
         onClick={() => void handleSelect(entry.providerId, entry.modelId)}
       >
@@ -462,7 +490,7 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
           <span className="model-selector-option-model">{entry.modelId}</span>
           <span className="model-selector-option-provider">{entry.providerLabel}</span>
         </span>
-        {entry.isActive && <Check size={11} weight="bold" aria-hidden="true" />}
+        {entry.isActive && <CheckIcon size={11} weight="bold" aria-hidden="true" />}
         {entry.isCustom && (
           <button
             type="button"
@@ -475,7 +503,7 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
             }}
             disabled={isMutating}
           >
-            <X size={10} weight="bold" aria-hidden="true" />
+            <XIcon size={10} weight="bold" aria-hidden="true" />
           </button>
         )}
       </li>
@@ -496,16 +524,21 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
         onClick={() => setOpen((value) => !value)}
       >
         {active ? (
-          <ProviderIcon providerId={active.providerId} displayLabel={active.providerLabel} size={12} />
+          <ProviderIcon
+            providerId={active.providerId}
+            displayLabel={active.providerLabel}
+            size={12}
+          />
         ) : (
-          <GearSix size={12} weight="regular" aria-hidden="true" />
+          <GearSixIcon size={12} weight="regular" aria-hidden="true" />
         )}
         <span className="model-selector-label">
           {active ? active.modelId : t("chat.modelConnectionRequired")}
         </span>
-        <CaretDown size={10} weight="bold" aria-hidden="true" />
+        <CaretDownIcon size={10} weight="bold" aria-hidden="true" />
       </button>
       {open && (
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- popover 内の key 操作 (矢印 / Enter / Escape) をまとめて扱う。
         <div
           className="model-selector-popover"
           role="dialog"
@@ -527,17 +560,15 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
             />
           </div>
           {actionError && (
-            <p className="model-selector-error" role="alert">{actionError}</p>
+            <p className="model-selector-error" role="alert">
+              {actionError}
+            </p>
           )}
           {filteredGroups.length === 0 ? (
             <p className="model-selector-empty-state">{t("chat.modelSearchNoResults")}</p>
           ) : (
-            <ul
-              className="model-selector-list"
-              role="listbox"
-              id={listboxId}
-              tabIndex={-1}
-            >
+            // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role -- combobox の listbox。focus は search input 側で aria-activedescendant により管理する。
+            <ul className="model-selector-list" role="listbox" id={listboxId} tabIndex={-1}>
               {recentEntries.length > 0 && (
                 <li className="model-selector-section" role="presentation">
                   {t("chat.modelSelector.recentLabel")}
@@ -546,15 +577,15 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
               {recentEntries.map((entry) => renderOption(entry, "recent"))}
 
               {filteredGroups.map((group) => {
-                const sourceLabel = group.listing
-                  ? sourceLabelFor(t, group.listing.source)
-                  : "";
+                const sourceLabel = group.listing ? sourceLabelFor(t, group.listing.source) : "";
                 const fetchedRel = formatRelativeTime(now, group.listing?.fetchedAt, i18n.language);
                 const isRefreshing = refreshing.has(group.providerId);
                 const isMutatingThis = mutatingCustom.has(group.providerId);
                 const showSkeleton = isRefreshing || isMutatingThis;
                 const draftValue = customDraftByProvider[group.providerId] ?? "";
-                const visibleEntries = group.entries.filter((entry) => !recentKeys.has(entryKey(entry)));
+                const visibleEntries = group.entries.filter(
+                  (entry) => !recentKeys.has(entryKey(entry)),
+                );
                 return (
                   <ProviderSectionFragment
                     key={group.providerId}
@@ -584,7 +615,7 @@ export function ModelSelector({ config, switching, onSelect, onOpenSettings, onC
               onOpenSettings();
             }}
           >
-            <GearSix size={11} weight="regular" />
+            <GearSixIcon size={11} weight="regular" />
             <span>{t("chat.configureModelConnections")}</span>
           </button>
         </div>
@@ -633,13 +664,14 @@ function ProviderSectionFragment({
         <ProviderIcon providerId={group.providerId} displayLabel={group.providerLabel} size={11} />
         <span className="model-selector-section-name">{group.providerLabel}</span>
         {sourceLabel && (
-          <span className="model-selector-source-badge" data-source={group.listing?.source ?? "builtin"}>
+          <span
+            className="model-selector-source-badge"
+            data-source={group.listing?.source ?? "builtin"}
+          >
             {sourceLabel}
           </span>
         )}
-        {fetchedRel && (
-          <span className="model-selector-section-fetched">{fetchedRel}</span>
-        )}
+        {fetchedRel && <span className="model-selector-section-fetched">{fetchedRel}</span>}
         {!group.isCustom && (
           <button
             type="button"
@@ -649,7 +681,7 @@ function ProviderSectionFragment({
             aria-label={t("chat.modelSelector.refreshAria", { provider: group.providerLabel })}
             title={refreshLabel}
           >
-            <ArrowsClockwise size={10} weight="bold" aria-hidden="true" />
+            <ArrowsClockwiseIcon size={10} weight="bold" aria-hidden="true" />
             <span className="model-selector-refresh-label">{refreshLabel}</span>
           </button>
         )}
@@ -668,7 +700,9 @@ function ProviderSectionFragment({
             value={draftValue}
             onChange={(event) => onDraftChange(group.providerId, event.target.value)}
             placeholder={t("chat.modelSelector.customModelPlaceholder")}
-            aria-label={t("chat.modelSelector.customModelInputAria", { provider: group.providerLabel })}
+            aria-label={t("chat.modelSelector.customModelInputAria", {
+              provider: group.providerLabel,
+            })}
             disabled={isMutatingThis}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -685,7 +719,7 @@ function ProviderSectionFragment({
             aria-label={t("chat.modelSelector.addCustomModel")}
             onClick={() => void onAddCustom(group.providerId)}
           >
-            <Plus size={10} weight="bold" aria-hidden="true" />
+            <PlusIcon size={10} weight="bold" aria-hidden="true" />
             <span>{t("chat.modelSelector.addCustomModel")}</span>
           </button>
         </li>

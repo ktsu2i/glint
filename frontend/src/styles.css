@@ -1,5 +1,6 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif;
   color: #20252a;
   background: #d8dddc;
   font-synthesis: none;
@@ -188,7 +189,10 @@ input:focus-visible,
   background: transparent;
   color: var(--slate);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 .app-toolbar-toggle:hover {
@@ -868,7 +872,9 @@ input:focus-visible,
     0 1px 1px rgb(32 37 42 / 8%),
     0 12px 26px rgb(32 37 42 / 11%);
   transform: translateY(0);
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .book-cover-button:hover:not(:disabled) .book-cover {
@@ -1677,7 +1683,9 @@ input:focus-visible,
   line-height: 1;
   box-shadow: 0 5px 14px rgb(24 30 34 / 18%);
   transform-origin: var(--transform-origin);
-  transition: opacity 100ms ease, transform 100ms ease;
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
 }
 
 .tooltip-popup[data-starting-style],
@@ -1771,12 +1779,12 @@ button.page-count:disabled {
   appearance: none;
   border: 0;
   border-radius: 0;
-  background:
-    linear-gradient(
+  background: linear-gradient(
       to right,
       var(--signal-deep) 0 var(--page-progress),
       var(--line-strong) var(--page-progress) 100%
-    ) center / 100% 2px no-repeat;
+    )
+    center / 100% 2px no-repeat;
   cursor: pointer;
 }
 
@@ -1830,12 +1838,12 @@ button.page-count:disabled {
 }
 
 .reader-page-rail.is-rtl input[type="range"] {
-  background:
-    linear-gradient(
+  background: linear-gradient(
       to left,
       var(--signal-deep) 0 var(--page-progress),
       var(--line-strong) var(--page-progress) 100%
-    ) center / 100% 2px no-repeat;
+    )
+    center / 100% 2px no-repeat;
 }
 
 .reader-slider-bookmarks {
@@ -1897,7 +1905,9 @@ button.page-count:disabled {
   opacity: 0;
   pointer-events: none;
   transform: translateX(50%) translateY(2px);
-  transition: opacity 100ms ease, transform 100ms ease;
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
   white-space: nowrap;
 }
 
@@ -1992,8 +2002,7 @@ button.page-count:disabled {
   font-size: calc(var(--text-scale-factor) * var(--font-height));
   --scale-x: 1;
   --rotate: 0deg;
-  transform: rotate(var(--rotate)) scaleX(var(--scale-x))
-    scale(calc(1 / var(--min-font-size, 1)));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(calc(1 / var(--min-font-size, 1)));
 }
 
 .text-layer .markedContent {
@@ -2306,7 +2315,9 @@ button.page-count:disabled {
   min-width: 0;
   border: 1px solid var(--line-strong);
   background: var(--paper);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 8%) inset, 0 10px 30px rgb(var(--shadow-rgb) / 12%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 8%) inset,
+    0 10px 30px rgb(var(--shadow-rgb) / 12%);
 }
 
 .appearance-settings {
@@ -2319,7 +2330,6 @@ button.page-count:disabled {
   font-size: 10px;
   line-height: 1.65;
 }
-
 
 .appearance-error {
   margin-top: 0;
@@ -2371,7 +2381,10 @@ button.page-count:disabled {
   color: var(--muted);
   cursor: pointer;
   text-align: left;
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .theme-option:hover:not(:disabled) {
@@ -3172,12 +3185,20 @@ button.page-count:disabled {
   line-height: 1.35;
 }
 
-.message-markdown h1 { font-size: 16px; }
-.message-markdown h2 { font-size: 15px; }
-.message-markdown h3 { font-size: 13px; }
+.message-markdown h1 {
+  font-size: 16px;
+}
+.message-markdown h2 {
+  font-size: 15px;
+}
+.message-markdown h3 {
+  font-size: 13px;
+}
 .message-markdown h4,
 .message-markdown h5,
-.message-markdown h6 { font-size: 12px; }
+.message-markdown h6 {
+  font-size: 12px;
+}
 
 .message-markdown ul,
 .message-markdown ol {
@@ -3325,7 +3346,9 @@ button.page-count:disabled {
 
 .chat-composer:focus-within {
   border-color: #879c9e;
-  box-shadow: 0 0 0 1px rgb(112 141 145 / 24%), 0 5px 16px rgb(32 37 42 / 7%);
+  box-shadow:
+    0 0 0 1px rgb(112 141 145 / 24%),
+    0 5px 16px rgb(32 37 42 / 7%);
 }
 
 .chat-composer textarea {
@@ -3685,8 +3708,13 @@ button.page-count:disabled {
 }
 
 @keyframes model-selector-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .model-selector-option-remove {
@@ -3952,7 +3980,9 @@ button.page-count:disabled {
 
 :root[data-theme="dark"] .chat-composer:focus-within {
   border-color: var(--signal);
-  box-shadow: 0 0 0 1px rgb(120 153 156 / 26%), 0 5px 16px rgb(0 0 0 / 28%);
+  box-shadow:
+    0 0 0 1px rgb(120 153 156 / 26%),
+    0 5px 16px rgb(0 0 0 / 28%);
 }
 
 :root[data-theme="dark"] .chat-composer textarea::placeholder {

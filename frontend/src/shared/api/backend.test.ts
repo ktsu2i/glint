@@ -103,8 +103,13 @@ beforeEach(() => {
 describe("backend facade", () => {
   it("delegates PDF selection and chat requests to Wails bindings", async () => {
     const book = {
-      id: "book-1", title: "Book", name: "book.pdf", url: "/book/1", size: 42,
-      initialPage: 1, coverStatus: "ready",
+      id: "book-1",
+      title: "Book",
+      name: "book.pdf",
+      url: "/book/1",
+      size: 42,
+      initialPage: 1,
+      coverStatus: "ready",
     };
     const request = {
       requestId: "request-1",
@@ -124,18 +129,32 @@ describe("backend facade", () => {
   it("delegates LLM config without exposing credential implementation", async () => {
     const config = {
       activeProviderId: "openrouter",
-      providers: [{
-        providerId: "openrouter", model: "provider/model",
-        options: { zdr: true }, hasApiKey: true, configured: true, isActive: true,
-      }],
-      catalog: [{
-        id: "openrouter", displayName: "OpenRouter", authKind: "bearer",
-        optionSchema: [], capabilities: { streaming: true, tools: false, images: false },
-      }],
+      providers: [
+        {
+          providerId: "openrouter",
+          model: "provider/model",
+          options: { zdr: true },
+          hasApiKey: true,
+          configured: true,
+          isActive: true,
+        },
+      ],
+      catalog: [
+        {
+          id: "openrouter",
+          displayName: "OpenRouter",
+          authKind: "bearer",
+          optionSchema: [],
+          capabilities: { streaming: true, tools: false, images: false },
+        },
+      ],
     };
     const upsertRequest = {
-      providerId: "openrouter", model: "provider/model",
-      options: { zdr: true }, apiKey: "new-key", activate: true,
+      providerId: "openrouter",
+      model: "provider/model",
+      options: { zdr: true },
+      apiKey: "new-key",
+      activate: true,
     };
     bindings.getLLMConfig.mockResolvedValue(config);
     bindings.upsertProviderSettings.mockResolvedValue(config);
@@ -195,9 +214,20 @@ describe("backend facade", () => {
       title: "Renamed",
     });
     await saveReadingPosition("book-1", 3, 10);
-    await expect(saveBookPages("book-1", [{
-      pageNumber: 1, text: "page text", width: 612, height: 792,
-    }], 10)).resolves.toBe(2);
+    await expect(
+      saveBookPages(
+        "book-1",
+        [
+          {
+            pageNumber: 1,
+            text: "page text",
+            width: 612,
+            height: 792,
+          },
+        ],
+        10,
+      ),
+    ).resolves.toBe(2);
     await expect(searchBook("book-1", "page")).resolves.toEqual([
       { pageNumber: 2, excerpt: "match", matchCount: 1 },
     ]);
@@ -209,9 +239,18 @@ describe("backend facade", () => {
     await markBookCoverFailed("book-1");
 
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10);
-    expect(bindings.saveBookPages).toHaveBeenCalledWith("book-1", [{
-      pageNumber: 1, text: "page text", width: 612, height: 792,
-    }], 10);
+    expect(bindings.saveBookPages).toHaveBeenCalledWith(
+      "book-1",
+      [
+        {
+          pageNumber: 1,
+          text: "page text",
+          width: 612,
+          height: 792,
+        },
+      ],
+      10,
+    );
     expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
     expect(bindings.searchLibrary).toHaveBeenCalledWith("page");
     expect(bindings.listBookmarks).toHaveBeenCalledWith("book-1");

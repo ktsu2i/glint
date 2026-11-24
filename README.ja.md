@@ -154,6 +154,15 @@ pnpm test
 pnpm run build
 ```
 
+frontend の静的チェック (型検査、oxlint、oxfmt、knip) はまとめて実行できます。
+
+```bash
+cd frontend
+pnpm check      # typecheck + lint + format:check + knip
+pnpm lint:fix   # 自動修正できる lint を直す
+pnpm format     # oxfmt で整形する
+```
+
 ### リリース
 
 リリースは [tagpr](https://github.com/Songmu/tagpr) で管理しています。`main` に merge するたびに、tagpr がリリース PR を作成・更新します。この PR で `wails.json` と `frontend/package.json` のバージョンが上がり、merge された PR の一覧が `CHANGELOG.md` に追記されます。リリース PR を merge すると、tag が作られ、macOS の universal app がビルドされて GitHub Release に添付され、Release が公開されます。続けて [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap) の update workflow を起動します。この workflow が cask のバージョンを上げ、インストールできることを確認してから merge するので、数分後には `brew upgrade --cask glint` で新しいバージョンが入ります。これには `HOMEBREW_TAP_TOKEN` secret (`ktsu2i/homebrew-tap` の Actions: write を持つ fine-grained PAT) が必要です。未設定の場合も、tap 側の定期実行 (1日2回) で取り込まれます。

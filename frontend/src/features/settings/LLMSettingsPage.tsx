@@ -1,19 +1,20 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SubmitEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@base-ui/react/switch";
 import { useTranslation } from "react-i18next";
 import {
-  CaretDown,
-  Check,
-  Eye,
-  EyeSlash,
-  Key,
-  Monitor,
-  Moon,
-  Plus,
-  Sun,
-  Translate,
-  Trash,
-  X,
+  CaretDownIcon,
+  CheckIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  KeyIcon,
+  MonitorIcon,
+  MoonIcon,
+  PlusIcon,
+  SunIcon,
+  TranslateIcon,
+  TrashIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import {
   deleteProviderSettings,
@@ -38,11 +39,11 @@ type LLMSettingsPageProps = {
 
 const themeOptions: Array<{
   value: ThemePreference;
-  icon: typeof Sun;
+  icon: typeof SunIcon;
 }> = [
-  { value: "light", icon: Sun },
-  { value: "dark", icon: Moon },
-  { value: "system", icon: Monitor },
+  { value: "light", icon: SunIcon },
+  { value: "dark", icon: MoonIcon },
+  { value: "system", icon: MonitorIcon },
 ];
 
 function extractErrorMessage(reason: unknown, fallback: string): string {
@@ -72,7 +73,7 @@ function mergeOptions(
   stored: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   const defaults = defaultOptionsFor(descriptor);
-  return { ...defaults, ...(stored ?? {}) };
+  return { ...defaults, ...stored };
 }
 
 const OPENAI_COMPATIBLE_TEMPLATE_ID = "openai_compatible";
@@ -80,7 +81,10 @@ const OPENAI_COMPATIBLE_PREFIX = "openai_compatible:";
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 function isOpenAICompatibleInstance(providerId: string): boolean {
-  return providerId.startsWith(OPENAI_COMPATIBLE_PREFIX) && providerId.length > OPENAI_COMPATIBLE_PREFIX.length;
+  return (
+    providerId.startsWith(OPENAI_COMPATIBLE_PREFIX) &&
+    providerId.length > OPENAI_COMPATIBLE_PREFIX.length
+  );
 }
 
 // Mirror of internal/settings.envVarNameFor — the UI shows this string so users
@@ -91,21 +95,25 @@ function envVarNameFor(providerId: string): string {
   if (isOpenAICompatibleInstance(trimmed)) {
     const slug = trimmed.slice(OPENAI_COMPATIBLE_PREFIX.length);
     if (!slug) return "";
-    return `GLINT_OPENAI_COMPATIBLE_${slug.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+    return `GLINT_OPENAI_COMPATIBLE_${slug.toUpperCase().replaceAll("-", "_")}_API_KEY`;
   }
   return `GLINT_${trimmed.toUpperCase()}_API_KEY`;
 }
 
 function resolveDescriptor(config: LLMConfig, providerId: string): ProviderDescriptor | null {
   if (isOpenAICompatibleInstance(providerId)) {
-    return config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null;
+    return (
+      config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null
+    );
   }
   return config.catalog.find((descriptor) => descriptor.id === providerId) ?? null;
 }
 
+async function noopThemeChange(): Promise<void> {}
+
 function headersToText(value: unknown): string {
-  if (!value || typeof value !== "object") return "";
-  return Object.entries(value as Record<string, unknown>)
+  if (value === null || typeof value !== "object") return "";
+  return Object.entries(value)
     .map(([key, val]) => `${key}: ${typeof val === "string" ? val : ""}`)
     .join("\n");
 }
@@ -142,7 +150,8 @@ function providerDisplayName(
   fallbackLabel = "",
 ): string {
   if (isOpenAICompatibleInstance(providerId)) {
-    const label = stored?.displayLabel || fallbackLabel || providerId.slice(OPENAI_COMPATIBLE_PREFIX.length);
+    const label =
+      stored?.displayLabel || fallbackLabel || providerId.slice(OPENAI_COMPATIBLE_PREFIX.length);
     return label || providerId;
   }
   return descriptor.displayName;
@@ -165,13 +174,17 @@ function endpointHintFor(
 // unconfigured built-ins (catalog order). Custom (openai_compatible:*) providers
 // only ever appear when explicitly added, so they have no unconfigured group.
 function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowDescriptor[] {
-  const builtIns = config.catalog.filter((descriptor) => descriptor.id !== OPENAI_COMPATIBLE_TEMPLATE_ID);
-  const template = config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null;
+  const builtIns = config.catalog.filter(
+    (descriptor) => descriptor.id !== OPENAI_COMPATIBLE_TEMPLATE_ID,
+  );
+  const template =
+    config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID) ?? null;
   const configured: ProviderRowDescriptor[] = [];
   const unconfigured: ProviderRowDescriptor[] = [];
 
   for (const descriptor of builtIns) {
-    const stored = config.providers.find((provider) => provider.providerId === descriptor.id) ?? null;
+    const stored =
+      config.providers.find((provider) => provider.providerId === descriptor.id) ?? null;
     const row: ProviderRowDescriptor = {
       rowId: descriptor.id,
       providerId: descriptor.id,
@@ -182,7 +195,7 @@ function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowD
       isStaged: false,
       endpointHint: endpointHintFor(descriptor.id, descriptor, stored),
     };
-    if (stored?.configured) configured.push(row);
+    if (stored?.configured === true) configured.push(row);
     else unconfigured.push(row);
   }
 
@@ -190,8 +203,9 @@ function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowD
   if (template) {
     const customProviders = config.providers
       .filter((provider) => isOpenAICompatibleInstance(provider.providerId))
-      .slice()
-      .sort((a, b) => (a.displayLabel || a.providerId).localeCompare(b.displayLabel || b.providerId));
+      .toSorted((a, b) =>
+        (a.displayLabel || a.providerId).localeCompare(b.displayLabel || b.providerId),
+      );
     for (const stored of customProviders) {
       customs.push({
         rowId: stored.providerId,
@@ -208,9 +222,9 @@ function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowD
 
   const stagedRow: ProviderRowDescriptor[] = [];
   if (
-    staged
-    && template
-    && !config.providers.some((provider) => provider.providerId === staged.providerId)
+    staged &&
+    template &&
+    !config.providers.some((provider) => provider.providerId === staged.providerId)
   ) {
     stagedRow.push({
       rowId: staged.providerId,
@@ -237,7 +251,7 @@ export function LLMSettingsPage({
   theme = "system",
   themeLoading = false,
   themeError = "",
-  onThemeChange = async () => {},
+  onThemeChange = noopThemeChange,
 }: LLMSettingsPageProps) {
   const { t } = useTranslation();
   const {
@@ -247,6 +261,7 @@ export function LLMSettingsPage({
     changeLanguage,
   } = useLanguageSettings();
   const translationRef = useRef(t);
+  // oxlint-disable-next-line react/refs -- 最新の t を callback から参照するための latest-ref pattern。
   translationRef.current = t;
 
   const [config, setConfig] = useState<LLMConfig | null>(null);
@@ -288,17 +303,25 @@ export function LLMSettingsPage({
   const managedStored = managedRow?.stored ?? null;
   const managedIsCustom = managedRow?.isCustom ?? false;
 
-  const openManagePanel = useCallback((rowId: string, descriptor: ProviderDescriptor, stored: ProviderSettings | null, label = "") => {
-    setManagedProviderId(rowId);
-    setDisplayLabel(stored?.displayLabel ?? label);
-    setOptions(mergeOptions(descriptor, stored?.options));
-    setAPIKey("");
-    setShowAPIKey(false);
-    setClearAPIKey(false);
-    setSaved(false);
-    setConnectionTest(null);
-    setConnectionTestError("");
-  }, []);
+  const openManagePanel = useCallback(
+    (
+      rowId: string,
+      descriptor: ProviderDescriptor,
+      stored: ProviderSettings | null,
+      label = "",
+    ) => {
+      setManagedProviderId(rowId);
+      setDisplayLabel(stored?.displayLabel ?? label);
+      setOptions(mergeOptions(descriptor, stored?.options));
+      setAPIKey("");
+      setShowAPIKey(false);
+      setClearAPIKey(false);
+      setSaved(false);
+      setConnectionTest(null);
+      setConnectionTestError("");
+    },
+    [],
+  );
 
   const closeManagePanel = useCallback((discardStaged = false) => {
     setManagedProviderId("");
@@ -328,12 +351,15 @@ export function LLMSettingsPage({
   }, [closeManagePanel]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 初回 load。loading 表示を含めて loadSettings に集約している。
     void loadSettings();
   }, [loadSettings]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- 入力変更時に接続テスト結果を reset する。
     setConnectionTest(null);
     setConnectionTestError("");
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- 入力が変わったら前回の接続テスト結果を破棄する。
   }, [apiKey, clearAPIKey, options, managedProviderId]);
 
   useEffect(() => {
@@ -342,7 +368,7 @@ export function LLMSettingsPage({
     return () => window.clearTimeout(timer);
   }, [removedLabel]);
 
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
+  async function handleSave(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving || !managedDescriptor || !managedProviderId) return;
     setSaving(true);
@@ -360,7 +386,8 @@ export function LLMSettingsPage({
       setConfig(next);
       // Staged custom is now persisted; drop the placeholder marker.
       setStaged(null);
-      const refreshedStored = next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
+      const refreshedStored =
+        next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
       openManagePanel(managedProviderId, managedDescriptor, refreshedStored);
       setSaved(true);
     } catch (reason) {
@@ -392,14 +419,15 @@ export function LLMSettingsPage({
         setConnectionTest("success");
       } else {
         setConnectionTest("error");
-        setConnectionTestError(localizeBackendError(result.error || t("settings.testConnectionFailed"), t));
+        setConnectionTestError(
+          localizeBackendError(result.error || t("settings.testConnectionFailed"), t),
+        );
       }
     } catch (reason) {
       setConnectionTest("error");
-      setConnectionTestError(localizeBackendError(
-        extractErrorMessage(reason, t("settings.testConnectionFailed")),
-        t,
-      ));
+      setConnectionTestError(
+        localizeBackendError(extractErrorMessage(reason, t("settings.testConnectionFailed")), t),
+      );
     } finally {
       setTestingConnection(false);
     }
@@ -413,12 +441,11 @@ export function LLMSettingsPage({
     try {
       if (row.isStaged) {
         setStaged((current) => (current?.providerId === row.rowId ? null : current));
-        if (managedProviderId === row.rowId) closeManagePanel();
       } else {
         const next = await deleteProviderSettings(row.providerId);
         setConfig(next);
-        if (managedProviderId === row.rowId) closeManagePanel();
       }
+      if (managedProviderId === row.rowId) closeManagePanel();
       setRemovedLabel(row.displayName);
     } catch (reason) {
       setError(localizeBackendError(extractErrorMessage(reason, t("settings.saveError")), t));
@@ -459,7 +486,9 @@ export function LLMSettingsPage({
       setNewCustomError("");
       return;
     }
-    const template = config.catalog.find((descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID);
+    const template = config.catalog.find(
+      (descriptor) => descriptor.id === OPENAI_COMPATIBLE_TEMPLATE_ID,
+    );
     if (!template) return;
     const label = newCustomLabel.trim() || slug;
     setStaged({ providerId, displayLabel: label });
@@ -504,10 +533,11 @@ export function LLMSettingsPage({
   const hasCredential = managedStored?.hasApiKey ?? false;
   const isCustomInstance = managedIsCustom;
   const requiresAPIKey = managedDescriptor
-    ? managedDescriptor.authKind !== "none"
-      && !(isCustomInstance && options.requires_api_key === false)
+    ? managedDescriptor.authKind !== "none" &&
+      !(isCustomInstance && options.requires_api_key === false)
     : true;
-  const willHaveCredential = !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
+  const willHaveCredential =
+    !requiresAPIKey || apiKey.trim() !== "" || (hasCredential && !clearAPIKey);
   const canSave = !loading && !saving && (willHaveCredential || clearAPIKey);
   const managedLabel = managedRow?.displayName ?? "—";
   const generalOptionSchema = managedDescriptor?.optionSchema ?? [];
@@ -526,11 +556,19 @@ export function LLMSettingsPage({
             <h1 id="settings-title">{t("settings.title")}</h1>
             <p>{t("settings.description")}</p>
           </div>
-          <div className={headerConfigured ? "settings-connection is-ready" : "settings-connection"}>
+          <div
+            className={headerConfigured ? "settings-connection is-ready" : "settings-connection"}
+          >
             <span className="settings-connection-dot" />
             <div>
               <small>{t("settings.connection")}</small>
-              <strong>{loading ? t("settings.checking") : headerConfigured ? t("settings.available") : t("settings.notConfigured")}</strong>
+              <strong>
+                {loading
+                  ? t("settings.checking")
+                  : headerConfigured
+                    ? t("settings.available")
+                    : t("settings.notConfigured")}
+              </strong>
             </div>
           </div>
         </header>
@@ -546,7 +584,7 @@ export function LLMSettingsPage({
             <p>{t("settings.credentialNote")}</p>
           </nav>
 
-          <form className="settings-page-form" onSubmit={handleSave}>
+          <form className="settings-page-form" onSubmit={(event) => void handleSave(event)}>
             <section className="appearance-settings" aria-labelledby="appearance-heading">
               <div className="settings-section-heading">
                 <div>
@@ -555,9 +593,7 @@ export function LLMSettingsPage({
                 </div>
                 <span className="provider-badge">{t("settings.theme")}</span>
               </div>
-              <p className="appearance-description">
-                {t("settings.appearanceDescription")}
-              </p>
+              <p className="appearance-description">{t("settings.appearanceDescription")}</p>
               {(themeError || localThemeError) && (
                 <div className="settings-error appearance-error" role="alert">
                   <span>{localThemeError || themeError}</span>
@@ -579,10 +615,10 @@ export function LLMSettingsPage({
                     >
                       <Icon size={18} weight={selected ? "fill" : "regular"} />
                       <span>
-                      <strong>{label}</strong>
-                      <small>{description}</small>
+                        <strong>{label}</strong>
+                        <small>{description}</small>
                       </span>
-                      <i aria-hidden="true">{selected ? <Check size={12} /> : null}</i>
+                      <i aria-hidden="true">{selected ? <CheckIcon size={12} /> : null}</i>
                     </button>
                   );
                 })}
@@ -597,19 +633,29 @@ export function LLMSettingsPage({
                   <span className="settings-kicker">{t("settings.languageKicker")}</span>
                   <h2 id="language-heading">{t("settings.language")}</h2>
                 </div>
-                <span className="provider-badge"><Translate size={13} /> {language.toUpperCase()}</span>
+                <span className="provider-badge">
+                  <TranslateIcon size={13} /> {language.toUpperCase()}
+                </span>
               </div>
               <p className="appearance-description">{t("settings.languageDescription")}</p>
               {(languageError || savingLanguage) && (
-                <p className={languageError ? "appearance-error" : "language-saving"} role={languageError ? "alert" : "status"}>
+                <p
+                  className={languageError ? "appearance-error" : "language-saving"}
+                  role={languageError ? "alert" : "status"}
+                >
                   {languageError || t("settings.languageSaving")}
                 </p>
               )}
-              <div className="theme-options language-options" aria-label={t("settings.languageOptions")}>
-                {([
-                  ["en", t("settings.english"), t("settings.englishDescription")],
-                  ["ja", t("settings.japanese"), t("settings.japaneseDescription")],
-                ] as const).map(([value, label, description]) => (
+              <div
+                className="theme-options language-options"
+                aria-label={t("settings.languageOptions")}
+              >
+                {(
+                  [
+                    ["en", t("settings.english"), t("settings.englishDescription")],
+                    ["ja", t("settings.japanese"), t("settings.japaneseDescription")],
+                  ] as const
+                ).map(([value, label, description]) => (
                   <button
                     key={value}
                     type="button"
@@ -618,12 +664,14 @@ export function LLMSettingsPage({
                     disabled={languageLoading || savingLanguage}
                     onClick={() => void handleLanguageChange(value)}
                   >
-                    <span className="language-code" aria-hidden="true">{value.toUpperCase()}</span>
+                    <span className="language-code" aria-hidden="true">
+                      {value.toUpperCase()}
+                    </span>
                     <span>
                       <strong>{label}</strong>
                       <small>{description}</small>
                     </span>
-                    <i aria-hidden="true">{language === value ? <Check size={12} /> : null}</i>
+                    <i aria-hidden="true">{language === value ? <CheckIcon size={12} /> : null}</i>
                   </button>
                 ))}
               </div>
@@ -644,13 +692,15 @@ export function LLMSettingsPage({
               <div className="settings-error" role="alert">
                 <span>{error}</span>
                 {!config && !loading && (
-                  <button type="button" onClick={() => void loadSettings()}>{t("settings.reload")}</button>
+                  <button type="button" onClick={() => void loadSettings()}>
+                    {t("settings.reload")}
+                  </button>
                 )}
               </div>
             )}
             {removedLabel && (
               <p className="settings-saved" role="status">
-                <Check size={14} /> {t("settings.providerRemoved", { provider: removedLabel })}
+                <CheckIcon size={14} /> {t("settings.providerRemoved", { provider: removedLabel })}
               </p>
             )}
 
@@ -658,8 +708,9 @@ export function LLMSettingsPage({
               <ul className="provider-list" aria-label={t("settings.providerListAria")}>
                 {rows.map((row) => {
                   const isManaged = managedProviderId === row.rowId;
-                  const requiresKeyForRow = row.descriptor.authKind !== "none"
-                    && !(row.isCustom && row.stored?.options?.requires_api_key === false);
+                  const requiresKeyForRow =
+                    row.descriptor.authKind !== "none" &&
+                    !(row.isCustom && row.stored?.options?.requires_api_key === false);
                   const usesEnvCredential = row.stored?.credentialSource === "env";
                   const envVarName = requiresKeyForRow ? envVarNameFor(row.providerId) : "";
                   const isActive = row.stored?.isActive ?? false;
@@ -668,7 +719,7 @@ export function LLMSettingsPage({
                   if (isActive) {
                     statusLabel = t("settings.statusActive");
                     statusKind = "active";
-                  } else if (row.stored?.configured) {
+                  } else if (row.stored?.configured === true) {
                     statusLabel = t("settings.statusConfigured");
                     statusKind = "configured";
                   } else if (row.endpointHint) {
@@ -707,7 +758,9 @@ export function LLMSettingsPage({
                           <span className="provider-row-name">{row.displayName}</span>
                         </span>
                         <span className={`provider-row-status is-${statusKind}`}>
-                          {(statusKind === "configured" || statusKind === "active") && <Check size={11} />}
+                          {(statusKind === "configured" || statusKind === "active") && (
+                            <CheckIcon size={11} />
+                          )}
                           <span>{statusLabel}</span>
                         </span>
                         {usesEnvCredential && envVarName && (
@@ -715,13 +768,15 @@ export function LLMSettingsPage({
                             className="provider-row-env-badge"
                             title={t("settings.credentialFromEnvHelp", { env: envVarName })}
                           >
-                            <Key size={10} /> {t("settings.credentialFromEnvBadge")}
+                            <KeyIcon size={10} /> {t("settings.credentialFromEnvBadge")}
                           </span>
                         )}
-                        <CaretDown
+                        <CaretDownIcon
                           size={12}
                           weight="bold"
-                          className={isManaged ? "provider-row-toggle is-open" : "provider-row-toggle"}
+                          className={
+                            isManaged ? "provider-row-toggle is-open" : "provider-row-toggle"
+                          }
                           aria-hidden="true"
                         />
                       </button>
@@ -732,12 +787,13 @@ export function LLMSettingsPage({
                         >
                           {saved && (
                             <p className="settings-saved" role="status">
-                              <Check size={14} /> {t("settings.saved")}
+                              <CheckIcon size={14} /> {t("settings.saved")}
                             </p>
                           )}
                           {connectionTest === "success" && (
                             <p className="settings-saved" role="status">
-                              <Check size={14} /> {t("settings.testConnectionSucceeded", { provider: managedLabel })}
+                              <CheckIcon size={14} />{" "}
+                              {t("settings.testConnectionSucceeded", { provider: managedLabel })}
                             </p>
                           )}
                           {connectionTest === "error" && (
@@ -750,7 +806,9 @@ export function LLMSettingsPage({
                             <fieldset className="settings-fieldset" disabled={loading || saving}>
                               <legend>{t("settings.customProviderLabel")}</legend>
                               <div className="settings-field">
-                                <label htmlFor={`provider-label-${row.rowId}`}>{t("settings.customProviderLabel")}</label>
+                                <label htmlFor={`provider-label-${row.rowId}`}>
+                                  {t("settings.customProviderLabel")}
+                                </label>
                                 <input
                                   id={`provider-label-${row.rowId}`}
                                   value={displayLabel}
@@ -758,7 +816,9 @@ export function LLMSettingsPage({
                                     setDisplayLabel(event.target.value);
                                     setSaved(false);
                                   }}
-                                  placeholder={row.providerId.slice(OPENAI_COMPATIBLE_PREFIX.length)}
+                                  placeholder={row.providerId.slice(
+                                    OPENAI_COMPATIBLE_PREFIX.length,
+                                  )}
                                   autoComplete="off"
                                 />
                                 <small>{t("settings.customProviderLabelHelp")}</small>
@@ -771,21 +831,27 @@ export function LLMSettingsPage({
                               <legend>{t("settings.credential")}</legend>
                               {usesEnvCredential && envVarName && (
                                 <p className="provider-row-env-note" role="status">
-                                  <Key size={12} />{" "}
+                                  <KeyIcon size={12} />{" "}
                                   {t("settings.credentialFromEnvHelp", { env: envVarName })}
                                 </p>
                               )}
                               <div className="settings-field">
                                 <span className="settings-field-label">
-                                  <label htmlFor={`provider-api-key-${row.rowId}`}>{t("settings.apiKey")}</label>
+                                  <label htmlFor={`provider-api-key-${row.rowId}`}>
+                                    {t("settings.apiKey")}
+                                  </label>
                                   {hasCredential && !clearAPIKey && (
-                                    <em><Key size={11} /> {t("settings.keyStored")}</em>
+                                    <em>
+                                      <KeyIcon size={11} /> {t("settings.keyStored")}
+                                    </em>
                                   )}
                                 </span>
                                 <div className="credential-input">
                                   <input
                                     id={`provider-api-key-${row.rowId}`}
-                                    className={hasCredential && !apiKey ? "has-saved-credential" : ""}
+                                    className={
+                                      hasCredential && !apiKey ? "has-saved-credential" : ""
+                                    }
                                     type={showAPIKey ? "text" : "password"}
                                     value={apiKey}
                                     onChange={(event) => {
@@ -793,7 +859,13 @@ export function LLMSettingsPage({
                                       if (event.target.value) setClearAPIKey(false);
                                       setSaved(false);
                                     }}
-                                    placeholder={clearAPIKey ? t("settings.keyScheduledForRemoval") : hasCredential ? "••••••••••••••••" : "sk-or-v1-…"}
+                                    placeholder={
+                                      clearAPIKey
+                                        ? t("settings.keyScheduledForRemoval")
+                                        : hasCredential
+                                          ? "••••••••••••••••"
+                                          : "sk-or-v1-…"
+                                    }
                                     autoComplete="new-password"
                                     disabled={clearAPIKey}
                                     required={!hasCredential}
@@ -803,9 +875,17 @@ export function LLMSettingsPage({
                                     className="credential-visibility"
                                     onClick={() => setShowAPIKey((current) => !current)}
                                     disabled={clearAPIKey || apiKey === ""}
-                                    aria-label={showAPIKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
+                                    aria-label={
+                                      showAPIKey
+                                        ? t("settings.hideApiKey")
+                                        : t("settings.showApiKey")
+                                    }
                                   >
-                                    {showAPIKey ? <EyeSlash size={16} /> : <Eye size={16} />}
+                                    {showAPIKey ? (
+                                      <EyeSlashIcon size={16} />
+                                    ) : (
+                                      <EyeIcon size={16} />
+                                    )}
                                   </button>
                                 </div>
                                 <small>
@@ -816,7 +896,11 @@ export function LLMSettingsPage({
                                 {hasCredential && (
                                   <button
                                     type="button"
-                                    className={clearAPIKey ? "credential-action is-pending" : "credential-action"}
+                                    className={
+                                      clearAPIKey
+                                        ? "credential-action is-pending"
+                                        : "credential-action"
+                                    }
                                     onClick={() => {
                                       setClearAPIKey((current) => !current);
                                       setAPIKey("");
@@ -824,7 +908,9 @@ export function LLMSettingsPage({
                                       setSaved(false);
                                     }}
                                   >
-                                    {clearAPIKey ? t("settings.keepApiKey") : t("settings.removeApiKey")}
+                                    {clearAPIKey
+                                      ? t("settings.keepApiKey")
+                                      : t("settings.removeApiKey")}
                                   </button>
                                 )}
                               </div>
@@ -848,7 +934,10 @@ export function LLMSettingsPage({
                                         className="context-switch"
                                         checked={Boolean(value)}
                                         onCheckedChange={(checked) => {
-                                          setOptions((current) => ({ ...current, [option.key]: checked }));
+                                          setOptions((current) => ({
+                                            ...current,
+                                            [option.key]: checked,
+                                          }));
                                           setSaved(false);
                                         }}
                                         aria-label={option.label}
@@ -868,7 +957,10 @@ export function LLMSettingsPage({
                                         value={headersToText(value)}
                                         onChange={(event) => {
                                           const parsed = parseHeadersText(event.target.value);
-                                          setOptions((current) => ({ ...current, [option.key]: parsed }));
+                                          setOptions((current) => ({
+                                            ...current,
+                                            [option.key]: parsed,
+                                          }));
                                           setSaved(false);
                                         }}
                                         placeholder="X-Org-Id: tenant-42"
@@ -886,10 +978,15 @@ export function LLMSettingsPage({
                                       type={option.type === "url" ? "url" : "text"}
                                       value={typeof value === "string" ? value : ""}
                                       onChange={(event) => {
-                                        setOptions((current) => ({ ...current, [option.key]: event.target.value }));
+                                        setOptions((current) => ({
+                                          ...current,
+                                          [option.key]: event.target.value,
+                                        }));
                                         setSaved(false);
                                       }}
-                                      placeholder={typeof option.default === "string" ? option.default : ""}
+                                      placeholder={
+                                        typeof option.default === "string" ? option.default : ""
+                                      }
                                       autoComplete="off"
                                       spellCheck={false}
                                       required={option.required}
@@ -909,8 +1006,10 @@ export function LLMSettingsPage({
                                 onClick={() => void handleRemoveCustom(row)}
                                 disabled={removingId === row.rowId}
                               >
-                                <Trash size={12} />
-                                {removingId === row.rowId ? t("settings.providerRemoving") : t("settings.providerRemove")}
+                                <TrashIcon size={12} />
+                                {removingId === row.rowId
+                                  ? t("settings.providerRemoving")
+                                  : t("settings.providerRemove")}
                               </button>
                             )}
                             <button
@@ -918,12 +1017,15 @@ export function LLMSettingsPage({
                               type="button"
                               onClick={() => void handleTestConnection()}
                               disabled={
-                                saving
-                                || testingConnection
-                                || (!managedStored?.configured && managedDescriptor?.authKind !== "none")
+                                saving ||
+                                testingConnection ||
+                                (managedStored?.configured !== true &&
+                                  managedDescriptor?.authKind !== "none")
                               }
                             >
-                              {testingConnection ? t("settings.testingConnection") : t("settings.testConnection")}
+                              {testingConnection
+                                ? t("settings.testingConnection")
+                                : t("settings.testConnection")}
                             </button>
                             <button className="settings-primary" type="submit" disabled={!canSave}>
                               {saving ? t("settings.saving") : t("settings.save")}
@@ -943,7 +1045,7 @@ export function LLMSettingsPage({
                 className="provider-add-compatible"
                 onClick={() => startCustomProviderFlow()}
               >
-                <Plus size={12} weight="bold" /> {t("settings.addCompatibleProvider")}
+                <PlusIcon size={12} weight="bold" /> {t("settings.addCompatibleProvider")}
               </button>
             )}
 
@@ -963,7 +1065,7 @@ export function LLMSettingsPage({
                       aria-label={t("settings.customProviderCancel")}
                       onClick={() => cancelCustomProviderFlow()}
                     >
-                      <X size={12} />
+                      <XIcon size={12} />
                     </button>
                   </div>
                   <div className="settings-field">
@@ -983,7 +1085,9 @@ export function LLMSettingsPage({
                     <small>{t("settings.customProviderSlugHelp")}</small>
                   </div>
                   <div className="settings-field">
-                    <label htmlFor="custom-provider-label">{t("settings.customProviderLabel")}</label>
+                    <label htmlFor="custom-provider-label">
+                      {t("settings.customProviderLabel")}
+                    </label>
                     <input
                       id="custom-provider-label"
                       value={newCustomLabel}
@@ -994,13 +1098,23 @@ export function LLMSettingsPage({
                     <small>{t("settings.customProviderLabelHelp")}</small>
                   </div>
                   {newCustomError && (
-                    <p className="settings-error" role="alert">{newCustomError}</p>
+                    <p className="settings-error" role="alert">
+                      {newCustomError}
+                    </p>
                   )}
                   <div className="provider-custom-modal-actions">
-                    <button className="settings-secondary" type="button" onClick={() => cancelCustomProviderFlow()}>
+                    <button
+                      className="settings-secondary"
+                      type="button"
+                      onClick={() => cancelCustomProviderFlow()}
+                    >
                       {t("settings.customProviderCancel")}
                     </button>
-                    <button className="settings-primary" type="button" onClick={confirmCustomProvider}>
+                    <button
+                      className="settings-primary"
+                      type="button"
+                      onClick={confirmCustomProvider}
+                    >
                       {t("settings.customProviderCreate")}
                     </button>
                   </div>
@@ -1009,7 +1123,12 @@ export function LLMSettingsPage({
             )}
 
             <footer className="settings-page-actions">
-              <button className="settings-secondary" type="button" onClick={onBack} disabled={saving}>
+              <button
+                className="settings-secondary"
+                type="button"
+                onClick={onBack}
+                disabled={saving}
+              >
                 {t("settings.back")}
               </button>
             </footer>

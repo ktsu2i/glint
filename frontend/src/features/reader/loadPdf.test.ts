@@ -33,7 +33,10 @@ describe("createPdfLoadingTask", () => {
     vi.stubGlobal("ImageData", class ImageData {});
     vi.stubGlobal("Path2D", class Path2D {});
     const fixture = new TextEncoder().encode(generatedReaderPdf);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(fixture)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(fixture)),
+    );
 
     const task = await createPdfLoadingTask("/book/generated-reader", new AbortController().signal);
     const document = await task.promise;
@@ -47,15 +50,17 @@ describe("createPdfLoadingTask", () => {
       "Section 1: Context Budgets",
       "Section 2: Evidence",
     ]);
-    expect(
-      text.items.some((item) => "str" in item && item.str.includes("Context Budgets")),
-    ).toBe(true);
-    expect(extracted).toEqual(expect.objectContaining({
-      pageNumber: 1,
-      text: expect.stringContaining("Context Budgets"),
-      width: 612,
-      height: 792,
-    }));
+    expect(text.items.some((item) => "str" in item && item.str.includes("Context Budgets"))).toBe(
+      true,
+    );
+    expect(extracted).toEqual(
+      expect.objectContaining({
+        pageNumber: 1,
+        text: expect.stringContaining("Context Budgets"),
+        width: 612,
+        height: 792,
+      }),
+    );
     await task.destroy();
   });
 
@@ -64,7 +69,10 @@ describe("createPdfLoadingTask", () => {
     vi.stubGlobal("ImageData", class ImageData {});
     vi.stubGlobal("Path2D", class Path2D {});
     const pdf = createOnePagePdf();
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(pdf.buffer as ArrayBuffer)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(pdf.buffer as ArrayBuffer)),
+    );
 
     const task = await createPdfLoadingTask("/book/token", new AbortController().signal);
     const document = await task.promise;
@@ -74,7 +82,10 @@ describe("createPdfLoadingTask", () => {
   });
 
   it("rejects a frontend HTML fallback before PDF.js parsing", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>fallback</html>")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>fallback</html>")),
+    );
 
     await expect(
       createPdfLoadingTask("/book/token", new AbortController().signal),
@@ -82,7 +93,10 @@ describe("createPdfLoadingTask", () => {
   });
 
   it("reports an unsuccessful HTTP response", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 })),
+    );
 
     await expect(
       createPdfLoadingTask("/book/missing", new AbortController().signal),
@@ -92,10 +106,14 @@ describe("createPdfLoadingTask", () => {
     });
   });
 
+  // oxlint-disable-next-line vitest/expect-expect -- document global が無い環境でも例外なく解決できることを確認する。
   it("resolves asset URLs without a document global", async () => {
     vi.stubGlobal("document", undefined);
     const pdf = createOnePagePdf();
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(pdf.buffer as ArrayBuffer)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(pdf.buffer as ArrayBuffer)),
+    );
 
     const task = await createPdfLoadingTask("/book/token", new AbortController().signal);
     await task.destroy();

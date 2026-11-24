@@ -9,11 +9,7 @@ import {
 } from "react";
 import { createInstance, type i18n } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
-import {
-  getLanguageSettings,
-  saveLanguageSettings,
-  type LanguagePreference,
-} from "../api/backend";
+import { getLanguageSettings, saveLanguageSettings, type LanguagePreference } from "../api/backend";
 
 export const en = {
   "app.technicalReader": "Technical reader",
@@ -45,11 +41,13 @@ export const en = {
   "error.saveLanguage": "Could not save language settings.",
   "library.section": "Local library",
   "library.title": "Library",
-  "library.description": "Return to your technical books. PDFs and reading positions stay on this Mac.",
+  "library.description":
+    "Return to your technical books. PDFs and reading positions stay on this Mac.",
   "library.loading": "Loading your library…",
   "library.emptyKicker": "First volume",
   "library.emptyTitle": "Add your first book.",
-  "library.emptyDescription": "Add a searchable technical PDF to save its cover and reading position locally.",
+  "library.emptyDescription":
+    "Add a searchable technical PDF to save its cover and reading position locally.",
   "library.choosePdf": "Choose PDF",
   "library.importedBooks": "Imported books",
   "library.neverOpened": "Not opened yet",
@@ -70,7 +68,8 @@ export const en = {
   "library.chooseAgain": "Choose again",
   "librarySearch.section": "Local library",
   "librarySearch.title": "Search the library",
-  "librarySearch.description": "Search across every book you have imported and jump straight to the matching page.",
+  "librarySearch.description":
+    "Search across every book you have imported and jump straight to the matching page.",
   "librarySearch.formAria": "Library search form",
   "librarySearch.inputAria": "Search query",
   "librarySearch.placeholder": "Search across imported books",
@@ -101,7 +100,8 @@ export const en = {
   "chat.rateLimit": "The {provider} rate limit was reached. Wait a moment and try again.",
   "chat.modelMissing": "Configure a model for {provider}.",
   "chat.apiKeyMissing": "Configure an API key for {provider}.",
-  "chat.ollamaModelMissing": "Ollama does not have this model. Download it with `ollama pull <model>`.",
+  "chat.ollamaModelMissing":
+    "Ollama does not have this model. Download it with `ollama pull <model>`.",
   "chat.connectionFailed": "Could not connect to {provider}: {detail}",
   "chat.requestFailed": "{provider} request failed (HTTP {status}). {detail}",
   "chat.safetyBlocked": "{provider} blocked the prompt with its safety filter ({reason}).",
@@ -144,7 +144,8 @@ export const en = {
   "settings.saveError": "Could not save LLM provider settings.",
   "settings.section": "Application settings",
   "settings.title": "Settings",
-  "settings.description": "Manage the reading interface, model connection, and privacy constraints for AI context.",
+  "settings.description":
+    "Manage the reading interface, model connection, and privacy constraints for AI context.",
   "settings.connection": "Connection",
   "settings.checking": "Checking",
   "settings.available": "Available",
@@ -158,7 +159,8 @@ export const en = {
   "settings.readingEnvironment": "Reading environment",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme",
-  "settings.appearanceDescription": "Change the brightness of Library, Reader, and Chat while preserving the PDF page itself.",
+  "settings.appearanceDescription":
+    "Change the brightness of Library, Reader, and Chat while preserving the PDF page itself.",
   "settings.themeOptions": "Display theme",
   "settings.themeLight": "Light",
   "settings.themeLightDescription": "A bright reading desk",
@@ -192,7 +194,8 @@ export const en = {
   "settings.hideApiKey": "Hide API key",
   "settings.showApiKey": "Show API key",
   "settings.savedKeyHelp": "Saved. The actual value is never read back and is shown masked.",
-  "settings.newKeyHelp": "After saving, Glint never reads the API key value back into the interface.",
+  "settings.newKeyHelp":
+    "After saving, Glint never reads the API key value back into the interface.",
   "settings.keepApiKey": "Keep API key",
   "settings.removeApiKey": "Remove saved API key",
   "settings.back": "Back",
@@ -215,7 +218,8 @@ export const en = {
   "settings.testConnectionTimeout": "The provider connection test timed out.",
   "settings.testConnectionUnsupported": "This provider does not support connection testing.",
   "settings.modelConnections": "LLM Providers",
-  "settings.modelConnectionsDescription": "Add at least one provider with an API key to use AI features.",
+  "settings.modelConnectionsDescription":
+    "Add at least one provider with an API key to use AI features.",
   "settings.providerListAria": "Model providers",
   "settings.statusConfigured": "Configured",
   "settings.statusApiKeyMissing": "API key is not configured",
@@ -236,7 +240,8 @@ export const en = {
   "settings.addCompatibleProvider": "Add compatible provider",
   "settings.customProviderDialogAria": "Add OpenAI-compatible endpoint",
   "settings.credentialFromEnv": "Using environment variable",
-  "settings.credentialFromEnvHelp": "Glint reads the API key from {env}. The value saved in the OS credential store is ignored while this env var is set.",
+  "settings.credentialFromEnvHelp":
+    "Glint reads the API key from {env}. The value saved in the OS credential store is ignored while this env var is set.",
   "settings.credentialFromEnvBadge": "env override",
   "chat.credentialFromEnv": "API key from {env}",
   "reader.emptyKicker": "Reading desk",
@@ -244,12 +249,14 @@ export const en = {
   "reader.epubPlaceholderAria": "EPUB reader placeholder",
   "reader.epubPlaceholderKicker": "EPUB · coming next",
   "reader.epubPlaceholderTitle": "EPUB reading is coming in the next phase.",
-  "reader.epubPlaceholderBody": "The book is imported and searchable from the library. The reflowable reader lands once foliate-js is wired up.",
+  "reader.epubPlaceholderBody":
+    "The book is imported and searchable from the library. The reflowable reader lands once foliate-js is wired up.",
   "reader.epubPlaceholderSpine": "Spine has {count} sections.",
   "reader.pageControls": "Page controls",
   "reader.zoomControls": "Zoom controls",
   "reader.emptyTitle": "Read between the book and the code.",
-  "reader.emptyDescription": "Open a searchable technical PDF. Page text is attached to questions only when you choose.",
+  "reader.emptyDescription":
+    "Open a searchable technical PDF. Page text is attached to questions only when you choose.",
   "reader.closeToc": "Close table of contents",
   "reader.openToc": "Open table of contents",
   "reader.closeSearch": "Close search",
@@ -338,7 +345,8 @@ export const ja: Record<keyof typeof en, string> = {
   "library.loading": "本棚を読み込んでいます…",
   "library.emptyKicker": "First volume",
   "library.emptyTitle": "最初の一冊を、本棚へ。",
-  "library.emptyDescription": "検索可能な技術書PDFを追加すると、表紙と読書位置をローカルに保存します。",
+  "library.emptyDescription":
+    "検索可能な技術書PDFを追加すると、表紙と読書位置をローカルに保存します。",
   "library.choosePdf": "PDFを選ぶ",
   "library.importedBooks": "import済みの本",
   "library.neverOpened": "まだ開いていません",
@@ -390,7 +398,8 @@ export const ja: Record<keyof typeof en, string> = {
   "chat.rateLimit": "{provider}のrate limitに達しました。少し待ってから再試行してください。",
   "chat.modelMissing": "{provider}のmodelを設定してください。",
   "chat.apiKeyMissing": "{provider}のAPI keyを設定してください。",
-  "chat.ollamaModelMissing": "Ollamaにmodelがありません。`ollama pull <model>` で取得してください。",
+  "chat.ollamaModelMissing":
+    "Ollamaにmodelがありません。`ollama pull <model>` で取得してください。",
   "chat.connectionFailed": "{provider}へ接続できませんでした: {detail}",
   "chat.requestFailed": "{provider}へのリクエストに失敗しました（HTTP {status}）。{detail}",
   "chat.safetyBlocked": "{provider}のsafety filterがプロンプトをブロックしました（{reason}）。",
@@ -433,7 +442,8 @@ export const ja: Record<keyof typeof en, string> = {
   "settings.saveError": "LLM provider設定を保存できませんでした。",
   "settings.section": "Application settings",
   "settings.title": "設定",
-  "settings.description": "画面の表示と、AIへ読書contextを送るときの接続・privacy制約を管理します。",
+  "settings.description":
+    "画面の表示と、AIへ読書contextを送るときの接続・privacy制約を管理します。",
   "settings.connection": "Connection",
   "settings.checking": "確認中",
   "settings.available": "利用可能",
@@ -447,7 +457,8 @@ export const ja: Record<keyof typeof en, string> = {
   "settings.readingEnvironment": "Reading environment",
   "settings.appearance": "表示",
   "settings.theme": "Theme",
-  "settings.appearanceDescription": "PDFの紙面は保ったまま、Library・Reader・Chatの明るさを切り替えます。",
+  "settings.appearanceDescription":
+    "PDFの紙面は保ったまま、Library・Reader・Chatの明るさを切り替えます。",
   "settings.themeOptions": "表示テーマ",
   "settings.themeLight": "ライト",
   "settings.themeLightDescription": "明るい読書机",
@@ -504,7 +515,8 @@ export const ja: Record<keyof typeof en, string> = {
   "settings.testConnectionTimeout": "provider接続テストがタイムアウトしました。",
   "settings.testConnectionUnsupported": "このproviderは接続テストに対応していません。",
   "settings.modelConnections": "LLM Providers",
-  "settings.modelConnectionsDescription": "AI機能を使うには、API keyを設定したproviderを少なくとも1つ追加してください。",
+  "settings.modelConnectionsDescription":
+    "AI機能を使うには、API keyを設定したproviderを少なくとも1つ追加してください。",
   "settings.providerListAria": "Model provider一覧",
   "settings.statusConfigured": "設定済み",
   "settings.statusApiKeyMissing": "API key未設定",
@@ -525,7 +537,8 @@ export const ja: Record<keyof typeof en, string> = {
   "settings.addCompatibleProvider": "OpenAI互換providerを追加",
   "settings.customProviderDialogAria": "OpenAI互換endpointを追加",
   "settings.credentialFromEnv": "環境変数を使用中",
-  "settings.credentialFromEnvHelp": "API keyを {env} から読み込んでいます。OS credential storeに保存した値はこの環境変数が設定されている間は無視されます。",
+  "settings.credentialFromEnvHelp":
+    "API keyを {env} から読み込んでいます。OS credential storeに保存した値はこの環境変数が設定されている間は無視されます。",
   "settings.credentialFromEnvBadge": "env上書き中",
   "chat.credentialFromEnv": "API keyの取得元: {env}",
   "reader.emptyKicker": "Reading desk",
@@ -533,12 +546,14 @@ export const ja: Record<keyof typeof en, string> = {
   "reader.epubPlaceholderAria": "EPUBリーダーのプレースホルダー",
   "reader.epubPlaceholderKicker": "EPUB · 近日対応",
   "reader.epubPlaceholderTitle": "EPUBのリーダーは次フェーズで実装します。",
-  "reader.epubPlaceholderBody": "本棚への登録と検索は完了しています。foliate-jsを組み込んだreflowable readerが続いて公開予定です。",
+  "reader.epubPlaceholderBody":
+    "本棚への登録と検索は完了しています。foliate-jsを組み込んだreflowable readerが続いて公開予定です。",
   "reader.epubPlaceholderSpine": "spineは{count}章で構成されています。",
   "reader.pageControls": "ページ操作",
   "reader.zoomControls": "ズーム操作",
   "reader.emptyTitle": "本とコードのあいだを読む。",
-  "reader.emptyDescription": "検索可能な技術書PDFを開いてください。ページ本文は、必要なときだけ質問に添付できます。",
+  "reader.emptyDescription":
+    "検索可能な技術書PDFを開いてください。ページ本文は、必要なときだけ質問に添付できます。",
   "reader.closeToc": "目次を閉じる",
   "reader.openToc": "目次を開く",
   "reader.closeSearch": "検索を閉じる",
@@ -584,13 +599,15 @@ export const ja: Record<keyof typeof en, string> = {
   "reader.goToResult": "{page}ページへ移動",
   "reader.matches": "一致 {count}",
   "reader.untitled": "(無題)",
-  "error.pdfTimeout": "PDFの読み込みがタイムアウトしました。アプリを再起動して、もう一度開いてください。",
+  "error.pdfTimeout":
+    "PDFの読み込みがタイムアウトしました。アプリを再起動して、もう一度開いてください。",
   "error.openPdf": "PDFを開けませんでした。",
   "error.canvas": "Canvasを初期化できませんでした。",
   "error.renderPage": "ページを描画できませんでした。",
   "error.searchBook": "本の中を検索できませんでした。",
   "error.fetchPdf": "PDFファイルを取得できませんでした（HTTP {status}）。",
-  "error.invalidPdf": "取得したデータがPDFではありません。アプリを再起動して、もう一度開いてください。",
+  "error.invalidPdf":
+    "取得したデータがPDFではありません。アプリを再起動して、もう一度開いてください。",
 };
 
 export type TranslationKey = keyof typeof en;
@@ -634,7 +651,13 @@ const LanguageSettingsContext = createContext<LanguageSettingsValue>({
   changeLanguage: async () => {},
 });
 
-export function I18nProvider({ children, initialLanguage }: { children: ReactNode; initialLanguage?: LanguagePreference }) {
+export function I18nProvider({
+  children,
+  initialLanguage,
+}: {
+  children: ReactNode;
+  initialLanguage?: LanguagePreference;
+}) {
   const [i18n] = useState<i18n>(() => createI18n(initialLanguage ?? "en"));
   const [language, setLanguage] = useState<LanguagePreference>(initialLanguage ?? "en");
   const [loading, setLoading] = useState(initialLanguage === undefined);
@@ -647,56 +670,65 @@ export function I18nProvider({ children, initialLanguage }: { children: ReactNod
   useEffect(() => {
     if (initialLanguage !== undefined) return;
     let active = true;
-    void getLanguageSettings()
-      .then((settings) => {
+    const load = async () => {
+      try {
+        const settings = await getLanguageSettings();
         if (!active) return;
-        return i18n.changeLanguage(settings.language).then(() => {
-          if (!active) return;
-          setLanguage(settings.language);
-          setError("");
-        });
-      })
-      .catch((reason) => {
+        await i18n.changeLanguage(settings.language);
+        if (!active) return;
+        setLanguage(settings.language);
+        setError("");
+      } catch (reason) {
         if (!active) return;
         setError(reason instanceof Error ? reason.message : i18n.t("error.loadLanguage"));
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
-    return () => { active = false; };
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
   }, [i18n, initialLanguage]);
 
-  const changeLanguage = useCallback(async (next: LanguagePreference) => {
-    if (next === language) return;
-    const previous = language;
-    setError("");
-    try {
-      await i18n.changeLanguage(next);
-      setLanguage(next);
-      const saved = await saveLanguageSettings(next);
-      await i18n.changeLanguage(saved.language);
-      setLanguage(saved.language);
-    } catch (reason) {
-      await i18n.changeLanguage(previous);
-      setLanguage(previous);
-      const message = reason instanceof Error ? reason.message : i18n.t("error.saveLanguage", { lng: previous });
-      setError(message);
-      throw new Error(message);
-    }
-  }, [i18n, language]);
+  const changeLanguage = useCallback(
+    async (next: LanguagePreference) => {
+      if (next === language) return;
+      const previous = language;
+      setError("");
+      try {
+        await i18n.changeLanguage(next);
+        setLanguage(next);
+        const saved = await saveLanguageSettings(next);
+        await i18n.changeLanguage(saved.language);
+        setLanguage(saved.language);
+      } catch (reason) {
+        await i18n.changeLanguage(previous);
+        setLanguage(previous);
+        const message =
+          reason instanceof Error
+            ? reason.message
+            : i18n.t("error.saveLanguage", { lng: previous });
+        setError(message);
+        throw new Error(message, { cause: reason });
+      }
+    },
+    [i18n, language],
+  );
 
-  const value = useMemo<LanguageSettingsValue>(() => ({
-    language,
-    loading,
-    error,
-    changeLanguage,
-  }), [changeLanguage, error, language, loading]);
+  const value = useMemo<LanguageSettingsValue>(
+    () => ({
+      language,
+      loading,
+      error,
+      changeLanguage,
+    }),
+    [changeLanguage, error, language, loading],
+  );
 
   return (
     <I18nextProvider i18n={i18n}>
-      <LanguageSettingsContext.Provider value={value}>
-        {children}
-      </LanguageSettingsContext.Provider>
+      <LanguageSettingsContext.Provider value={value}>{children}</LanguageSettingsContext.Provider>
     </I18nextProvider>
   );
 }

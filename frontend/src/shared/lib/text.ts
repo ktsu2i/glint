@@ -2,11 +2,11 @@ export const MAX_CHAT_CONTEXT_CHARACTERS = 6000;
 
 export function normalizePageText(items: Array<{ str?: string; hasEOL?: boolean }>): string {
   return items
-    .map((item) => `${item.str ?? ""}${item.hasEOL ? "\n" : " "}`)
+    .map((item) => `${item.str ?? ""}${item.hasEOL === true ? "\n" : " "}`)
     .join("")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
+    .replaceAll(/[ \t]+\n/g, "\n")
+    .replaceAll(/[ \t]{2,}/g, " ")
+    .replaceAll(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -15,7 +15,7 @@ export function trimChatContext(value: string): string {
 }
 
 export function contextPreview(value: string, maximum = 260): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = value.replaceAll(/\s+/g, " ").trim();
   const characters = Array.from(normalized);
   if (characters.length <= maximum) {
     return normalized;

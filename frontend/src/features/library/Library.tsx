@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowCounterClockwise,
-  ArrowRight,
-  BookOpenText,
-  Books,
-  Plus,
-  Trash,
-  WarningCircle,
+  ArrowCounterClockwiseIcon,
+  ArrowRightIcon,
+  BookOpenTextIcon,
+  BooksIcon,
+  PlusIcon,
+  TrashIcon,
+  WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { BookFormat, BookSummary } from "../../shared/api/backend";
@@ -23,11 +23,11 @@ type LibraryProps = {
   error: string;
   busyBookId: string;
   opening: boolean;
-  onImport: () => void;
-  onOpen: (book: BookSummary) => void;
-  onRelink: (book: BookSummary) => void;
-  onRemove: (book: BookSummary) => void;
-  onRename: (book: BookSummary, name: string) => void;
+  onImport: () => Promise<void>;
+  onOpen: (book: BookSummary) => Promise<void>;
+  onRelink: (book: BookSummary) => Promise<void>;
+  onRemove: (book: BookSummary) => Promise<void>;
+  onRename: (book: BookSummary, name: string) => Promise<void>;
 };
 
 export function Library({
@@ -71,7 +71,7 @@ export function Library({
     }
     const next = draftName.trim();
     if (next && next !== book.title) {
-      onRename(book, next);
+      void onRename(book, next);
     }
     cancelEdit();
   }
@@ -103,50 +103,56 @@ export function Library({
         <button
           type="button"
           className="library-import-button"
-          onClick={onImport}
+          onClick={() => void onImport()}
           disabled={opening}
         >
-          <Plus size={14} weight="bold" />
+          <PlusIcon size={14} weight="bold" />
           {opening ? t("app.choosingPdf") : t("app.addPdf")}
         </button>
       </header>
 
       {error && (
         <div className="library-error" role="alert">
-          <WarningCircle size={17} />
+          <WarningCircleIcon size={17} />
           <span>{error}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="library-loading" role="status">{t("library.loading")}</div>
+        <div className="library-loading" role="status">
+          {t("library.loading")}
+        </div>
       ) : books.length === 0 ? (
         <div className="library-empty">
           <div className="empty-shelf-mark" aria-hidden="true">
-            <Books size={37} weight="thin" />
+            <BooksIcon size={37} weight="thin" />
             <span />
           </div>
           <p className="section-label">{t("library.emptyKicker")}</p>
           <h2>{t("library.emptyTitle")}</h2>
           <p>{t("library.emptyDescription")}</p>
-          <button type="button" className="library-primary-action" onClick={onImport}>
-            <Plus size={16} weight="bold" />
+          <button type="button" className="library-primary-action" onClick={() => void onImport()}>
+            <PlusIcon size={16} weight="bold" />
             {t("library.choosePdf")}
           </button>
         </div>
       ) : (
         <div className="book-grid" aria-label={t("library.importedBooks")}>
           {books.map((book) => {
-            const progress = book.pageCount > 0
-              ? Math.min(100, Math.max(2, (book.lastPage / book.pageCount) * 100))
-              : 2;
+            const progress =
+              book.pageCount > 0
+                ? Math.min(100, Math.max(2, (book.lastPage / book.pageCount) * 100))
+                : 2;
             const busy = busyBookId === book.id;
             return (
-              <article className={book.available ? "book-card" : "book-card is-missing"} key={book.id}>
+              <article
+                className={book.available ? "book-card" : "book-card is-missing"}
+                key={book.id}
+              >
                 <button
                   type="button"
                   className="book-cover-button"
-                  onClick={() => onOpen(book)}
+                  onClick={() => void onOpen(book)}
                   disabled={!book.available || busy}
                   aria-label={t("library.openBook", { title: book.title })}
                 >
@@ -155,9 +161,11 @@ export function Library({
                       <img src={book.coverUrl} alt="" />
                     ) : (
                       <span className="placeholder-cover" aria-hidden="true">
-                        <span className="placeholder-kicker">GLINT / {formatBadgeLabel(book.format)}</span>
+                        <span className="placeholder-kicker">
+                          GLINT / {formatBadgeLabel(book.format)}
+                        </span>
                         <strong>{book.title}</strong>
-                        <BookOpenText size={25} weight="thin" />
+                        <BookOpenTextIcon size={25} weight="thin" />
                       </span>
                     )}
                     <span className="reading-progress" aria-hidden="true">
@@ -168,7 +176,7 @@ export function Library({
                     </span>
                     {!book.available && (
                       <span className="missing-cover-state">
-                        <WarningCircle size={21} />
+                        <WarningCircleIcon size={21} />
                         {t("library.missingFile")}
                       </span>
                     )}
@@ -220,21 +228,25 @@ export function Library({
                       <button
                         type="button"
                         className="book-card-remove"
-                        onClick={() => onRemove(book)}
+                        onClick={() => void onRemove(book)}
                         disabled={busy}
                         aria-label={t("library.removeBook", { title: book.title })}
                       >
-                        <Trash size={13} weight="bold" />
+                        <TrashIcon size={13} weight="bold" />
                         {t("library.remove")}
                       </button>
                       {book.available ? (
-                        <button type="button" onClick={() => onOpen(book)} disabled={busy}>
-                          {busy ? t("library.opening") : book.lastPage > 1 ? t("library.continue") : t("library.open")}
-                          <ArrowRight size={13} weight="bold" />
+                        <button type="button" onClick={() => void onOpen(book)} disabled={busy}>
+                          {busy
+                            ? t("library.opening")
+                            : book.lastPage > 1
+                              ? t("library.continue")
+                              : t("library.open")}
+                          <ArrowRightIcon size={13} weight="bold" />
                         </button>
                       ) : (
-                        <button type="button" onClick={() => onRelink(book)} disabled={busy}>
-                          <ArrowCounterClockwise size={13} weight="bold" />
+                        <button type="button" onClick={() => void onRelink(book)} disabled={busy}>
+                          <ArrowCounterClockwiseIcon size={13} weight="bold" />
                           {busy ? t("library.choosing") : t("library.chooseAgain")}
                         </button>
                       )}
