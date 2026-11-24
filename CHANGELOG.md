@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.3.0](https://github.com/ktsu2i/glint/compare/v0.2.2...v0.3.0) - 2026-11-24
+
+### New Features
+- chore: migrate Glint to Wails v3 by @ktsu2i in https://github.com/ktsu2i/glint/pull/40
+
 ## [v0.2.2](https://github.com/ktsu2i/glint/compare/v0.2.1...v0.2.2) - 2026-11-24
 
 ### Other Changes
