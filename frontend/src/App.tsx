@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import {
-  BookOpenTextIcon,
-  BooksIcon,
-  GearSixIcon,
-  MagnifyingGlassIcon,
-} from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
 import { Library } from "./features/library/Library";
+import { LibraryTopBar } from "./features/library/LibraryTopBar";
 import { LibrarySearch, type LibrarySearchStatus } from "./features/library/LibrarySearch";
 import { EpubReaderPlaceholder } from "./features/reader/EpubReaderPlaceholder";
 import { PdfReader } from "./features/reader/PdfReader";
@@ -422,144 +417,74 @@ function AppContent() {
     setView("reader");
   }, [book, currentPage]);
 
-  const contextLabel =
-    view === "reader" && book
-      ? book.title
-      : view === "settings"
-        ? t("app.settings")
-        : view === "search"
-          ? t("app.search")
-          : t("app.library");
-  const ContextIcon =
-    view === "reader" && book
-      ? BookOpenTextIcon
-      : view === "settings"
-        ? GearSixIcon
-        : view === "search"
-          ? MagnifyingGlassIcon
-          : BooksIcon;
-
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
       <main className="app-shell">
-        <header className="app-toolbar" aria-label="Glint">
-          <div className="app-chrome">
-            <span className="wordmark">GLINT</span>
-            <span className="chrome-separator" aria-hidden="true" />
-            <span className="chrome-view" title={contextLabel}>
-              <ContextIcon size={13} weight="regular" />
-              <span>{contextLabel}</span>
-            </span>
-          </div>
-        </header>
-
-        <div className="app-body">
-          <aside className="app-navigation" aria-label={t("app.mainNavigation")}>
-            <nav className="app-navigation-primary">
-              <button
-                type="button"
-                className={view === "library" ? "app-nav-button is-active" : "app-nav-button"}
-                aria-current={view === "library" ? "page" : undefined}
-                onClick={showLibrary}
-              >
-                <BooksIcon size={20} weight={view === "library" ? "fill" : "regular"} />
-                <span>{t("app.library")}</span>
-              </button>
-              <button
-                type="button"
-                className={view === "search" ? "app-nav-button is-active" : "app-nav-button"}
-                aria-current={view === "search" ? "page" : undefined}
-                onClick={showSearch}
-              >
-                <MagnifyingGlassIcon size={20} weight={view === "search" ? "fill" : "regular"} />
-                <span>{t("app.search")}</span>
-              </button>
-              <button
-                type="button"
-                className={view === "reader" ? "app-nav-button is-active" : "app-nav-button"}
-                aria-current={view === "reader" ? "page" : undefined}
-                onClick={resumeReader}
-                disabled={!book}
-              >
-                <BookOpenTextIcon size={20} weight={view === "reader" ? "fill" : "regular"} />
-                <span>{t("app.read")}</span>
-              </button>
-            </nav>
-
-            <div className="app-navigation-secondary">
-              {book && currentPage > 0 && (
-                <div
-                  className="nav-reading-position"
-                  aria-label={t("app.pageLabel", { page: currentPage })}
-                >
-                  <span>{t("app.page").toUpperCase()}</span>
-                  <i aria-hidden="true" />
-                  <strong>{String(currentPage).padStart(3, "0")}</strong>
-                </div>
-              )}
-              <button
-                type="button"
-                className={view === "settings" ? "app-nav-button is-active" : "app-nav-button"}
-                aria-current={view === "settings" ? "page" : undefined}
-                onClick={openSettings}
-              >
-                <GearSixIcon size={20} weight={view === "settings" ? "fill" : "regular"} />
-                <span>{t("app.settings")}</span>
-              </button>
-            </div>
-          </aside>
-
-          <div className="app-content">
-            {view === "settings" ? (
-              <SettingsPage
-                onBack={closeSettings}
-                theme={theme}
-                themeLoading={themeLoading}
-                themeError={themeError}
-                onThemeChange={handleThemeChange}
-              />
-            ) : view === "library" ? (
-              <Library
-                books={books}
-                loading={libraryLoading}
-                error={libraryError}
-                busyBookId={busyBookId}
-                opening={opening}
-                onImport={handleImportPDF}
-                onOpen={handleOpenBook}
-                onRelink={handleRelinkBook}
-                onRemove={handleRemoveBook}
-                onRename={handleRenameBook}
-              />
-            ) : view === "search" ? (
-              <LibrarySearch
-                busyBookId={busyBookId}
-                searchQuery={searchQuery}
-                searchInput={searchInput}
-                searchResults={searchResults}
-                searchStatus={searchStatus}
-                searchError={searchError}
-                onSearchInputChange={setSearchInput}
-                onSearchSubmit={handleLibrarySearchSubmit}
-                onSearchClear={handleLibrarySearchClear}
-                onOpenAtPage={handleOpenBookAtPage}
-              />
+        {view === "reader" ? (
+          <div className="workspace">
+            {book?.format === "epub" ? (
+              <EpubReaderPlaceholder book={book} onBack={showLibrary} />
             ) : (
-              <div className="workspace">
-                {book?.format === "epub" ? (
-                  <EpubReaderPlaceholder book={book} />
-                ) : (
-                  <PdfReader
-                    book={book}
-                    initialPage={book?.initialPage ?? 1}
-                    onPageChange={handlePageChange}
-                    onBack={showLibrary}
-                  />
-                )}
-              </div>
+              <PdfReader
+                book={book}
+                initialPage={book?.initialPage ?? 1}
+                onPageChange={handlePageChange}
+                onBack={showLibrary}
+              />
             )}
           </div>
-        </div>
+        ) : (
+          <div className="library-screen ambient">
+            <LibraryTopBar
+              title={t("app.library")}
+              resumeTitle={book ? book.title : null}
+              opening={opening}
+              searchActive={view === "search"}
+              settingsActive={view === "settings"}
+              onImport={() => void handleImportPDF()}
+              onResume={resumeReader}
+              onSearch={view === "search" ? showLibrary : showSearch}
+              onSettings={view === "settings" ? closeSettings : openSettings}
+            />
+            <div className="library-content">
+              {view === "settings" ? (
+                <SettingsPage
+                  onBack={closeSettings}
+                  theme={theme}
+                  themeLoading={themeLoading}
+                  themeError={themeError}
+                  onThemeChange={handleThemeChange}
+                />
+              ) : view === "search" ? (
+                <LibrarySearch
+                  busyBookId={busyBookId}
+                  searchQuery={searchQuery}
+                  searchInput={searchInput}
+                  searchResults={searchResults}
+                  searchStatus={searchStatus}
+                  searchError={searchError}
+                  onSearchInputChange={setSearchInput}
+                  onSearchSubmit={handleLibrarySearchSubmit}
+                  onSearchClear={handleLibrarySearchClear}
+                  onOpenAtPage={handleOpenBookAtPage}
+                />
+              ) : (
+                <Library
+                  books={books}
+                  loading={libraryLoading}
+                  error={libraryError}
+                  busyBookId={busyBookId}
+                  opening={opening}
+                  onImport={handleImportPDF}
+                  onOpen={handleOpenBook}
+                  onRelink={handleRelinkBook}
+                  onRemove={handleRemoveBook}
+                  onRename={handleRenameBook}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </Tooltip.Provider>
   );

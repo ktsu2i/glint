@@ -48,16 +48,21 @@ vi.mock("./features/reader/PdfReader", () => ({
     book,
     initialPage,
     onPageChange,
+    onBack,
   }: {
     book: { name: string } | null;
     initialPage: number;
     onPageChange: (page: number, pageCount: number) => void;
+    onBack: () => void;
   }) => (
     <div data-testid="pdf-reader">
       <span>{book?.name ?? "no-book"}</span>
       <span>initial-{initialPage}</span>
       <button type="button" onClick={() => onPageChange(4, 12)}>
         set-page
+      </button>
+      <button type="button" onClick={onBack}>
+        back-to-library
       </button>
     </div>
   ),
@@ -176,9 +181,8 @@ describe("App", () => {
     const { unmount } = render(<App />);
 
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "メインナビゲーション" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "本棚" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("button", { name: "読書" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /読書に戻る/ })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     expect(screen.getByText("選択しています…")).toBeTruthy();
@@ -188,21 +192,14 @@ describe("App", () => {
     mocks.openBookFile.mockResolvedValueOnce(openedBook);
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     await waitFor(() => expect(screen.getByText("initial-3")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "読書" }).getAttribute("aria-current")).toBe("page");
 
     fireEvent.click(screen.getByRole("button", { name: "set-page" }));
-    expect(screen.getByLabelText("4ページ")).toBeTruthy();
-    expect(screen.getByText("004")).toBeTruthy();
     expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12);
 
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
-    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "設定" }).getAttribute("aria-current")).toBe("page");
-    fireEvent.click(screen.getByRole("button", { name: "読書" }));
+    fireEvent.click(screen.getByRole("button", { name: "back-to-library" }));
+    expect(await screen.findByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Guideの読書に戻る" }));
     expect(await screen.findByText("initial-4")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
-    expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
     unmount();
   });
 
@@ -245,8 +242,8 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "表示", level: 2 })).toBeTruthy();
     expect(screen.queryByText(/API key/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
-    expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "設定" }));
+    expect(await screen.findByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
   });
 
   it("restores, applies, and persists the appearance theme", async () => {
