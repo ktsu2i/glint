@@ -65,7 +65,6 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      # aqua.yaml の版で golangci-lint を入れる。aqua-checksums.json で検証する。
       - name: Set up golangci-lint (aqua.yaml)
         uses: aquaproj/aqua-installer@b8be739961814ee66b9e0d505f4d5de0d2eff047 # v4.1.2
         with:

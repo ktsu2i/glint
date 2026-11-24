@@ -1,10 +1,6 @@
-# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
-# golangci-lint の設定 (https://golangci-lint.run/docs/configuration/file/)
-# 版は aqua.yaml で固定している。CI (.github/workflows/lint.yaml) も同じ版を使う。
 version: "2"
 
 linters:
-  # standard (errcheck, govet, ineffassign, staticcheck, unused) に加えて有効にする。
   enable:
     - bodyclose
     - copyloopvar
@@ -29,7 +25,6 @@ linters:
   settings:
     forbidigo:
       forbid:
-        # テストの assertion は testify (assert / require) で書く。
         - pattern: ^(t|b|tb)\.(Error|Errorf|Fatal|Fatalf|Fail|FailNow)$
           msg: use testify assert / require instead
     nolintlint:
@@ -38,24 +33,19 @@ linters:
     staticcheck:
       checks:
         - all
-        # 公開 API の doc comment は必須にしない。
         - -ST1000
         - -ST1020
         - -ST1021
         - -ST1022
-        # request DTO と保存用の型は別物として明示的に詰め替える。
         - -S1016
     testifylint:
       disable:
-        # 失敗後も残りの assert を見たい場面があるので require を強制しない。
         - require-error
     usetesting:
-      # テストでは context.Background() / context.TODO() ではなく t.Context() を使う。
       context-background: true
       context-todo: true
 
 issues:
-  # 同種の指摘を省略せず全件表示する。
   max-issues-per-linter: 0
   max-same-issues: 0
 
