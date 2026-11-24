@@ -119,6 +119,8 @@ export const en = {
   "reader.emptyTitle": "Read between the book and the code.",
   "reader.emptyDescription":
     "Open a searchable technical PDF. Page text is attached to questions only when you choose.",
+  "reader.backToLibrary": "Library",
+  "reader.closePanel": "Close panel",
   "reader.closeToc": "Close table of contents",
   "reader.openToc": "Open table of contents",
   "reader.closeSearch": "Close search",
@@ -279,6 +281,8 @@ export const ja: Record<keyof typeof en, string> = {
   "reader.emptyTitle": "本とコードのあいだを読む。",
   "reader.emptyDescription":
     "検索可能な技術書PDFを開いてください。ページ本文は、必要なときだけ質問に添付できます。",
+  "reader.backToLibrary": "本棚",
+  "reader.closePanel": "パネルを閉じる",
   "reader.closeToc": "目次を閉じる",
   "reader.openToc": "目次を開く",
   "reader.closeSearch": "検索を閉じる",

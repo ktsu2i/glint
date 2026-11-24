@@ -845,6 +845,47 @@ describe("PdfReader", () => {
     expect(screen.getByRole("button", { name: "目次を閉じる" })).toBeTruthy();
   });
 
+  it("hides the floating controls while reading and brings them back on demand", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 6;
+    resolveDocument(pdfDocument);
+    const onBack = vi.fn();
+    render(<PdfReader book={makeBook()} onPageChange={vi.fn()} onBack={onBack} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    const reader = screen.getByRole("region", { name: "PDFリーダー" });
+    const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
+    expect(reader.className).toContain("is-chrome-visible");
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    await waitFor(() => expect(reader.className).not.toContain("is-chrome-visible"));
+    expect(globalThis.document.querySelector(".reader-status")?.textContent).toBe("2 / 6");
+
+    fireEvent.click(stage);
+    expect(reader.className).toContain("is-chrome-visible");
+    fireEvent.click(stage);
+    expect(reader.className).not.toContain("is-chrome-visible");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(reader.className).toContain("is-chrome-visible");
+
+    fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
+    expect(screen.getByRole("complementary", { name: "目次" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("complementary", { name: "目次" })).toBeNull();
+    expect(reader.className).toContain("is-chrome-visible");
+
+    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
+    fireEvent.click(stage);
+    expect(screen.queryByRole("complementary", { name: "しおり" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
+    fireEvent.click(screen.getByRole("button", { name: "パネルを閉じる" }));
+    expect(screen.queryByRole("complementary", { name: "本文検索" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
   it("persists page bookmarks, navigates from the bookmark panel, and removes them", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);

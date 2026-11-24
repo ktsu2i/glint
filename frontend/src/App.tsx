@@ -553,6 +553,7 @@ function AppContent() {
                     book={book}
                     initialPage={book?.initialPage ?? 1}
                     onPageChange={handlePageChange}
+                    onBack={showLibrary}
                   />
                 )}
               </div>
