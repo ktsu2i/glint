@@ -7,149 +7,115 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
-
-	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/library"
-	"github.com/kaito/glint/internal/settings"
 )
 
-type BookFile struct {
-	ID               string      `json:"id"`
-	Title            string      `json:"title"`
-	Name             string      `json:"name"`
-	URL              string      `json:"url"`
-	Format           string      `json:"format"`
-	Size             int64       `json:"size"`
-	InitialPage      int         `json:"initialPage"`
-	IndexedPageCount int         `json:"indexedPageCount"`
-	NextSegment      int         `json:"nextSegment"`
-	CoverStatus      string      `json:"coverStatus"`
-	SpineItems       []SpineItem `json:"spineItems,omitempty"`
+// ErrSourceMissing reports that a library entry's source file is no longer on disk.
+var ErrSourceMissing = errors.New("book source file is missing")
+
+// ErrFormatMismatch reports that a file's format does not match its library entry.
+var ErrFormatMismatch = errors.New("book file format does not match the library entry")
+
+// Entry is a library book with its on-disk state resolved.
+type Entry struct {
+	library.Book
+	Available bool
 }
 
-type BookSegmentInput struct {
-	Ordinal     int    `json:"ordinal"`
-	Location    string `json:"location"`
-	HeadingPath string `json:"headingPath"`
-	Text        string `json:"text"`
+// OpenedBook is a book ready for the reader, with its index progress.
+type OpenedBook struct {
+	Book            library.Book
+	Spine           []SpineItem
+	IndexedSegments int
+	NextSegment     int
 }
 
+// IndexTarget is a PDF whose page text still has to be extracted by the frontend.
 type IndexTarget struct {
-	ID          string `json:"id"`
-	URL         string `json:"url"`
-	NextSegment int    `json:"nextSegment"`
-	Total       int    `json:"total"`
+	Book        library.Book
+	NextSegment int
+	Total       int
 }
 
-type BookSearchResult struct {
-	PageNumber  int    `json:"pageNumber"`
-	Location    string `json:"location"`
-	HeadingPath string `json:"headingPath"`
-	Excerpt     string `json:"excerpt"`
-	MatchCount  int    `json:"matchCount"`
+// LibraryHit groups the matching segments of one book.
+type LibraryHit struct {
+	Entry        Entry
+	TotalMatches int
+	Segments     []library.SegmentSearchResult
 }
 
-type BookBookmark struct {
-	PageNumber int    `json:"pageNumber"`
-	CreatedAt  string `json:"createdAt"`
-}
-
-type BookSummary struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	FileName    string `json:"fileName"`
-	Format      string `json:"format"`
-	Size        int64  `json:"size"`
-	PageCount   int    `json:"pageCount"`
-	LastPage    int    `json:"lastPage"`
-	ImportedAt  string `json:"importedAt"`
-	LastOpened  string `json:"lastOpenedAt"`
-	CoverURL    string `json:"coverUrl"`
-	CoverStatus string `json:"coverStatus"`
-	Available   bool   `json:"available"`
-}
-
-type LibrarySearchHit struct {
-	Book         BookSummary        `json:"book"`
-	TotalMatches int                `json:"totalMatches"`
-	Pages        []BookSearchResult `json:"pages"`
-}
-
+// Service holds the book use cases. It does not depend on Wails or the UI.
 type Service struct {
-	ctx           context.Context
 	library       *library.Store
-	assets        *assetserver.Server
 	dataDirectory string
-	settings      *settings.Manager
 }
 
-func New(lib *library.Store, assets *assetserver.Server, dataDirectory string, settingsManager *settings.Manager) *Service {
-	return &Service{
-		library:       lib,
-		assets:        assets,
-		dataDirectory: dataDirectory,
-		settings:      settingsManager,
-	}
+func New(lib *library.Store, dataDirectory string) *Service {
+	return &Service{library: lib, dataDirectory: dataDirectory}
 }
 
-func Startup(s *Service, ctx context.Context) {
-	s.ctx = ctx
-}
-
-func (s *Service) appContext() context.Context {
-	if s.ctx == nil {
-		return context.Background()
-	}
-	return s.ctx
-}
-
-func (s *Service) OpenBookFile() (BookFile, error) {
-	if s.ctx == nil {
-		return BookFile{}, errors.New("application is not ready")
-	}
-	path, err := s.chooseBookFile(s.localized(
-		"Add a technical book to the library",
-		"技術書を本棚へ追加",
-	))
-	if err != nil || path == "" {
-		return BookFile{}, err
-	}
-	return s.selectBookFile(path)
-}
-
-func (s *Service) OpenBook(id string) (BookFile, error) {
-	book, err := s.library.Get(s.appContext(), id)
+// Import adds the file at filePath to the library and opens it.
+func (s *Service) Import(ctx context.Context, filePath string) (OpenedBook, error) {
+	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
-		return BookFile{}, err
+		return OpenedBook{}, err
+	}
+	id, err := randomToken()
+	if err != nil {
+		return OpenedBook{}, fmt.Errorf("create book id: %w", err)
+	}
+	book, err := s.library.Import(
+		ctx, id, filePath, inspection.FileHash,
+		inspection.Format, inspection.SizeBytes, time.Now(),
+	)
+	if err != nil {
+		return OpenedBook{}, err
+	}
+	if err := s.afterImport(ctx, book, pkg); err != nil {
+		return OpenedBook{}, err
+	}
+	book, err = s.library.Get(ctx, book.ID)
+	if err != nil {
+		return OpenedBook{}, err
+	}
+	if err := s.recordSourceStat(ctx, &book, inspection); err != nil {
+		return OpenedBook{}, err
+	}
+	if err := s.library.MarkOpened(ctx, book.ID, time.Now()); err != nil {
+		return OpenedBook{}, err
+	}
+	return s.opened(ctx, book, pkg)
+}
+
+// Open loads a library book, refreshing its record if the source file changed.
+func (s *Service) Open(ctx context.Context, id string) (OpenedBook, error) {
+	book, err := s.library.Get(ctx, id)
+	if err != nil {
+		return OpenedBook{}, err
 	}
 	if !fileExists(book.SourcePath) {
-		return BookFile{}, errors.New(s.localized(
-			"The book could not be found. Choose the file again from the library.",
-			"本のファイルが見つかりません。本棚からファイルを再選択してください。",
-		))
+		return OpenedBook{}, ErrSourceMissing
 	}
-	book, pkg, err := s.refreshSource(book)
+	book, pkg, err := s.refreshSource(ctx, book)
 	if err != nil {
-		return BookFile{}, err
+		return OpenedBook{}, err
 	}
 	if book.CoverThumbnailStatus == "ready" && !fileExists(book.CoverThumbnailPath) {
-		if err := s.library.ResetCover(s.appContext(), id, time.Now()); err != nil {
-			return BookFile{}, err
+		if err := s.library.ResetCover(ctx, id, time.Now()); err != nil {
+			return OpenedBook{}, err
 		}
 		book.CoverThumbnailPath = ""
 		book.CoverThumbnailStatus = "pending"
 	}
-	if err := s.library.MarkOpened(s.appContext(), id, time.Now()); err != nil {
-		return BookFile{}, err
+	if err := s.library.MarkOpened(ctx, id, time.Now()); err != nil {
+		return OpenedBook{}, err
 	}
-	return s.bookFile(book, pkg)
+	return s.opened(ctx, book, pkg)
 }
 
-func (s *Service) refreshSource(book library.Book) (library.Book, *epubPackage, error) {
+func (s *Service) refreshSource(ctx context.Context, book library.Book) (library.Book, *epubPackage, error) {
 	info, err := os.Stat(book.SourcePath)
 	if err != nil {
 		return library.Book{}, nil, fmt.Errorf("inspect book file: %w", err)
@@ -160,34 +126,31 @@ func (s *Service) refreshSource(book library.Book) (library.Book, *epubPackage, 
 		}
 		pkg, err := loadEPUBPackage(book.SourcePath)
 		if err != nil {
-			return library.Book{}, nil, s.translateInspectionError(err)
+			return library.Book{}, nil, err
 		}
 		return book, pkg, nil
 	}
 	inspection, pkg, err := inspectBook(book.SourcePath)
 	if err != nil {
-		return library.Book{}, nil, s.translateInspectionError(err)
+		return library.Book{}, nil, err
 	}
 	if inspection.Format != book.Format {
-		return library.Book{}, nil, errors.New(s.localized(
-			"The selected file format no longer matches this library entry.",
-			"選択されたファイルの形式が本棚の記録と一致しません。",
-		))
+		return library.Book{}, nil, ErrFormatMismatch
 	}
 	if inspection.FileHash != book.FileHash {
 		oldCoverPath := book.CoverThumbnailPath
-		book, err = s.library.Relink(s.appContext(), book.ID, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
+		book, err = s.library.Relink(ctx, book.ID, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
 		if err != nil {
 			return library.Book{}, nil, err
 		}
 		if oldCoverPath != "" {
 			_ = os.Remove(oldCoverPath)
 		}
-		if err := s.afterImport(book, pkg); err != nil {
+		if err := s.afterImport(ctx, book, pkg); err != nil {
 			return library.Book{}, nil, err
 		}
 	}
-	if err := s.recordSourceStat(&book, inspection); err != nil {
+	if err := s.recordSourceStat(ctx, &book, inspection); err != nil {
 		return library.Book{}, nil, err
 	}
 	return book, pkg, nil
@@ -199,8 +162,8 @@ func sourceUnchanged(book library.Book, info os.FileInfo) bool {
 		library.FormatSourceModTime(info.ModTime()) == book.SourceModTime
 }
 
-func (s *Service) recordSourceStat(book *library.Book, inspection Inspection) error {
-	if err := s.library.RecordSourceStat(s.appContext(), book.ID, inspection.SizeBytes, inspection.ModTime, time.Now()); err != nil {
+func (s *Service) recordSourceStat(ctx context.Context, book *library.Book, inspection Inspection) error {
+	if err := s.library.RecordSourceStat(ctx, book.ID, inspection.SizeBytes, inspection.ModTime, time.Now()); err != nil {
 		return err
 	}
 	book.SizeBytes = inspection.SizeBytes
@@ -208,185 +171,115 @@ func (s *Service) recordSourceStat(book *library.Book, inspection Inspection) er
 	return nil
 }
 
-func (s *Service) RelinkBook(id string) (BookFile, error) {
-	if s.ctx == nil {
-		return BookFile{}, errors.New("application is not ready")
-	}
-	path, err := s.chooseBookFile(s.localized(
-		"Choose the book file again",
-		"ファイルを再選択",
-	))
-	if err != nil || path == "" {
-		return BookFile{}, err
-	}
-	inspection, pkg, err := inspectBook(path)
+// Relink points a library entry at a new source file and opens it.
+func (s *Service) Relink(ctx context.Context, id, filePath string) (OpenedBook, error) {
+	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
-		return BookFile{}, s.translateInspectionError(err)
+		return OpenedBook{}, err
 	}
-	oldBook, err := s.library.Get(s.appContext(), id)
+	oldBook, err := s.library.Get(ctx, id)
 	if err != nil {
-		return BookFile{}, err
+		return OpenedBook{}, err
 	}
 	if inspection.Format != oldBook.Format {
-		return BookFile{}, errors.New(s.localized(
-			"The chosen file format does not match this library entry.",
-			"選択したファイルの形式が本棚の記録と一致しません。",
-		))
+		return OpenedBook{}, ErrFormatMismatch
 	}
-	book, err := s.library.Relink(s.appContext(), id, path, inspection.FileHash, inspection.SizeBytes, time.Now())
+	book, err := s.library.Relink(ctx, id, filePath, inspection.FileHash, inspection.SizeBytes, time.Now())
 	if err != nil {
-		return BookFile{}, err
-	}
-	if oldBook.FileHash != inspection.FileHash && oldBook.CoverThumbnailPath != "" {
-		_ = os.Remove(oldBook.CoverThumbnailPath)
+		return OpenedBook{}, err
 	}
 	if oldBook.FileHash != inspection.FileHash {
-		if err := s.afterImport(book, pkg); err != nil {
-			return BookFile{}, err
+		if oldBook.CoverThumbnailPath != "" {
+			_ = os.Remove(oldBook.CoverThumbnailPath)
+		}
+		if err := s.afterImport(ctx, book, pkg); err != nil {
+			return OpenedBook{}, err
 		}
 	}
-	if err := s.recordSourceStat(&book, inspection); err != nil {
-		return BookFile{}, err
+	if err := s.recordSourceStat(ctx, &book, inspection); err != nil {
+		return OpenedBook{}, err
 	}
-	if err := s.library.MarkOpened(s.appContext(), id, time.Now()); err != nil {
-		return BookFile{}, err
+	if err := s.library.MarkOpened(ctx, id, time.Now()); err != nil {
+		return OpenedBook{}, err
 	}
-	return s.bookFile(book, pkg)
+	return s.opened(ctx, book, pkg)
 }
 
-func (s *Service) RenameBook(id, name string) (BookSummary, error) {
-	book, err := s.library.Rename(s.appContext(), id, name, time.Now())
-	if err != nil {
-		if errors.Is(err, library.ErrInvalidDisplayName) {
-			return BookSummary{}, errors.New(s.localized(
-				"Book names must be between 1 and 200 characters.",
-				"本の名前は1〜200文字で入力してください。",
-			))
-		}
-		return BookSummary{}, err
-	}
-	return s.bookSummary(book)
+// Get returns a library entry without touching its source file.
+func (s *Service) Get(ctx context.Context, id string) (library.Book, error) {
+	return s.library.Get(ctx, id)
 }
 
-func (s *Service) RemoveBook(id string) (bool, error) {
-	book, err := s.library.Get(s.appContext(), id)
+func (s *Service) Rename(ctx context.Context, id, name string) (Entry, error) {
+	book, err := s.library.Rename(ctx, id, name, time.Now())
 	if err != nil {
-		return false, err
+		return Entry{}, err
 	}
-	if s.ctx != nil {
-		removeLabel := s.localized("Remove", "削除")
-		cancelLabel := s.localized("Cancel", "キャンセル")
-		response, err := runtime.MessageDialog(s.ctx, runtime.MessageDialogOptions{
-			Type:          runtime.QuestionDialog,
-			Title:         s.localized("Remove from library", "本棚から削除"),
-			Message:       s.localized(fmt.Sprintf("Remove “%s” from the library?\nThe source file itself will remain.", book.Display()), fmt.Sprintf("「%s」を本棚から削除しますか？\n元のファイル自体は残ります。", book.Display())),
-			Buttons:       []string{removeLabel, cancelLabel},
-			DefaultButton: cancelLabel,
-			CancelButton:  cancelLabel,
-		})
-		if err != nil {
-			return false, fmt.Errorf("confirm book removal: %w", err)
-		}
-		if response != removeLabel {
-			return false, nil
-		}
+	return s.entry(ctx, book)
+}
+
+// Remove deletes the library entry and its cover cache. The source file is kept.
+func (s *Service) Remove(ctx context.Context, id string) error {
+	book, err := s.library.Get(ctx, id)
+	if err != nil {
+		return err
 	}
-	if err := s.library.Remove(s.appContext(), id); err != nil {
-		return false, err
+	if err := s.library.Remove(ctx, id); err != nil {
+		return err
 	}
 	if book.CoverThumbnailPath != "" {
 		_ = os.Remove(book.CoverThumbnailPath)
 	}
-	return true, nil
+	return nil
 }
 
-func (s *Service) ListBooks() ([]BookSummary, error) {
-	books, err := s.library.List(s.appContext())
+func (s *Service) List(ctx context.Context) ([]Entry, error) {
+	books, err := s.library.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	summaries := make([]BookSummary, 0, len(books))
+	entries := make([]Entry, 0, len(books))
 	for _, book := range books {
-		summary, err := s.bookSummary(book)
+		entry, err := s.entry(ctx, book)
 		if err != nil {
 			return nil, err
 		}
-		summaries = append(summaries, summary)
+		entries = append(entries, entry)
 	}
-	return summaries, nil
+	return entries, nil
 }
 
-func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
-	summary := BookSummary{
-		ID:          book.ID,
-		Title:       book.Display(),
-		FileName:    book.FileName,
-		Format:      book.Format,
-		Size:        book.SizeBytes,
-		PageCount:   book.PageCount,
-		LastPage:    book.LastPage,
-		ImportedAt:  book.ImportedAt,
-		LastOpened:  book.LastOpenedAt,
-		CoverStatus: book.CoverThumbnailStatus,
-		Available:   fileExists(book.SourcePath),
-	}
-	if book.CoverThumbnailStatus == "ready" && fileExists(book.CoverThumbnailPath) {
-		url, err := s.assets.Register(book.CoverThumbnailPath, coverContentType(book.CoverThumbnailPath))
-		if err != nil {
-			return BookSummary{}, err
+// entry resolves the on-disk state of a book and resets a cover whose cache file is gone.
+func (s *Service) entry(ctx context.Context, book library.Book) (Entry, error) {
+	if book.CoverThumbnailStatus == "ready" && !fileExists(book.CoverThumbnailPath) {
+		if err := s.library.ResetCover(ctx, book.ID, time.Now()); err != nil {
+			return Entry{}, err
 		}
-		summary.CoverURL = url
-	} else if book.CoverThumbnailStatus == "ready" {
-		summary.CoverStatus = "pending"
-		if err := s.library.ResetCover(s.appContext(), book.ID, time.Now()); err != nil {
-			return BookSummary{}, err
-		}
+		book.CoverThumbnailPath = ""
+		book.CoverThumbnailStatus = "pending"
 	}
-	return summary, nil
+	return Entry{Book: book, Available: fileExists(book.SourcePath)}, nil
 }
 
-func (s *Service) SaveReadingPosition(bookID string, pageNumber, pageCount int) error {
-	return s.library.SaveReadingPosition(s.appContext(), bookID, pageNumber, pageCount, time.Now())
+func (s *Service) SaveReadingPosition(ctx context.Context, bookID string, pageNumber, pageCount int) error {
+	return s.library.SaveReadingPosition(ctx, bookID, pageNumber, pageCount, time.Now())
 }
 
-func (s *Service) ListBookmarks(bookID string) ([]BookBookmark, error) {
-	bookmarks, err := s.library.ListBookmarks(s.appContext(), bookID)
-	if err != nil {
-		return nil, err
-	}
-	output := make([]BookBookmark, len(bookmarks))
-	for i, bookmark := range bookmarks {
-		output[i] = BookBookmark{PageNumber: bookmark.PageNumber, CreatedAt: bookmark.CreatedAt}
-	}
-	return output, nil
+func (s *Service) ListBookmarks(ctx context.Context, bookID string) ([]library.BookBookmark, error) {
+	return s.library.ListBookmarks(ctx, bookID)
 }
 
-func (s *Service) AddBookmark(bookID string, pageNumber, pageCount int) (BookBookmark, error) {
-	bookmark, err := s.library.SaveBookmark(
-		s.appContext(), bookID, pageNumber, pageCount, time.Now(),
-	)
-	if errors.Is(err, library.ErrInvalidBookmark) {
-		return BookBookmark{}, errors.New(s.localized(
-			"The bookmark page is outside this document.",
-			"しおりのページがこのPDFの範囲外です。",
-		))
-	}
-	if err != nil {
-		return BookBookmark{}, err
-	}
-	return BookBookmark{PageNumber: bookmark.PageNumber, CreatedAt: bookmark.CreatedAt}, nil
+func (s *Service) AddBookmark(ctx context.Context, bookID string, pageNumber, pageCount int) (library.BookBookmark, error) {
+	return s.library.SaveBookmark(ctx, bookID, pageNumber, pageCount, time.Now())
 }
 
-func (s *Service) RemoveBookmark(bookID string, pageNumber int) error {
-	err := s.library.DeleteBookmark(s.appContext(), bookID, pageNumber)
-	if errors.Is(err, library.ErrInvalidBookmark) {
-		return errors.New(s.localized("The bookmark is invalid.", "しおりの内容が不正です。"))
-	}
-	return err
+func (s *Service) RemoveBookmark(ctx context.Context, bookID string, pageNumber int) error {
+	return s.library.DeleteBookmark(ctx, bookID, pageNumber)
 }
 
-func (s *Service) SaveBookSegments(bookID string, segments []BookSegmentInput, total int) (int, error) {
-	book, err := s.library.Get(s.appContext(), bookID)
+// SaveSegments stores extracted text. The segment kind follows the book's format.
+func (s *Service) SaveSegments(ctx context.Context, bookID string, segments []library.BookSegment, total int) (int, error) {
+	book, err := s.library.Get(ctx, bookID)
 	if err != nil {
 		return 0, err
 	}
@@ -396,25 +289,15 @@ func (s *Service) SaveBookSegments(bookID string, segments []BookSegmentInput, t
 	}
 	inputs := make([]library.BookSegment, len(segments))
 	for i, segment := range segments {
-		inputs[i] = library.BookSegment{
-			Ordinal:     segment.Ordinal,
-			Kind:        kind,
-			Location:    segment.Location,
-			HeadingPath: segment.HeadingPath,
-			Text:        segment.Text,
-		}
+		segment.Kind = kind
+		inputs[i] = segment
 	}
-	count, err := s.library.SaveBookSegments(
-		s.appContext(), bookID, inputs, total, time.Now(),
-	)
-	if errors.Is(err, library.ErrInvalidSegmentBatch) {
-		return 0, errors.New(s.localized("The book index data is invalid.", "本の索引データが不正です。"))
-	}
-	return count, err
+	return s.library.SaveBookSegments(ctx, bookID, inputs, total, time.Now())
 }
 
-func (s *Service) PendingIndexBooks() ([]IndexTarget, error) {
-	books, err := s.library.List(s.appContext())
+// PendingIndexTargets lists available PDFs whose pages are not fully indexed.
+func (s *Service) PendingIndexTargets(ctx context.Context) ([]IndexTarget, error) {
+	books, err := s.library.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -423,230 +306,73 @@ func (s *Service) PendingIndexBooks() ([]IndexTarget, error) {
 		if book.Format != BookFormatPDF || book.PageCount < 1 || !fileExists(book.SourcePath) {
 			continue
 		}
-		next, err := s.library.FirstMissingOrdinal(s.appContext(), book.ID)
+		next, err := s.library.FirstMissingOrdinal(ctx, book.ID)
 		if err != nil {
 			return nil, err
 		}
 		if next > book.PageCount {
 			continue
 		}
-		url, err := s.assets.Register(book.SourcePath, bookContentType(book.Format))
-		if err != nil {
-			return nil, err
-		}
-		targets = append(targets, IndexTarget{ID: book.ID, URL: url, NextSegment: next, Total: book.PageCount})
+		targets = append(targets, IndexTarget{Book: book, NextSegment: next, Total: book.PageCount})
 	}
 	return targets, nil
 }
 
-func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
-	results, err := s.library.SearchBookSegments(s.appContext(), bookID, query, 50)
-	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
-		return nil, errors.New(s.localized(
-			"Search terms must be between 1 and 200 characters.",
-			"検索語は1〜200文字で入力してください。",
-		))
-	}
-	if err != nil {
-		return nil, err
-	}
-	output := make([]BookSearchResult, len(results))
-	for i, result := range results {
-		output[i] = bookSearchResult(result)
-	}
-	return output, nil
+func (s *Service) SearchBook(ctx context.Context, bookID, query string) ([]library.SegmentSearchResult, error) {
+	return s.library.SearchBookSegments(ctx, bookID, query, 50)
 }
 
-func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
-	hits, err := s.library.SearchLibrarySegments(s.appContext(), query, 0, 0)
-	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
-		return nil, errors.New(s.localized(
-			"Search terms must be between 1 and 200 characters.",
-			"検索語は1〜200文字で入力してください。",
-		))
-	}
+func (s *Service) SearchLibrary(ctx context.Context, query string) ([]LibraryHit, error) {
+	hits, err := s.library.SearchLibrarySegments(ctx, query, 0, 0)
 	if err != nil {
 		return nil, err
 	}
-	if len(hits) == 0 {
-		return []LibrarySearchHit{}, nil
-	}
-	output := make([]LibrarySearchHit, 0, len(hits))
+	output := make([]LibraryHit, 0, len(hits))
 	for _, hit := range hits {
-		book, err := s.library.Get(s.appContext(), hit.BookID)
+		book, err := s.library.Get(ctx, hit.BookID)
 		if errors.Is(err, library.ErrBookNotFound) {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		summary, err := s.bookSummary(book)
+		entry, err := s.entry(ctx, book)
 		if err != nil {
 			return nil, err
 		}
-		pages := make([]BookSearchResult, len(hit.Segments))
-		for i, segment := range hit.Segments {
-			pages[i] = bookSearchResult(segment)
-		}
-		output = append(output, LibrarySearchHit{
-			Book:         summary,
+		output = append(output, LibraryHit{
+			Entry:        entry,
 			TotalMatches: hit.TotalMatches,
-			Pages:        pages,
+			Segments:     hit.Segments,
 		})
 	}
 	return output, nil
 }
 
-func bookSearchResult(result library.SegmentSearchResult) BookSearchResult {
-	return BookSearchResult{
-		PageNumber:  result.Ordinal,
-		Location:    result.Location,
-		HeadingPath: result.HeadingPath,
-		Excerpt:     result.Excerpt,
-		MatchCount:  result.MatchCount,
-	}
-}
-
-func (s *Service) localized(english, japanese string) string {
-	if s.settings == nil {
-		return english
-	}
-	preference, err := s.settings.GetLanguage(s.appContext())
-	if err == nil && preference.Language == settings.LanguageJapanese {
-		return japanese
-	}
-	return english
-}
-
-func (s *Service) selectBookFile(filePath string) (BookFile, error) {
-	inspection, pkg, err := inspectBook(filePath)
-	if err != nil {
-		return BookFile{}, s.translateInspectionError(err)
-	}
-	id, err := randomToken()
-	if err != nil {
-		return BookFile{}, fmt.Errorf("create book id: %w", err)
-	}
-	book, err := s.library.Import(
-		s.appContext(), id, filePath, inspection.FileHash,
-		inspection.Format, inspection.SizeBytes, time.Now(),
-	)
-	if err != nil {
-		return BookFile{}, err
-	}
-	if err := s.afterImport(book, pkg); err != nil {
-		return BookFile{}, err
-	}
-	book, err = s.library.Get(s.appContext(), book.ID)
-	if err != nil {
-		return BookFile{}, err
-	}
-	if err := s.recordSourceStat(&book, inspection); err != nil {
-		return BookFile{}, err
-	}
-	if err := s.library.MarkOpened(s.appContext(), book.ID, time.Now()); err != nil {
-		return BookFile{}, err
-	}
-	return s.bookFile(book, pkg)
-}
-
-func (s *Service) afterImport(book library.Book, pkg *epubPackage) error {
+func (s *Service) afterImport(ctx context.Context, book library.Book, pkg *epubPackage) error {
 	if book.Format != BookFormatEPUB || pkg == nil {
 		return nil
 	}
-	if err := s.extractEPUBCover(book, pkg); err != nil {
-		_ = s.library.MarkCoverFailed(s.appContext(), book.ID, time.Now())
+	if err := s.extractEPUBCover(ctx, book, pkg); err != nil {
+		_ = s.library.MarkCoverFailed(ctx, book.ID, time.Now())
 	}
-	return s.indexEPUBSpine(book, pkg)
+	return s.indexEPUBSpine(ctx, book, pkg)
 }
 
-func (s *Service) bookFile(book library.Book, pkg *epubPackage) (BookFile, error) {
-	url, err := s.assets.Register(book.SourcePath, bookContentType(book.Format))
+func (s *Service) opened(ctx context.Context, book library.Book, pkg *epubPackage) (OpenedBook, error) {
+	indexed, err := s.library.BookSegmentCount(ctx, book.ID)
 	if err != nil {
-		return BookFile{}, err
+		return OpenedBook{}, err
 	}
-	indexedPageCount, err := s.library.BookSegmentCount(s.appContext(), book.ID)
+	next, err := s.library.FirstMissingOrdinal(ctx, book.ID)
 	if err != nil {
-		return BookFile{}, err
+		return OpenedBook{}, err
 	}
-	nextSegment, err := s.library.FirstMissingOrdinal(s.appContext(), book.ID)
-	if err != nil {
-		return BookFile{}, err
-	}
-	coverStatus := book.CoverThumbnailStatus
-	if coverStatus == "failed" {
-		coverStatus = "pending"
-	}
-	file := BookFile{
-		ID:               book.ID,
-		Title:            book.Display(),
-		Name:             book.FileName,
-		URL:              url,
-		Format:           book.Format,
-		Size:             book.SizeBytes,
-		InitialPage:      max(1, book.LastPage),
-		IndexedPageCount: indexedPageCount,
-		NextSegment:      nextSegment,
-		CoverStatus:      coverStatus,
-	}
+	opened := OpenedBook{Book: book, IndexedSegments: indexed, NextSegment: next}
 	if book.Format == BookFormatEPUB && pkg != nil {
-		file.SpineItems = pkg.Spine
+		opened.Spine = pkg.Spine
 	}
-	return file, nil
-}
-
-func (s *Service) chooseBookFile(title string) (string, error) {
-	filters := []runtime.FileFilter{
-		{DisplayName: "Books (*.pdf;*.epub)", Pattern: "*.pdf;*.epub"},
-		{DisplayName: "PDF files (*.pdf)", Pattern: "*.pdf"},
-		{DisplayName: "EPUB files (*.epub)", Pattern: "*.epub"},
-	}
-	path, err := runtime.OpenFileDialog(s.ctx, runtime.OpenDialogOptions{
-		Title:   title,
-		Filters: filters,
-	})
-	if err != nil {
-		return "", fmt.Errorf("open book dialog: %w", err)
-	}
-	return path, nil
-}
-
-func (s *Service) translateInspectionError(err error) error {
-	switch {
-	case errors.Is(err, ErrEPUBDRMProtected):
-		return errors.New(s.localized(
-			"This EPUB is DRM-protected and cannot be opened.",
-			"このEPUBはDRM保護されているため開けません。",
-		))
-	case errors.Is(err, ErrUnsupportedBookFormat):
-		return errors.New(s.localized(
-			"Glint can only import PDF or EPUB files.",
-			"PDF または EPUB のみ取り込めます。",
-		))
-	default:
-		return err
-	}
-}
-
-func bookContentType(format string) string {
-	if format == BookFormatEPUB {
-		return "application/epub+zip"
-	}
-	return "application/pdf"
-}
-
-func coverContentType(path string) string {
-	switch strings.ToLower(extension(path)) {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".webp":
-		return "image/webp"
-	case ".gif":
-		return "image/gif"
-	case ".svg":
-		return "image/svg+xml"
-	}
-	return "image/png"
+	return opened, nil
 }
 
 func randomToken() (string, error) {

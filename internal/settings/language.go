@@ -9,6 +9,9 @@ import (
 
 const languageSettingKey = "application.language"
 
+// ErrInvalidLanguage reports a language other than en or ja.
+var ErrInvalidLanguage = errors.New("language must be en or ja")
+
 type Language string
 
 const (
@@ -41,7 +44,7 @@ func (manager *Manager) GetLanguage(ctx context.Context) (LanguageSettings, erro
 
 func (manager *Manager) SaveLanguage(ctx context.Context, request SaveLanguageSettingsRequest) (LanguageSettings, error) {
 	if !request.Language.Valid() {
-		return LanguageSettings{}, errors.New("language must be en or ja")
+		return LanguageSettings{}, ErrInvalidLanguage
 	}
 	if err := manager.store.SaveSetting(ctx, languageSettingKey, string(request.Language)); err != nil {
 		return LanguageSettings{}, err

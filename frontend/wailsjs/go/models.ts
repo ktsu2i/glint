@@ -1,5 +1,17 @@
-export namespace books {
+export namespace app {
 	
+	export class AppearanceSettings {
+	    theme: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppearanceSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.theme = source["theme"];
+	    }
+	}
 	export class BookBookmark {
 	    pageNumber: number;
 	    createdAt: string;
@@ -174,6 +186,18 @@ export namespace books {
 	        this.total = source["total"];
 	    }
 	}
+	export class LanguageSettings {
+	    language: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LanguageSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.language = source["language"];
+	    }
+	}
 	export class LibrarySearchHit {
 	    book: BookSummary;
 	    totalMatches: number;
@@ -207,35 +231,6 @@ export namespace books {
 		    }
 		    return a;
 		}
-	}
-
-}
-
-export namespace settings {
-	
-	export class AppearanceSettings {
-	    theme: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new AppearanceSettings(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.theme = source["theme"];
-	    }
-	}
-	export class LanguageSettings {
-	    language: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new LanguageSettings(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.language = source["language"];
-	    }
 	}
 	export class SaveAppearanceSettingsRequest {
 	    theme: string;

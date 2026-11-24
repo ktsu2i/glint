@@ -21,7 +21,7 @@ const bindings = vi.hoisted(() => ({
   saveAppearanceSettings: vi.fn(),
 }));
 
-vi.mock("../../../wailsjs/go/books/Service", () => ({
+vi.mock("../../../wailsjs/go/app/BooksService", () => ({
   AddBookmark: bindings.addBookmark,
   ListBookmarks: bindings.listBookmarks,
   ListBooks: bindings.listBooks,
@@ -40,7 +40,7 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   SearchLibrary: bindings.searchLibrary,
 }));
 
-vi.mock("../../../wailsjs/go/settings/Service", () => ({
+vi.mock("../../../wailsjs/go/app/SettingsService", () => ({
   GetAppearanceSettings: bindings.getAppearanceSettings,
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
 }));

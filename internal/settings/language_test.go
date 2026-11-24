@@ -28,5 +28,5 @@ func TestLanguagePersistsSupportedPreference(t *testing.T) {
 	assert.Equal(t, LanguageJapanese, loaded.Language)
 
 	_, err = manager.SaveLanguage(t.Context(), SaveLanguageSettingsRequest{Language: "fr"})
-	assert.Error(t, err, "unsupported language must fail")
+	assert.ErrorIs(t, err, ErrInvalidLanguage, "unsupported language must fail")
 }

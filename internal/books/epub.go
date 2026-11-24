@@ -23,11 +23,11 @@ const (
 )
 
 type SpineItem struct {
-	Index     int    `json:"index"`
-	ID        string `json:"id"`
-	Href      string `json:"href"`
-	MediaType string `json:"mediaType"`
-	Title     string `json:"title"`
+	Index     int
+	ID        string
+	Href      string
+	MediaType string
+	Title     string
 }
 
 type epubPackage struct {
