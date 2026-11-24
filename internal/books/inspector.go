@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+
+	"github.com/kaito/glint/internal/library"
 )
 
 type Inspection struct {
@@ -54,6 +56,6 @@ func inspectBook(filePath string) (Inspection, *epubPackage, error) {
 }
 
 const (
-	BookFormatPDF  = "pdf"
-	BookFormatEPUB = "epub"
+	BookFormatPDF  = library.BookFormatPDF
+	BookFormatEPUB = library.BookFormatEPUB
 )

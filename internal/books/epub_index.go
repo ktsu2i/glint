@@ -2,7 +2,6 @@ package books
 
 import (
 	"archive/zip"
-	"context"
 	"fmt"
 	"time"
 
@@ -32,7 +31,7 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 		})
 		if len(batch) >= epubIndexBatchSize {
 			if _, err := s.library.SaveBookPages(
-				context.Background(), book.ID, batch, total, time.Now(),
+				s.appContext(), book.ID, batch, total, time.Now(),
 			); err != nil {
 				return fmt.Errorf("save EPUB spine batch: %w", err)
 			}
@@ -41,7 +40,7 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 	}
 	if len(batch) > 0 {
 		if _, err := s.library.SaveBookPages(
-			context.Background(), book.ID, batch, total, time.Now(),
+			s.appContext(), book.ID, batch, total, time.Now(),
 		); err != nil {
 			return fmt.Errorf("save EPUB spine batch: %w", err)
 		}

@@ -6,9 +6,7 @@ const mocks = vi.hoisted(() => ({
   markBookCoverFailed: vi.fn(),
   openBook: vi.fn(),
   openBookFile: vi.fn(),
-  openPDF: vi.fn(),
   relinkBook: vi.fn(),
-  relinkPDF: vi.fn(),
   removeBook: vi.fn(),
   renameBook: vi.fn(),
   saveBookCover: vi.fn(),
@@ -25,9 +23,7 @@ vi.mock("./shared/api/backend", () => ({
   markBookCoverFailed: mocks.markBookCoverFailed,
   openBook: mocks.openBook,
   openBookFile: mocks.openBookFile,
-  openPDF: mocks.openPDF,
   relinkBook: mocks.relinkBook,
-  relinkPDF: mocks.relinkPDF,
   removeBook: mocks.removeBook,
   renameBook: mocks.renameBook,
   saveBookCover: mocks.saveBookCover,
@@ -44,16 +40,16 @@ vi.mock("./features/reader/PdfReader", () => ({
   PdfReader: ({
     book,
     initialPage,
-    onPageContextChange,
+    onPageChange,
   }: {
     book: { name: string } | null;
     initialPage: number;
-    onPageContextChange: (page: number, text: string, pageCount: number) => void;
+    onPageChange: (page: number, pageCount: number) => void;
   }) => (
     <div data-testid="pdf-reader">
       <span>{book?.name ?? "no-book"}</span>
       <span>initial-{initialPage}</span>
-      <button type="button" onClick={() => onPageContextChange(4, "page text", 12)}>
+      <button type="button" onClick={() => onPageChange(4, 12)}>
         set-page
       </button>
     </div>
@@ -132,7 +128,7 @@ describe("App", () => {
     expect(document.documentElement.lang).toBe("en");
   });
 
-  it("starts in the library, imports a PDF, saves page context, and returns", async () => {
+  it("starts in the library, imports a PDF, saves the reading position, and returns", async () => {
     let resolveEmpty!: (value: typeof openedBook) => void;
     mocks.openBookFile.mockReturnValueOnce(
       new Promise((resolve) => {

@@ -7,9 +7,7 @@ const bindings = vi.hoisted(() => ({
   markBookCoverFailed: vi.fn(),
   openBook: vi.fn(),
   openBookFile: vi.fn(),
-  openPDF: vi.fn(),
   relinkBook: vi.fn(),
-  relinkPDF: vi.fn(),
   removeBook: vi.fn(),
   removeBookmark: vi.fn(),
   renameBook: vi.fn(),
@@ -29,9 +27,7 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   MarkBookCoverFailed: bindings.markBookCoverFailed,
   OpenBook: bindings.openBook,
   OpenBookFile: bindings.openBookFile,
-  OpenPDF: bindings.openPDF,
   RelinkBook: bindings.relinkBook,
-  RelinkPDF: bindings.relinkPDF,
   RemoveBook: bindings.removeBook,
   RemoveBookmark: bindings.removeBookmark,
   RenameBook: bindings.renameBook,
@@ -54,8 +50,8 @@ import {
   listBookmarks,
   markBookCoverFailed,
   openBook,
-  openPDF,
-  relinkPDF,
+  openBookFile,
+  relinkBook,
   removeBook,
   removeBookmark,
   renameBook,
@@ -72,7 +68,7 @@ beforeEach(() => {
 });
 
 describe("backend facade", () => {
-  it("delegates PDF selection to Wails bindings", async () => {
+  it("delegates book file selection to Wails bindings", async () => {
     const book = {
       id: "book-1",
       title: "Book",
@@ -82,9 +78,9 @@ describe("backend facade", () => {
       initialPage: 1,
       coverStatus: "ready",
     };
-    bindings.openPDF.mockResolvedValue(book);
+    bindings.openBookFile.mockResolvedValue(book);
 
-    await expect(openPDF()).resolves.toEqual(book);
+    await expect(openBookFile()).resolves.toEqual(book);
   });
 
   it("delegates appearance settings through a typed theme contract", async () => {
@@ -101,7 +97,7 @@ describe("backend facade", () => {
     const book = { id: "book-1", url: "/book/1" };
     bindings.listBooks.mockResolvedValue(summaries);
     bindings.openBook.mockResolvedValue(book);
-    bindings.relinkPDF.mockResolvedValue(book);
+    bindings.relinkBook.mockResolvedValue(book);
     bindings.removeBook.mockResolvedValue(true);
     bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
     bindings.saveBookPages.mockResolvedValue(2);
@@ -118,7 +114,7 @@ describe("backend facade", () => {
 
     await expect(listBooks()).resolves.toEqual(summaries);
     await expect(openBook("book-1")).resolves.toEqual(book);
-    await expect(relinkPDF("book-1")).resolves.toEqual(book);
+    await expect(relinkBook("book-1")).resolves.toEqual(book);
     await expect(removeBook("book-1")).resolves.toBe(true);
     await expect(renameBook("book-1", "Renamed")).resolves.toEqual({
       ...summaries[0],

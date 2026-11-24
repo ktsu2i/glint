@@ -26,16 +26,8 @@ export function OpenBookFile() {
   return window['go']['books']['Service']['OpenBookFile']();
 }
 
-export function OpenPDF() {
-  return window['go']['books']['Service']['OpenPDF']();
-}
-
 export function RelinkBook(arg1) {
   return window['go']['books']['Service']['RelinkBook'](arg1);
-}
-
-export function RelinkPDF(arg1) {
-  return window['go']['books']['Service']['RelinkPDF'](arg1);
 }
 
 export function RemoveBook(arg1) {

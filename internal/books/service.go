@@ -77,20 +77,24 @@ type Service struct {
 	settings      *settings.Manager
 }
 
-func New(lib *library.Store, assets *assetserver.Server, dataDirectory string, managers ...*settings.Manager) *Service {
-	service := &Service{
+func New(lib *library.Store, assets *assetserver.Server, dataDirectory string, settingsManager *settings.Manager) *Service {
+	return &Service{
 		library:       lib,
 		assets:        assets,
 		dataDirectory: dataDirectory,
+		settings:      settingsManager,
 	}
-	if len(managers) > 0 {
-		service.settings = managers[0]
-	}
-	return service
 }
 
 func Startup(s *Service, ctx context.Context) {
 	s.ctx = ctx
+}
+
+func (s *Service) appContext() context.Context {
+	if s.ctx == nil {
+		return context.Background()
+	}
+	return s.ctx
 }
 
 func (s *Service) OpenBookFile() (BookFile, error) {
@@ -107,12 +111,8 @@ func (s *Service) OpenBookFile() (BookFile, error) {
 	return s.selectBookFile(path)
 }
 
-func (s *Service) OpenPDF() (BookFile, error) {
-	return s.OpenBookFile()
-}
-
 func (s *Service) OpenBook(id string) (BookFile, error) {
-	book, err := s.library.Get(context.Background(), id)
+	book, err := s.library.Get(s.appContext(), id)
 	if err != nil {
 		return BookFile{}, err
 	}
@@ -134,7 +134,7 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 	}
 	if inspection.FileHash != book.FileHash {
 		oldCoverPath := book.CoverThumbnailPath
-		book, err = s.library.Relink(context.Background(), id, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
+		book, err = s.library.Relink(s.appContext(), id, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
 		if err != nil {
 			return BookFile{}, err
 		}
@@ -146,13 +146,13 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 		}
 	}
 	if book.CoverThumbnailStatus == "ready" && !fileExists(book.CoverThumbnailPath) {
-		if err := s.library.ResetCover(context.Background(), id, time.Now()); err != nil {
+		if err := s.library.ResetCover(s.appContext(), id, time.Now()); err != nil {
 			return BookFile{}, err
 		}
 		book.CoverThumbnailPath = ""
 		book.CoverThumbnailStatus = "pending"
 	}
-	if err := s.library.MarkOpened(context.Background(), id, time.Now()); err != nil {
+	if err := s.library.MarkOpened(s.appContext(), id, time.Now()); err != nil {
 		return BookFile{}, err
 	}
 	return s.bookFile(book, pkg)
@@ -173,7 +173,7 @@ func (s *Service) RelinkBook(id string) (BookFile, error) {
 	if err != nil {
 		return BookFile{}, s.translateInspectionError(err)
 	}
-	oldBook, err := s.library.Get(context.Background(), id)
+	oldBook, err := s.library.Get(s.appContext(), id)
 	if err != nil {
 		return BookFile{}, err
 	}
@@ -183,7 +183,7 @@ func (s *Service) RelinkBook(id string) (BookFile, error) {
 			"選択したファイルの形式が本棚の記録と一致しません。",
 		))
 	}
-	book, err := s.library.Relink(context.Background(), id, path, inspection.FileHash, inspection.SizeBytes, time.Now())
+	book, err := s.library.Relink(s.appContext(), id, path, inspection.FileHash, inspection.SizeBytes, time.Now())
 	if err != nil {
 		return BookFile{}, err
 	}
@@ -195,18 +195,14 @@ func (s *Service) RelinkBook(id string) (BookFile, error) {
 			return BookFile{}, err
 		}
 	}
-	if err := s.library.MarkOpened(context.Background(), id, time.Now()); err != nil {
+	if err := s.library.MarkOpened(s.appContext(), id, time.Now()); err != nil {
 		return BookFile{}, err
 	}
 	return s.bookFile(book, pkg)
 }
 
-func (s *Service) RelinkPDF(id string) (BookFile, error) {
-	return s.RelinkBook(id)
-}
-
 func (s *Service) RenameBook(id, name string) (BookSummary, error) {
-	book, err := s.library.Rename(context.Background(), id, name, time.Now())
+	book, err := s.library.Rename(s.appContext(), id, name, time.Now())
 	if err != nil {
 		if errors.Is(err, library.ErrInvalidDisplayName) {
 			return BookSummary{}, errors.New(s.localized(
@@ -220,7 +216,7 @@ func (s *Service) RenameBook(id, name string) (BookSummary, error) {
 }
 
 func (s *Service) RemoveBook(id string) (bool, error) {
-	book, err := s.library.Get(context.Background(), id)
+	book, err := s.library.Get(s.appContext(), id)
 	if err != nil {
 		return false, err
 	}
@@ -242,7 +238,7 @@ func (s *Service) RemoveBook(id string) (bool, error) {
 			return false, nil
 		}
 	}
-	if err := s.library.Remove(context.Background(), id); err != nil {
+	if err := s.library.Remove(s.appContext(), id); err != nil {
 		return false, err
 	}
 	if book.CoverThumbnailPath != "" {
@@ -252,7 +248,7 @@ func (s *Service) RemoveBook(id string) (bool, error) {
 }
 
 func (s *Service) ListBooks() ([]BookSummary, error) {
-	books, err := s.library.List(context.Background())
+	books, err := s.library.List(s.appContext())
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +285,7 @@ func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
 		summary.CoverURL = url
 	} else if book.CoverThumbnailStatus == "ready" {
 		summary.CoverStatus = "pending"
-		if err := s.library.ResetCover(context.Background(), book.ID, time.Now()); err != nil {
+		if err := s.library.ResetCover(s.appContext(), book.ID, time.Now()); err != nil {
 			return BookSummary{}, err
 		}
 	}
@@ -297,11 +293,11 @@ func (s *Service) bookSummary(book library.Book) (BookSummary, error) {
 }
 
 func (s *Service) SaveReadingPosition(bookID string, pageNumber, pageCount int) error {
-	return s.library.SaveReadingPosition(context.Background(), bookID, pageNumber, pageCount, time.Now())
+	return s.library.SaveReadingPosition(s.appContext(), bookID, pageNumber, pageCount, time.Now())
 }
 
 func (s *Service) ListBookmarks(bookID string) ([]BookBookmark, error) {
-	bookmarks, err := s.library.ListBookmarks(context.Background(), bookID)
+	bookmarks, err := s.library.ListBookmarks(s.appContext(), bookID)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +310,7 @@ func (s *Service) ListBookmarks(bookID string) ([]BookBookmark, error) {
 
 func (s *Service) AddBookmark(bookID string, pageNumber, pageCount int) (BookBookmark, error) {
 	bookmark, err := s.library.SaveBookmark(
-		context.Background(), bookID, pageNumber, pageCount, time.Now(),
+		s.appContext(), bookID, pageNumber, pageCount, time.Now(),
 	)
 	if errors.Is(err, library.ErrInvalidBookmark) {
 		return BookBookmark{}, errors.New(s.localized(
@@ -329,7 +325,7 @@ func (s *Service) AddBookmark(bookID string, pageNumber, pageCount int) (BookBoo
 }
 
 func (s *Service) RemoveBookmark(bookID string, pageNumber int) error {
-	err := s.library.DeleteBookmark(context.Background(), bookID, pageNumber)
+	err := s.library.DeleteBookmark(s.appContext(), bookID, pageNumber)
 	if errors.Is(err, library.ErrInvalidBookmark) {
 		return errors.New(s.localized("The bookmark is invalid.", "しおりの内容が不正です。"))
 	}
@@ -347,7 +343,7 @@ func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount 
 		}
 	}
 	count, err := s.library.SaveBookPages(
-		context.Background(), bookID, inputs, pageCount, time.Now(),
+		s.appContext(), bookID, inputs, pageCount, time.Now(),
 	)
 	if errors.Is(err, library.ErrInvalidBookPageBatch) {
 		return 0, errors.New(s.localized("The PDF page index is invalid.", "PDF page indexの内容が不正です。"))
@@ -356,7 +352,7 @@ func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount 
 }
 
 func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
-	results, err := s.library.SearchBookPages(context.Background(), bookID, query, 50)
+	results, err := s.library.SearchBookPages(s.appContext(), bookID, query, 50)
 	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
 		return nil, errors.New(s.localized(
 			"Search terms must be between 1 and 200 characters.",
@@ -378,7 +374,7 @@ func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
 }
 
 func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
-	hits, err := s.library.SearchLibraryPages(context.Background(), query, 0, 0)
+	hits, err := s.library.SearchLibraryPages(s.appContext(), query, 0, 0)
 	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
 		return nil, errors.New(s.localized(
 			"Search terms must be between 1 and 200 characters.",
@@ -393,7 +389,7 @@ func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
 	}
 	output := make([]LibrarySearchHit, 0, len(hits))
 	for _, hit := range hits {
-		book, err := s.library.Get(context.Background(), hit.BookID)
+		book, err := s.library.Get(s.appContext(), hit.BookID)
 		if errors.Is(err, library.ErrBookNotFound) {
 			continue
 		}
@@ -425,7 +421,7 @@ func (s *Service) localized(english, japanese string) string {
 	if s.settings == nil {
 		return english
 	}
-	preference, err := s.settings.GetLanguage(context.Background())
+	preference, err := s.settings.GetLanguage(s.appContext())
 	if err == nil && preference.Language == settings.LanguageJapanese {
 		return japanese
 	}
@@ -442,7 +438,7 @@ func (s *Service) selectBookFile(filePath string) (BookFile, error) {
 		return BookFile{}, fmt.Errorf("create book id: %w", err)
 	}
 	book, err := s.library.Import(
-		context.Background(), id, filePath, inspection.FileHash,
+		s.appContext(), id, filePath, inspection.FileHash,
 		inspection.Format, inspection.SizeBytes, time.Now(),
 	)
 	if err != nil {
@@ -451,18 +447,14 @@ func (s *Service) selectBookFile(filePath string) (BookFile, error) {
 	if err := s.afterImport(book, pkg); err != nil {
 		return BookFile{}, err
 	}
-	book, err = s.library.Get(context.Background(), book.ID)
+	book, err = s.library.Get(s.appContext(), book.ID)
 	if err != nil {
 		return BookFile{}, err
 	}
-	if err := s.library.MarkOpened(context.Background(), book.ID, time.Now()); err != nil {
+	if err := s.library.MarkOpened(s.appContext(), book.ID, time.Now()); err != nil {
 		return BookFile{}, err
 	}
 	return s.bookFile(book, pkg)
-}
-
-func (s *Service) selectPDF(filePath string) (BookFile, error) {
-	return s.selectBookFile(filePath)
 }
 
 func (s *Service) afterImport(book library.Book, pkg *epubPackage) error {
@@ -470,7 +462,7 @@ func (s *Service) afterImport(book library.Book, pkg *epubPackage) error {
 		return nil
 	}
 	if err := s.extractEPUBCover(book, pkg); err != nil {
-		_ = s.library.MarkCoverFailed(context.Background(), book.ID, time.Now())
+		_ = s.library.MarkCoverFailed(s.appContext(), book.ID, time.Now())
 	}
 	return s.indexEPUBSpine(book, pkg)
 }
@@ -480,7 +472,7 @@ func (s *Service) bookFile(book library.Book, pkg *epubPackage) (BookFile, error
 	if err != nil {
 		return BookFile{}, err
 	}
-	indexedPageCount, err := s.library.BookPageCount(context.Background(), book.ID)
+	indexedPageCount, err := s.library.BookPageCount(s.appContext(), book.ID)
 	if err != nil {
 		return BookFile{}, err
 	}

@@ -85,21 +85,21 @@ function persistBindingDirection(bookId: string | undefined, direction: BindingD
 type PdfReaderProps = {
   book: BookFile | null;
   initialPage?: number;
-  onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
+  onPageChange: (pageNumber: number, pageCount: number) => void;
 };
 
-export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfReaderProps) {
+export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProps) {
   const { t, i18n } = useTranslation();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
   const textLayerLeftRef = useRef<HTMLDivElement>(null);
   const textLayerRightRef = useRef<HTMLDivElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
-  const pageContextCallbackRef = useRef(onPageContextChange);
+  const pageChangeCallbackRef = useRef(onPageChange);
 
   useEffect(() => {
-    pageContextCallbackRef.current = onPageContextChange;
-  }, [onPageContextChange]);
+    pageChangeCallbackRef.current = onPageChange;
+  }, [onPageChange]);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -210,7 +210,7 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
       searchRequestRef.current += 1;
       setIsSearching(false);
       setSearchError("");
-      pageContextCallbackRef.current(0, "", 0);
+      pageChangeCallbackRef.current(0, 0);
       return;
     }
 
@@ -234,7 +234,7 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
     setBindingDirection(loadBindingDirection(book.id));
-    pageContextCallbackRef.current(0, "", 0);
+    pageChangeCallbackRef.current(0, 0);
 
     let timeout = 0;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -519,7 +519,7 @@ export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfRea
         )
         .join("\n\n");
       setReadableText({ pageNumber, text });
-      pageContextCallbackRef.current(pageNumber, text, pdfDocument.numPages);
+      pageChangeCallbackRef.current(pageNumber, pdfDocument.numPages);
 
       for (const [index, textContent] of textContents.entries()) {
         const container = textLayerContainers[index];

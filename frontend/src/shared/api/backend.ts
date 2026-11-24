@@ -5,9 +5,7 @@ import {
   MarkBookCoverFailed,
   OpenBook,
   OpenBookFile,
-  OpenPDF,
   RelinkBook,
-  RelinkPDF,
   RemoveBook,
   RemoveBookmark,
   RenameBook,
@@ -102,10 +100,6 @@ export async function openBookFile(): Promise<BookFile> {
   return (await OpenBookFile()) as BookFile;
 }
 
-export async function openPDF(): Promise<BookFile> {
-  return (await OpenPDF()) as BookFile;
-}
-
 export async function listBooks(): Promise<BookSummary[]> {
   return (await ListBooks()) as BookSummary[];
 }
@@ -116,10 +110,6 @@ export async function openBook(bookId: string): Promise<BookFile> {
 
 export async function relinkBook(bookId: string): Promise<BookFile> {
   return (await RelinkBook(bookId)) as BookFile;
-}
-
-export async function relinkPDF(bookId: string): Promise<BookFile> {
-  return (await RelinkPDF(bookId)) as BookFile;
 }
 
 export async function removeBook(bookId: string): Promise<boolean> {
