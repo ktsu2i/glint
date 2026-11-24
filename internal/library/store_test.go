@@ -396,3 +396,23 @@ func TestStoreReopeningAppliesFormatMigrationIdempotently(t *testing.T) {
 	).Row().Scan(&defaultValue))
 	assert.Contains(t, defaultValue, "pdf", "format column must default to pdf so legacy rows remain readable")
 }
+
+func TestStoreNewDefersDatabaseCreationUntilConnect(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "Glint")
+	path := filepath.Join(directory, "library.sqlite3")
+
+	store := New(path)
+	t.Cleanup(func() { _ = store.Close() })
+	assert.NoDirExists(t, directory)
+	require.NoError(t, store.Close())
+
+	require.NoError(t, store.Connect())
+	assert.FileExists(t, path)
+	value, err := store.Setting(context.Background(), "missing")
+	require.NoError(t, err)
+	assert.Empty(t, value)
+
+	db := store.db
+	require.NoError(t, store.Connect())
+	assert.Same(t, db, store.db)
+}
