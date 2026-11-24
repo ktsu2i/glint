@@ -11,16 +11,10 @@ import (
 )
 
 const (
-	// DefaultIdleTimeout aborts a streaming chat request when the upstream stops
-	// sending deltas for this duration.
-	DefaultIdleTimeout = 60 * time.Second
-	// DefaultTotalTimeout aborts a chat request once the total time budget is
-	// exhausted, regardless of progress.
+	DefaultIdleTimeout  = 60 * time.Second
 	DefaultTotalTimeout = 5 * time.Minute
 )
 
-// ErrChatTimeout signals that the service aborted a request because the
-// upstream stalled or exceeded the total time budget.
 var ErrChatTimeout = errors.New("chat request timed out")
 
 type Service struct {
@@ -61,9 +55,6 @@ func newService(provider GatewayProvider) *Service {
 	}
 }
 
-// Startup wires the Wails runtime context into the service. It is a package
-// function (not a method) so that Wails does not expose it to the frontend as
-// a bound RPC.
 func Startup(s *Service, ctx context.Context) {
 	s.ctx = ctx
 }
@@ -135,8 +126,6 @@ func (s *Service) pump(
 	}
 }
 
-// CancelChat aborts an in-flight request started by StartChat. It is safe to
-// call with an unknown request ID; the call is a no-op in that case.
 func (s *Service) CancelChat(requestID string) {
 	if requestID == "" {
 		return

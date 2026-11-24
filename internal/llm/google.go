@@ -245,8 +245,6 @@ func (gateway *GoogleGateway) readStream(ctx context.Context, requestID string, 
 	sendAnswerDelta(ctx, stream, AnswerDelta{RequestID: requestID, Done: true, Error: gateway.errorMapper.streamIncomplete()})
 }
 
-// googleStreamEndpoint はユーザー入力の base URL から `streamGenerateContent` endpoint を組み立てる。
-// `?alt=sse` を強制してSSE形式で受信し、auth_mode=query なら `key=<apiKey>` を query に付ける。
 func googleStreamEndpoint(baseURL, apiVersion, model, authMode, apiKey string) (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if base == "" {

@@ -9,11 +9,8 @@ import (
 	"time"
 )
 
-// OpenAICompatiblePrefix は user-defined OpenAI 互換 provider id の prefix。
-// 実際の id は `openai_compatible:<slug>` の形になる。
 const OpenAICompatiblePrefix = "openai_compatible"
 
-// OpenAICompatibleConfig は openai_compatible adapter の設定。
 type OpenAICompatibleConfig struct {
 	APIKey         string
 	Model          string
@@ -122,7 +119,6 @@ func (gateway *OpenAICompatibleGateway) TestConnection(ctx context.Context) erro
 	return awaitConnectionTest(ctx, stream)
 }
 
-// IsOpenAICompatibleID は provider id が `openai_compatible:<slug>` 形式かを判定する。
 func IsOpenAICompatibleID(id ProviderID) bool {
 	value := string(id)
 	if value == OpenAICompatiblePrefix {
@@ -132,7 +128,6 @@ func IsOpenAICompatibleID(id ProviderID) bool {
 	return strings.HasPrefix(value, prefix) && strings.TrimSpace(strings.TrimPrefix(value, prefix)) != ""
 }
 
-// OpenAICompatibleSlug は provider id から slug 部分を抽出する。
 func OpenAICompatibleSlug(id ProviderID) string {
 	if !IsOpenAICompatibleID(id) {
 		return ""

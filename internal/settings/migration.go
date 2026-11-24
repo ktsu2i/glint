@@ -17,9 +17,6 @@ type legacyOpenRouterSettings struct {
 	ZDR      bool   `json:"zdr"`
 }
 
-// ensureMigration moves pre-F2 OpenRouter config into the multi-provider
-// schema, then removes the legacy keyring entry after the replacement exists.
-// Both steps are idempotent and have independent completion markers.
 func (manager *Manager) ensureMigration(ctx context.Context) error {
 	if manager.migrated {
 		return nil
@@ -50,9 +47,6 @@ func (manager *Manager) ensureMigration(ctx context.Context) error {
 		}
 	}
 
-	// F10: model 単独保存と active_provider を models[] + active_model_ref に
-	// 持ち上げる。`llm.providers.<id>.model` から `models[]` に1件コピーし、
-	// 同時に `llm.active_provider` を `llm.active_model_ref` に変換する。
 	modelsDone, err := manager.store.Setting(ctx, llmModelsMigrationKey)
 	if err != nil {
 		return err
@@ -66,10 +60,6 @@ func (manager *Manager) ensureMigration(ctx context.Context) error {
 		}
 	}
 
-	// F16: built-in provider options are implementation details owned by the
-	// adapters. Remove legacy endpoint/version/auth overrides so hidden values
-	// cannot keep affecting chat, listing, or connection tests. Custom
-	// OpenAI-compatible options remain user-managed and are preserved.
 	optionsDone, err := manager.store.Setting(ctx, llmOptionsMigrationKey)
 	if err != nil {
 		return err
@@ -136,7 +126,6 @@ func (manager *Manager) migrateLegacyOpenRouter(ctx context.Context) error {
 			return fmt.Errorf("read new OpenRouter API key entry: %w", getErr)
 		}
 	case errors.Is(err, ErrSecretNotFound):
-		// nothing to migrate
 	default:
 		return fmt.Errorf("read legacy OpenRouter API key: %w", err)
 	}
@@ -170,14 +159,6 @@ func (manager *Manager) cleanupLegacyOpenRouterKey() error {
 	return nil
 }
 
-// migrateToActiveModelRef converts the F2 schema into the F10 one. Concretely:
-//   - llm.providers.<id>.model (single value) becomes the first entry of
-//     models[] and stays in `model` as the per-provider last-used pointer
-//   - llm.active_provider is paired with that model to populate
-//     llm.active_model_ref
-//
-// The migration is one-shot, idempotent (controlled by llm.migration_v4_done),
-// and leaves the v2 keys intact so a downgrade-and-reupgrade still works.
 func (manager *Manager) migrateToActiveModelRef(ctx context.Context) error {
 	stored, err := manager.loadStoredProviders(ctx)
 	if err != nil {
@@ -189,7 +170,6 @@ func (manager *Manager) migrateToActiveModelRef(ctx context.Context) error {
 		if trimmedModel == "" {
 			continue
 		}
-		// Already part of models[]? skip.
 		if !slices.Contains(entry.Models, trimmedModel) {
 			entry.Models = append([]string{trimmedModel}, entry.Models...)
 			stored[id] = entry
@@ -202,7 +182,6 @@ func (manager *Manager) migrateToActiveModelRef(ctx context.Context) error {
 		}
 	}
 
-	// active_model_ref が既に書かれているなら何もしない。
 	existing, err := manager.store.Setting(ctx, llmActiveModelKey)
 	if err != nil {
 		return err
@@ -233,9 +212,6 @@ func (manager *Manager) migrateToActiveModelRef(ctx context.Context) error {
 	return manager.store.SaveSetting(ctx, llmActiveModelKey, string(encoded))
 }
 
-// migrateBuiltInProviderOptions deletes only options previously persisted for
-// built-in providers. Models, labels, active/recent references, and keyring
-// credentials live in separate fields/stores and are intentionally untouched.
 func (manager *Manager) migrateBuiltInProviderOptions(ctx context.Context) error {
 	stored, err := manager.loadStoredProviders(ctx)
 	if err != nil {

@@ -30,8 +30,6 @@ type Gateway interface {
 	Complete(ctx context.Context, request ChatRequest) (<-chan AnswerDelta, error)
 }
 
-// ConnectionTester verifies the configured credential, endpoint, and model
-// with a provider-specific minimal completion.
 type ConnectionTester interface {
 	TestConnection(ctx context.Context) error
 }
@@ -55,10 +53,6 @@ func awaitConnectionTest(ctx context.Context, stream <-chan AnswerDelta) error {
 	}
 }
 
-// normalizeChatRequest trims, redacts, and attaches the budget metadata that
-// the frontend will surface in the context preview. The caller must pass the
-// budget it computed at construction time so the trim limit reflects the
-// active provider/model instead of the legacy hardcoded 6000 rune cap.
 func normalizeChatRequest(request ChatRequest, budget ContextBudget) (ChatRequest, error) {
 	if budget.PromptRunes <= 0 {
 		budget = FallbackBudget()

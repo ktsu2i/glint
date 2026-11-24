@@ -226,8 +226,6 @@ func (gateway *AnthropicGateway) readStream(ctx context.Context, requestID strin
 	sendAnswerDelta(ctx, stream, AnswerDelta{RequestID: requestID, Done: true, Error: gateway.errorMapper.streamIncomplete()})
 }
 
-// anthropicMessagesEndpoint はユーザー入力の base URL から `/v1/messages` endpoint を組み立てる。
-// 既に `/messages` で終わっていればそのまま使い、それ以外は `/v1/messages` を後ろに足す。
 func anthropicMessagesEndpoint(baseURL, fallback string) string {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed == "" {

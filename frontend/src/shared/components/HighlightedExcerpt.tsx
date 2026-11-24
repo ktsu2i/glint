@@ -12,7 +12,6 @@ export function HighlightedExcerpt({ text, query }: { text: string; query: strin
     "giu",
   );
   const foldedTerms = new Set(terms.map((term) => term.toLocaleLowerCase()));
-  // 空文字の断片を除いた上で、text 内の開始 offset を key にする。
   const segments: Array<{ part: string; start: number }> = [];
   let offset = 0;
   for (const part of text.split(expression)) {

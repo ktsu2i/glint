@@ -11,10 +11,10 @@ import (
 )
 
 type fakeGateway struct {
-	mu        sync.Mutex
-	started   chan struct{}
-	delivered chan llm.AnswerDelta
-	finish    chan struct{}
+	mu          sync.Mutex
+	started     chan struct{}
+	delivered   chan llm.AnswerDelta
+	finish      chan struct{}
 	receivedCtx context.Context
 }
 

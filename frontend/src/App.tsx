@@ -154,9 +154,7 @@ function AppContent() {
       } catch {
         try {
           await markBookCoverFailed(selected.id);
-        } catch {
-          // A missing thumbnail must not prevent reading.
-        }
+        } catch {}
       } finally {
         generatingCovers.current.delete(selected.id);
         await refreshLibrary();

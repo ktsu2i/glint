@@ -1,8 +1,3 @@
-// Package sqlite applies embedded SQL migration files to a SQLite database.
-// Migrations are picked up from an fs.FS in lexical order, each filename must
-// start with a numeric version prefix (e.g. "0001_init.sql"), and each is run
-// inside its own transaction. Applied versions are recorded in the
-// app-owned schema_migrations table so subsequent runs skip them.
 package sqlite
 
 import (
@@ -80,9 +75,6 @@ func (m *Migrator) Up(ctx context.Context) error {
 	return nil
 }
 
-// Earlier development builds used golang-migrate's (version, dirty) table.
-// Preserve its applied versions while moving to the app-owned schema used by
-// this migrator. This runs before any new migration is applied.
 func (m *Migrator) upgradeLegacyMigrationTable(ctx context.Context) error {
 	rows, err := m.DB.QueryContext(ctx, "PRAGMA table_info(schema_migrations)")
 	if err != nil {

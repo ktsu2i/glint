@@ -9,8 +9,6 @@ const backend = vi.hoisted(() => ({
   deleteProviderSettings: vi.fn(),
 }));
 
-// These APIs remain available to the composer, but Settings must never call
-// them after F15's provider/model responsibility split.
 const modelAPI = vi.hoisted(() => ({
   setActiveModel: vi.fn(),
   listProviderModels: vi.fn(),
@@ -552,14 +550,10 @@ describe("LLMSettingsPage", () => {
     });
     render(<LLMSettingsPage onBack={vi.fn()} />);
 
-    // The summary row shows a small env badge so the user notices that the
-    // active key is coming from outside the keyring.
     const badge = await screen.findByText("env上書き中");
     expect(badge).toBeTruthy();
     expect(badge.getAttribute("title")).toContain("GLINT_OPENAI_API_KEY");
 
-    // Expanding the row reveals an env note explaining the override and a
-    // working test-connection button.
     const list = screen.getByRole("list", { name: "Model provider一覧" });
     const openAIRow = within(list)
       .getAllByRole("listitem")

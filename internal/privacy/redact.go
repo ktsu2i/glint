@@ -26,9 +26,6 @@ var secretPatterns = []struct {
 	},
 }
 
-// RedactKnownSecrets removes common credential forms before content leaves
-// the local process. It is a final safety net and does not replace file-level
-// exclude rules or the send-preview UI.
 func RedactKnownSecrets(value string) string {
 	for _, secret := range secretPatterns {
 		replaceWith := secret.replacement

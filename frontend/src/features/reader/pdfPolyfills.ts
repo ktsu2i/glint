@@ -1,6 +1,3 @@
-// pdfjs-dist 6.x uses the TC39 "upsert" Map methods which Wails' bundled
-// WebKit does not yet ship. Polyfill them before pdfjs evaluates.
-
 declare global {
   interface Map<K, V> {
     getOrInsertComputed(key: K, callbackfn: (key: K) => V): V;
@@ -17,8 +14,6 @@ declare global {
   }
 }
 
-// pdfjs-dist 6.x also uses Uint8Array#toHex, which is not available in
-// Node.js 24 or Wails' current WebKit.
 if (typeof Uint8Array.prototype.toHex !== "function") {
   Object.defineProperty(Uint8Array.prototype, "toHex", {
     value: function toHex(this: Uint8Array): string {
@@ -39,8 +34,6 @@ type UpsertMap<K, V> = {
   set(key: K, value: V): unknown;
 };
 
-// pdfjs-dist 6.5+ also calls these methods on WeakMap instances (e.g. the
-// canvas path cache), so install them on both prototypes.
 function installUpsertMethods(prototype: object): void {
   if (!("getOrInsertComputed" in prototype)) {
     Object.defineProperty(prototype, "getOrInsertComputed", {
@@ -79,9 +72,6 @@ function installUpsertMethods(prototype: object): void {
 installUpsertMethods(Map.prototype);
 installUpsertMethods(WeakMap.prototype);
 
-// pdfjs iterates streams via `for await (const value of stream)`, which
-// requires `Symbol.asyncIterator` on ReadableStream — also missing in
-// Wails' WebKit.
 if (typeof ReadableStream !== "undefined" && !(Symbol.asyncIterator in ReadableStream.prototype)) {
   Object.defineProperty(ReadableStream.prototype, Symbol.asyncIterator, {
     value: function asyncIterator<R>(

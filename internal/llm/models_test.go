@@ -15,7 +15,6 @@ func TestBuiltinModelsExposesProviderSeeds(t *testing.T) {
 			assert.NotEmpty(t, model.ID)
 		}
 	}
-	// Ollama and openai_compatible intentionally have no builtin seed list.
 	assert.Empty(t, BuiltinModels(ProviderOllama))
 	assert.Empty(t, BuiltinModels(ProviderID("openai_compatible:foo")))
 }
@@ -26,7 +25,7 @@ func TestMergeModelsKeepsPrimaryAndAppendsUniqueSecondary(t *testing.T) {
 		{ID: "beta", Source: ModelSourceAPI},
 	}
 	secondary := []ModelDescriptor{
-		{ID: "beta", Source: ModelSourceBuiltin}, // duplicate; should be dropped
+		{ID: "beta", Source: ModelSourceBuiltin},
 		{ID: "gamma", Source: ModelSourceBuiltin},
 	}
 	merged := MergeModels(primary, secondary)

@@ -9,10 +9,6 @@ import (
 	"github.com/kaito/glint/internal/library"
 )
 
-// indexEPUBSpine extracts plain text for every spine item and persists it to
-// book_pages so the existing lexical search treats EPUB chapters the same as
-// PDF pages. Empty spines (a malformed OPF) are tolerated: the book still
-// imports, just without any indexed text.
 func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 	if pkg == nil || len(pkg.Spine) == 0 {
 		return nil
@@ -53,6 +49,4 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 	return nil
 }
 
-// epubIndexBatchSize mirrors library.maxBookPageBatchSize so the EPUB indexer
-// stays under the SQLite-side limit without depending on an internal constant.
 const epubIndexBatchSize = 50

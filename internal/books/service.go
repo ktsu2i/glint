@@ -88,16 +88,10 @@ func New(lib *library.Store, assets *assetserver.Server, dataDirectory string, m
 	return service
 }
 
-// Startup wires the Wails runtime context into the service. It is a package
-// function (not a method) so that Wails does not expose it to the frontend as
-// a bound RPC.
 func Startup(s *Service, ctx context.Context) {
 	s.ctx = ctx
 }
 
-// OpenBookFile prompts the user for a PDF or EPUB and imports the selected
-// file. Wails binds this method to the frontend; PDF / EPUB dispatch happens by
-// extension inside selectBookFile.
 func (s *Service) OpenBookFile() (BookFile, error) {
 	if s.ctx == nil {
 		return BookFile{}, errors.New("application is not ready")
@@ -112,8 +106,6 @@ func (s *Service) OpenBookFile() (BookFile, error) {
 	return s.selectBookFile(path)
 }
 
-// OpenPDF is retained as a thin alias so frontend code generated against the
-// E1 wails facade keeps working until callers switch to OpenBookFile.
 func (s *Service) OpenPDF() (BookFile, error) {
 	return s.OpenBookFile()
 }
@@ -165,9 +157,6 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 	return s.bookFile(book, pkg)
 }
 
-// RelinkBook prompts the user to point this library entry at a new file. The
-// dialog accepts the same formats as OpenBookFile so a renamed or moved EPUB
-// can replace a PDF entry only when the format actually still matches.
 func (s *Service) RelinkBook(id string) (BookFile, error) {
 	if s.ctx == nil {
 		return BookFile{}, errors.New("application is not ready")
@@ -211,8 +200,6 @@ func (s *Service) RelinkBook(id string) (BookFile, error) {
 	return s.bookFile(book, pkg)
 }
 
-// RelinkPDF stays available so the Wails bindings emitted in Phase E1 keep
-// compiling on the frontend. The implementation simply forwards to RelinkBook.
 func (s *Service) RelinkPDF(id string) (BookFile, error) {
 	return s.RelinkBook(id)
 }
@@ -348,8 +335,6 @@ func (s *Service) RemoveBookmark(bookID string, pageNumber int) error {
 	return err
 }
 
-// SaveBookPages persists a bounded extraction batch produced by PDF.js. It
-// returns the total indexed page count so the reader can report progress.
 func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount int) (int, error) {
 	inputs := make([]library.BookPage, len(pages))
 	for i, page := range pages {
@@ -391,9 +376,6 @@ func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
 	return output, nil
 }
 
-// SearchLibrary runs a library-wide lexical search and returns matches grouped
-// by book, with book metadata pre-resolved so the result list can render covers
-// and titles without an extra round trip.
 func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
 	hits, err := s.library.SearchLibraryPages(context.Background(), query, 0, 0)
 	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
@@ -449,9 +431,6 @@ func (s *Service) localized(english, japanese string) string {
 	return english
 }
 
-// selectBookFile imports a freshly chosen file of either supported format.
-// PDF / EPUB paths converge once the inspection has produced a hash, size and
-// (for EPUB) the parsed package so cover + page indexing can run synchronously.
 func (s *Service) selectBookFile(filePath string) (BookFile, error) {
 	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
@@ -481,24 +460,15 @@ func (s *Service) selectBookFile(filePath string) (BookFile, error) {
 	return s.bookFile(book, pkg)
 }
 
-// selectPDF stays available for callers and tests that still want the PDF-only
-// import path. It dispatches through selectBookFile so all format-specific
-// logic lives in one place.
 func (s *Service) selectPDF(filePath string) (BookFile, error) {
 	return s.selectBookFile(filePath)
 }
 
-// afterImport runs format-specific work that should happen once on initial
-// import (and again when a file is relinked to a new hash). For EPUB this
-// covers cover extraction and spine indexing; PDF cover + indexing remain a
-// frontend responsibility because PDF.js drives both.
 func (s *Service) afterImport(book library.Book, pkg *epubPackage) error {
 	if book.Format != BookFormatEPUB || pkg == nil {
 		return nil
 	}
 	if err := s.extractEPUBCover(book, pkg); err != nil {
-		// Cover extraction failure should never block import; mark the book
-		// as failed so the UI can render its placeholder.
 		_ = s.library.MarkCoverFailed(context.Background(), book.ID, time.Now())
 	}
 	return s.indexEPUBSpine(book, pkg)
@@ -550,9 +520,6 @@ func (s *Service) chooseBookFile(title string) (string, error) {
 	return path, nil
 }
 
-// translateInspectionError converts the typed inspector errors into a
-// localized, user-facing message. The original error is wrapped so logs still
-// carry the underlying cause.
 func (s *Service) translateInspectionError(err error) error {
 	switch {
 	case errors.Is(err, ErrEPUBDRMProtected):
