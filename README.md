@@ -112,6 +112,14 @@ wails build
 
 The finished app lands at `build/bin/Glint.app`. Move it to your Applications folder and open it like any other Mac app.
 
+If you change the workflows under `.github/workflows`, run the same checks as CI. `mise install` also sets up these tools:
+
+```bash
+actionlint
+ghalint run
+zizmor .
+```
+
 ## Setting up an AI provider
 
 1. Open **Settings** from the sidebar.
