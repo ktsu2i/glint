@@ -2,13 +2,19 @@ name: Lint GitHub Actions
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
-    name: actionlint / ghalint / zizmor
+    name: actionlint / jactionlint / ghalint / zizmor
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -24,11 +30,14 @@ jobs:
       - name: Set up lint tools (mise.toml)
         uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
-          install_args: actionlint ghalint zizmor shellcheck
+          install_args: actionlint jactionlint ghalint zizmor shellcheck
           cache: false
 
       - name: Run actionlint
         run: actionlint
+
+      - name: Run jactionlint
+        run: jactionlint
 
       - name: Run ghalint
         run: ghalint run

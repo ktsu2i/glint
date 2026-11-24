@@ -55,10 +55,11 @@ jobs:
           ref: ${{ needs.tagpr.outputs.tag }}
           persist-credentials: false
 
+      # 公開する asset を作る job なので、cache poisoning を避けて cache は使わない。
       - name: Set up toolchain (mise.toml)
         uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
-          cache: true
+          cache: false
 
       - name: Check version
         run: |

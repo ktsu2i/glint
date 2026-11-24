@@ -116,6 +116,7 @@ If you change the workflows under `.github/workflows`, run the same checks as CI
 
 ```bash
 actionlint
+jactionlint
 ghalint run
 zizmor .
 ```
