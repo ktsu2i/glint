@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.2.0](https://github.com/ktsu2i/glint/compare/v0.1.5...v0.2.0) - 2026-11-24
+
+### New Features
+- chore: remove all AI features by @ktsu2i in https://github.com/ktsu2i/glint/pull/23
+### Other Changes
+- fix: open the library database on startup by @ktsu2i in https://github.com/ktsu2i/glint/pull/25
+- chore: add golangci-lint by @ktsu2i in https://github.com/ktsu2i/glint/pull/26
+
 ## [v0.1.5](https://github.com/ktsu2i/glint/compare/v0.1.4...v0.1.5) - 2026-11-24
 
 ### Other Changes
