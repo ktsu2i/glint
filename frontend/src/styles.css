@@ -1440,23 +1440,6 @@ input:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: 6px;
-  padding-left: 6px;
-  border-left: 1px solid var(--glass-rule);
-  color: var(--glass-muted);
-}
-
-.zoom-controls > span {
-  width: 44px;
-  text-align: center;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
 .tool-button {
   width: 34px;
   height: 34px;
@@ -1530,6 +1513,94 @@ input:focus-visible,
   line-height: 1.4;
   box-shadow: 0 4px 12px rgb(var(--shadow-rgb) / 12%);
   transform: translateX(-50%);
+}
+
+.reader-view-toggle {
+  min-width: 40px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* The Aa menu holds the page layout, binding, and zoom. */
+.reader-view-menu {
+  position: absolute;
+  z-index: 7;
+  top: 60px;
+  right: 8px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.reader-view-menu section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reader-view-menu h2 {
+  margin: 0;
+  color: var(--glass-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reader-view-menu p {
+  margin: 0;
+  color: var(--glass-muted);
+  font-size: 11.5px;
+}
+
+.reader-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reader-zoom-stepper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--glass-track);
+}
+
+.reader-zoom-stepper .glass-button {
+  width: 40px;
+  height: 36px;
+}
+
+.reader-zoom-stepper span {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.reader-fit-button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--glass-track);
+  color: var(--glass-ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reader-fit-button[aria-pressed="true"] {
+  background: var(--glass-selected);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
 }
 
 /* Side sheet for the table of contents, search, and bookmarks. */

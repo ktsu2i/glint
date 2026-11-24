@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
   BookOpenIcon,
   BookOpenTextIcon,
   BookmarkSimpleIcon,
@@ -118,6 +116,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const [outlineLoaded, setOutlineLoaded] = useState(false);
   const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [submittedSearchQuery, setSubmittedSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
@@ -231,6 +230,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     setOutline([]);
     setOutlineLoaded(false);
     setOpenPanel(null);
+    setIsViewMenuOpen(false);
     setChromeVisible(true);
     setSearchQuery("");
     setSubmittedSearchQuery("");
@@ -403,8 +403,9 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         setPageNumber((current) => Math.max(1, current - step));
         setChromeVisible(false);
       } else if (event.key === "Escape") {
-        if (openPanel) {
+        if (openPanel || isViewMenuOpen) {
           setOpenPanel(null);
+          setIsViewMenuOpen(false);
         } else {
           setChromeVisible((current) => !current);
         }
@@ -412,7 +413,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [document, viewMode, bindingDirection, openPanel]);
+  }, [document, viewMode, bindingDirection, isViewMenuOpen, openPanel]);
 
   useEffect(() => {
     stageClickRef.current = (event: MouseEvent) => {
@@ -424,13 +425,14 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
       if (selection && !selection.isCollapsed && selection.toString().trim() !== "") {
         return;
       }
-      if (openPanel) {
+      if (openPanel || isViewMenuOpen) {
         setOpenPanel(null);
+        setIsViewMenuOpen(false);
         return;
       }
       setChromeVisible((current) => !current);
     };
-  }, [openPanel]);
+  }, [isViewMenuOpen, openPanel]);
 
   useEffect(() => {
     if (!document || !stageNodeRef.current) {
@@ -717,6 +719,11 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     });
   }
 
+  function changeBinding(next: BindingDirection) {
+    setBindingDirection(next);
+    persistBindingDirection(book?.id, next);
+  }
+
   function adjustZoom(delta: number) {
     setZoomMode((current) => {
       const base = current.kind === "manual" ? current.value : effectiveScale;
@@ -838,7 +845,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     }
   }
 
-  const chromeShown = chromeVisible || openPanel !== null;
+  const chromeShown = chromeVisible || openPanel !== null || isViewMenuOpen;
   const panelTitle = isTocOpen
     ? t("reader.toc")
     : isSearchOpen
@@ -973,52 +980,101 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
           >
             <BookmarkSimpleIcon size={17} weight={currentPageBookmarked ? "fill" : "regular"} />
           </ToolButton>
-          <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
-            <ToolButton
-              label={isRtlBinding ? t("reader.bindingSwitchToLtr") : t("reader.bindingSwitchToRtl")}
-              className={isRtlBinding ? "is-active" : ""}
-              onClick={() =>
-                setBindingDirection((current) => {
-                  const next: BindingDirection = current === "rtl" ? "ltr" : "rtl";
-                  persistBindingDirection(book?.id, next);
-                  return next;
-                })
-              }
-            >
-              {isRtlBinding ? (
-                <ArrowLeftIcon size={15} weight="bold" />
-              ) : (
-                <ArrowRightIcon size={15} weight="bold" />
-              )}
-            </ToolButton>
-            <ToolButton
-              label={viewMode === "spread" ? t("reader.singlePage") : t("reader.spread")}
-              className={viewMode === "spread" ? "is-active" : ""}
-              onClick={() => setViewMode((current) => (current === "spread" ? "single" : "spread"))}
-            >
-              {viewMode === "spread" ? (
-                <FileIcon size={15} weight="bold" />
-              ) : (
-                <BookOpenIcon size={15} weight="bold" />
-              )}
-            </ToolButton>
-            <ToolButton
-              label={t("reader.fitPage")}
-              className={zoomMode.kind === "fit-page" ? "is-active" : ""}
-              onClick={() => setZoomMode({ kind: "fit-page" })}
-            >
-              <CornersInIcon size={15} weight="bold" />
-            </ToolButton>
-            <ToolButton label={t("reader.zoomOut")} onClick={() => adjustZoom(-manualZoomStep)}>
-              <MinusIcon size={15} weight="bold" />
-            </ToolButton>
-            <span>{Math.round(effectiveScale * 100)}%</span>
-            <ToolButton label={t("reader.zoomIn")} onClick={() => adjustZoom(manualZoomStep)}>
-              <PlusIcon size={15} weight="bold" />
-            </ToolButton>
-          </div>
+          <button
+            type="button"
+            className="glass-button reader-view-toggle"
+            aria-label={t("reader.view")}
+            aria-pressed={isViewMenuOpen}
+            aria-expanded={isViewMenuOpen}
+            onClick={() => setIsViewMenuOpen((current) => !current)}
+          >
+            Aa
+          </button>
         </div>
       </header>
+
+      {isViewMenuOpen && (
+        <div
+          className="reader-view-menu glass glass-strong"
+          role="dialog"
+          aria-label={t("reader.view")}
+        >
+          <section>
+            <h2>{t("reader.layoutHeading")}</h2>
+            <div className="segmented" role="group" aria-label={t("reader.layoutHeading")}>
+              <button
+                type="button"
+                aria-pressed={viewMode === "single"}
+                onClick={() => setViewMode("single")}
+              >
+                <FileIcon size={14} aria-hidden="true" />
+                {t("reader.layoutSingle")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={viewMode === "spread"}
+                onClick={() => setViewMode("spread")}
+              >
+                <BookOpenIcon size={14} aria-hidden="true" />
+                {t("reader.layoutSpread")}
+              </button>
+            </div>
+          </section>
+          <section>
+            <h2>{t("reader.bindingHeading")}</h2>
+            <div className="segmented" role="group" aria-label={t("reader.bindingHeading")}>
+              <button
+                type="button"
+                aria-pressed={!isRtlBinding}
+                onClick={() => changeBinding("ltr")}
+              >
+                {t("reader.bindingLtr")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={isRtlBinding}
+                onClick={() => changeBinding("rtl")}
+              >
+                {t("reader.bindingRtl")}
+              </button>
+            </div>
+            <p>{isRtlBinding ? t("reader.bindingRtlNote") : t("reader.bindingLtrNote")}</p>
+          </section>
+          <section>
+            <h2>{t("reader.zoomHeading")}</h2>
+            <div className="reader-zoom-row">
+              <div className="reader-zoom-stepper">
+                <button
+                  type="button"
+                  className="glass-button"
+                  aria-label={t("reader.zoomOut")}
+                  onClick={() => adjustZoom(-manualZoomStep)}
+                >
+                  <MinusIcon size={13} weight="bold" aria-hidden="true" />
+                </button>
+                <span>{Math.round(effectiveScale * 100)}%</span>
+                <button
+                  type="button"
+                  className="glass-button"
+                  aria-label={t("reader.zoomIn")}
+                  onClick={() => adjustZoom(manualZoomStep)}
+                >
+                  <PlusIcon size={13} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="reader-fit-button"
+                aria-pressed={zoomMode.kind === "fit-page"}
+                onClick={() => setZoomMode({ kind: "fit-page" })}
+              >
+                <CornersInIcon size={14} aria-hidden="true" />
+                {t("reader.fitPage")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {bookmarkError && (
         <div className="reader-bookmark-error" role="alert">
