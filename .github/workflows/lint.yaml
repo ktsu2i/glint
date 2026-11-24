@@ -30,7 +30,11 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      # Linux では wails3 CLI が cgo で gtk4 / webkitgtk に link しようとするので cgo を切る。
+      # bindings は静的解析なので、server tag と合わせて macOS で生成したものと一致する。
       - name: Generate frontend bindings
+        env:
+          CGO_ENABLED: "0"
         run: go tool wails3 generate bindings -ts -i -f '-tags=server'
 
       - name: Set up pnpm and Node.js, install dependencies
