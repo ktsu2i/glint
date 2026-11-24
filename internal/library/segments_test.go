@@ -228,3 +228,39 @@ func TestSaveBookSegmentsRejectsInvalidSegments(t *testing.T) {
 	assert.Equal(t, "2章 > 2.1 節", results[0].HeadingPath)
 	assert.Equal(t, "page:1", results[0].Location)
 }
+
+func TestFirstMissingOrdinalFindsTheEarliestGap(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	cases := map[string]struct {
+		ordinals []int
+		next     int
+	}{
+		"empty":            {ordinals: nil, next: 1},
+		"contiguous":       {ordinals: []int{1, 2, 3}, next: 4},
+		"gap in middle":    {ordinals: []int{1, 2, 4, 5}, next: 3},
+		"missing first":    {ordinals: []int{2, 3}, next: 1},
+		"multiple gaps":    {ordinals: []int{1, 3, 5}, next: 2},
+		"single first one": {ordinals: []int{1}, next: 2},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			id := "book-" + name
+			_, err := store.Import(t.Context(), id, "/tmp/"+id+".pdf", "hash-"+name, "pdf", 10, time.Now())
+			require.NoError(t, err)
+			segments := make([]BookSegment, 0, len(tc.ordinals))
+			for _, ordinal := range tc.ordinals {
+				segments = append(segments, pageSegment(ordinal, "text"))
+			}
+			if len(segments) > 0 {
+				_, err = store.SaveBookSegments(t.Context(), id, segments, 10, time.Now())
+				require.NoError(t, err)
+			}
+			next, err := store.FirstMissingOrdinal(t.Context(), id)
+			require.NoError(t, err)
+			assert.Equal(t, tc.next, next)
+		})
+	}
+}

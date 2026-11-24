@@ -22,6 +22,7 @@ import {
   markBookCoverFailed,
   openBook,
   openBookFile,
+  pendingIndexBooks,
   relinkBook,
   removeBook,
   renameBook,
@@ -146,7 +147,7 @@ function AppContent() {
   );
 
   const ensureBookIndexed = useCallback(
-    (target: IndexableBook) => {
+    async (target: IndexableBook) => {
       if (!target.url || !target.id) {
         return;
       }
@@ -158,31 +159,54 @@ function AppContent() {
       }
       const controller = new AbortController();
       indexAbortersRef.current.set(target.id, controller);
-      const runIndexing = async () => {
-        try {
-          const result = await indexBookPages(
-            { id: target.id, url: target.url, indexedPageCount: target.indexedPageCount ?? 0 },
-            { signal: controller.signal },
-          );
-          setBook((current) =>
-            current && current.id === target.id
-              ? { ...current, indexedPageCount: result.persistedCount }
-              : current,
-          );
-          void refreshLibrary();
-        } catch (reason: unknown) {
-          if (isAbortError(reason)) {
-            return;
-          }
-          console.warn("Book indexing failed", reason);
-        } finally {
-          indexAbortersRef.current.delete(target.id);
+      try {
+        const result = await indexBookPages(
+          { id: target.id, url: target.url, nextSegment: target.nextSegment },
+          { signal: controller.signal },
+        );
+        setBook((current) =>
+          current && current.id === target.id
+            ? {
+                ...current,
+                indexedPageCount: result.persistedCount,
+                nextSegment: result.pageCount + 1,
+              }
+            : current,
+        );
+        void refreshLibrary();
+      } catch (reason: unknown) {
+        if (isAbortError(reason)) {
+          return;
         }
-      };
-      void runIndexing();
+        console.warn("Book indexing failed", reason);
+      } finally {
+        indexAbortersRef.current.delete(target.id);
+      }
     },
     [refreshLibrary],
   );
+
+  const resumedPendingIndex = useRef(false);
+  useEffect(() => {
+    if (resumedPendingIndex.current) {
+      return;
+    }
+    resumedPendingIndex.current = true;
+    const resume = async () => {
+      let targets;
+      try {
+        targets = await pendingIndexBooks();
+      } catch (reason: unknown) {
+        console.warn("Listing books to index failed", reason);
+        return;
+      }
+      for (const target of targets) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- 裏で1冊ずつ順番に index する。
+        await ensureBookIndexed(target);
+      }
+    };
+    void resume();
+  }, [ensureBookIndexed]);
 
   useEffect(() => {
     const aborters = indexAbortersRef.current;
@@ -201,7 +225,7 @@ function AppContent() {
       if (selected.format !== "epub") {
         void ensureCover(selected);
       }
-      ensureBookIndexed(selected);
+      void ensureBookIndexed(selected);
     },
     [ensureCover, ensureBookIndexed],
   );

@@ -12,7 +12,8 @@ const bindings = vi.hoisted(() => ({
   removeBookmark: vi.fn(),
   renameBook: vi.fn(),
   saveBookCover: vi.fn(),
-  saveBookPages: vi.fn(),
+  saveBookSegments: vi.fn(),
+  pendingIndexBooks: vi.fn(),
   saveReadingPosition: vi.fn(),
   searchBook: vi.fn(),
   searchLibrary: vi.fn(),
@@ -32,7 +33,8 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   RemoveBookmark: bindings.removeBookmark,
   RenameBook: bindings.renameBook,
   SaveBookCover: bindings.saveBookCover,
-  SaveBookPages: bindings.saveBookPages,
+  SaveBookSegments: bindings.saveBookSegments,
+  PendingIndexBooks: bindings.pendingIndexBooks,
   SaveReadingPosition: bindings.saveReadingPosition,
   SearchBook: bindings.searchBook,
   SearchLibrary: bindings.searchLibrary,
@@ -56,7 +58,8 @@ import {
   removeBookmark,
   renameBook,
   saveBookCover,
-  saveBookPages,
+  saveBookSegments,
+  pendingIndexBooks,
   saveAppearanceSettings,
   saveReadingPosition,
   searchBook,
@@ -100,7 +103,9 @@ describe("backend facade", () => {
     bindings.relinkBook.mockResolvedValue(book);
     bindings.removeBook.mockResolvedValue(true);
     bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
-    bindings.saveBookPages.mockResolvedValue(2);
+    bindings.saveBookSegments.mockResolvedValue(2);
+    const pending = [{ id: "book-1", url: "/book/1", nextSegment: 3, total: 10 }];
+    bindings.pendingIndexBooks.mockResolvedValue(pending);
     bindings.searchBook.mockResolvedValue([{ pageNumber: 2, excerpt: "match", matchCount: 1 }]);
     const libraryHit = {
       book: { id: "book-1", title: "Book", coverUrl: "/cover/1", available: true },
@@ -122,14 +127,14 @@ describe("backend facade", () => {
     });
     await saveReadingPosition("book-1", 3, 10);
     await expect(
-      saveBookPages(
+      saveBookSegments(
         "book-1",
         [
           {
-            pageNumber: 1,
+            ordinal: 1,
+            location: "page:1",
+            headingPath: "1章",
             text: "page text",
-            width: 612,
-            height: 792,
           },
         ],
         10,
@@ -139,6 +144,7 @@ describe("backend facade", () => {
       { pageNumber: 2, excerpt: "match", matchCount: 1 },
     ]);
     await expect(searchLibrary("page")).resolves.toEqual([libraryHit]);
+    await expect(pendingIndexBooks()).resolves.toEqual(pending);
     await expect(listBookmarks("book-1")).resolves.toEqual([bookmark]);
     await expect(addBookmark("book-1", 4, 10)).resolves.toEqual(bookmark);
     await removeBookmark("book-1", 4);
@@ -146,14 +152,14 @@ describe("backend facade", () => {
     await markBookCoverFailed("book-1");
 
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10);
-    expect(bindings.saveBookPages).toHaveBeenCalledWith(
+    expect(bindings.saveBookSegments).toHaveBeenCalledWith(
       "book-1",
       [
         {
-          pageNumber: 1,
+          ordinal: 1,
+          location: "page:1",
+          headingPath: "1章",
           text: "page text",
-          width: 612,
-          height: 792,
         },
       ],
       10,

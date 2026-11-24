@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   markBookCoverFailed: vi.fn(),
   openBook: vi.fn(),
   openBookFile: vi.fn(),
+  pendingIndexBooks: vi.fn(),
+  indexBookPages: vi.fn(),
   relinkBook: vi.fn(),
   removeBook: vi.fn(),
   renameBook: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock("./shared/api/backend", () => ({
   markBookCoverFailed: mocks.markBookCoverFailed,
   openBook: mocks.openBook,
   openBookFile: mocks.openBookFile,
+  pendingIndexBooks: mocks.pendingIndexBooks,
   relinkBook: mocks.relinkBook,
   removeBook: mocks.removeBook,
   renameBook: mocks.renameBook,
@@ -32,6 +35,10 @@ vi.mock("./shared/api/backend", () => ({
   getLanguageSettings: mocks.getLanguageSettings,
   saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLanguageSettings: mocks.saveLanguageSettings,
+}));
+vi.mock("./features/library/indexer", () => ({
+  indexBookPages: mocks.indexBookPages,
+  isAbortError: () => false,
 }));
 vi.mock("./features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
@@ -65,6 +72,7 @@ const openedBook = {
   size: 10,
   initialPage: 3,
   indexedPageCount: 0,
+  nextSegment: 1,
   coverStatus: "ready" as const,
 };
 
@@ -89,6 +97,8 @@ beforeEach(() => {
   delete document.documentElement.dataset.themePreference;
   document.documentElement.style.colorScheme = "";
   mocks.listBooks.mockResolvedValue([]);
+  mocks.pendingIndexBooks.mockResolvedValue([]);
+  mocks.indexBookPages.mockResolvedValue({ pageCount: 1, persistedCount: 1 });
   mocks.saveReadingPosition.mockResolvedValue(undefined);
   mocks.saveBookCover.mockResolvedValue(undefined);
   mocks.markBookCoverFailed.mockResolvedValue(undefined);
@@ -100,6 +110,34 @@ beforeEach(() => {
 });
 
 describe("App", () => {
+  it("resumes unfinished PDF indexing one book at a time on startup", async () => {
+    const first = { id: "book-1", url: "/book/1", nextSegment: 3, total: 5 };
+    const second = { id: "book-2", url: "/book/2", nextSegment: 1, total: 2 };
+    mocks.pendingIndexBooks.mockResolvedValue([first, second]);
+    let finishFirst!: (value: { pageCount: number; persistedCount: number }) => void;
+    mocks.indexBookPages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = resolve;
+      }),
+    );
+    render(<App />);
+
+    await waitFor(() => expect(mocks.indexBookPages).toHaveBeenCalledTimes(1));
+    expect(mocks.indexBookPages.mock.calls[0]?.[0]).toEqual({
+      id: "book-1",
+      url: "/book/1",
+      nextSegment: 3,
+    });
+    finishFirst({ pageCount: 5, persistedCount: 5 });
+    await waitFor(() => expect(mocks.indexBookPages).toHaveBeenCalledTimes(2));
+    expect(mocks.indexBookPages.mock.calls[1]?.[0]).toEqual({
+      id: "book-2",
+      url: "/book/2",
+      nextSegment: 1,
+    });
+    expect(mocks.pendingIndexBooks).toHaveBeenCalledTimes(1);
+  });
+
   it("defaults to English and switches the interface to Japanese from Settings", async () => {
     mocks.getLanguageSettings.mockResolvedValue({ language: "en" });
     render(<App />);

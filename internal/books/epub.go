@@ -255,21 +255,31 @@ func resolveCoverItem(manifest map[string]epubManifestItem, coverID string) (str
 	return "", ""
 }
 
-func (pkg *epubPackage) extractSpineItemText(reader *zip.Reader, item SpineItem) (string, error) {
+type spineItemContent struct {
+	Text    string
+	Heading string
+}
+
+func (pkg *epubPackage) extractSpineItemText(reader *zip.Reader, item SpineItem) (spineItemContent, error) {
 	target := pkg.resolveHref(item.Href)
 	raw, err := readZipFile(reader, target, maxEPUBSpineItemBytes)
 	if err != nil {
-		return "", fmt.Errorf("read EPUB spine item %q: %w", item.Href, err)
+		return spineItemContent{}, fmt.Errorf("read EPUB spine item %q: %w", item.Href, err)
 	}
-	text, err := xhtmlToPlainText(raw)
+	content, err := xhtmlToPlainText(raw)
 	if err != nil {
-		return "", fmt.Errorf("convert EPUB spine item %q: %w", item.Href, err)
+		return spineItemContent{}, fmt.Errorf("convert EPUB spine item %q: %w", item.Href, err)
 	}
-	if len(text) > maxBookPageTextBytes {
-		text = truncateUTF8(text, maxBookPageTextBytes)
+	if len(content.Text) > maxBookPageTextBytes {
+		content.Text = truncateUTF8(content.Text, maxBookPageTextBytes)
 	}
-	return text, nil
+	if len(content.Heading) > maxSpineHeadingBytes {
+		content.Heading = truncateUTF8(content.Heading, maxSpineHeadingBytes)
+	}
+	return content, nil
 }
+
+const maxSpineHeadingBytes = 1024
 
 func (pkg *epubPackage) extractCover(reader *zip.Reader) ([]byte, string, error) {
 	if pkg.CoverItemHref == "" {
@@ -296,13 +306,16 @@ func (pkg *epubPackage) resolveHref(href string) string {
 
 const maxBookPageTextBytes = 4 * 1024 * 1024
 
-func xhtmlToPlainText(raw []byte) (string, error) {
+func xhtmlToPlainText(raw []byte) (spineItemContent, error) {
 	tokenizer := html.NewTokenizer(strings.NewReader(string(raw)))
 	tokenizer.AllowCDATA(true)
 
 	var (
-		builder strings.Builder
-		skip    int
+		builder        strings.Builder
+		headingBuilder strings.Builder
+		heading        string
+		inHeading      string
+		skip           int
 	)
 	flushBreak := func() {
 		if builder.Len() == 0 {
@@ -318,9 +331,9 @@ func xhtmlToPlainText(raw []byte) (string, error) {
 		switch tokenType {
 		case html.ErrorToken:
 			if err := tokenizer.Err(); err != nil && !errors.Is(err, io.EOF) {
-				return "", err
+				return spineItemContent{}, err
 			}
-			return normalizeWhitespace(builder.String()), nil
+			return spineItemContent{Text: normalizeWhitespace(builder.String()), Heading: heading}, nil
 		case html.StartTagToken, html.SelfClosingTagToken:
 			name, _ := tokenizer.TagName()
 			tag := string(name)
@@ -339,6 +352,10 @@ func xhtmlToPlainText(raw []byte) (string, error) {
 			if tag == "br" {
 				flushBreak()
 			}
+			if heading == "" && inHeading == "" && isSectionHeadingTag(tag) && tokenType == html.StartTagToken {
+				inHeading = tag
+				headingBuilder.Reset()
+			}
 		case html.EndTagToken:
 			name, _ := tokenizer.TagName()
 			tag := string(name)
@@ -354,13 +371,25 @@ func xhtmlToPlainText(raw []byte) (string, error) {
 			if isBlockTag(tag) {
 				flushBreak()
 			}
+			if tag == inHeading {
+				inHeading = ""
+				heading = strings.Join(strings.Fields(headingBuilder.String()), " ")
+			}
 		case html.TextToken:
 			if skip > 0 {
 				continue
 			}
-			builder.Write(tokenizer.Text())
+			text := tokenizer.Text()
+			builder.Write(text)
+			if inHeading != "" {
+				headingBuilder.Write(text)
+			}
 		}
 	}
+}
+
+func isSectionHeadingTag(tag string) bool {
+	return tag == "h1" || tag == "h2" || tag == "h3"
 }
 
 func isBlockTag(tag string) bool {

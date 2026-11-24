@@ -136,11 +136,39 @@ func TestExtractSpineItemTextStripsScriptsAndKeepsHeadings(t *testing.T) {
 	reader, err := zip.OpenReader(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = reader.Close() })
-	text, err := pkg.extractSpineItemText(&reader.Reader, pkg.Spine[0])
+	content, err := pkg.extractSpineItemText(&reader.Reader, pkg.Spine[0])
 	require.NoError(t, err)
-	assert.Contains(t, text, "Chapter One")
-	assert.Contains(t, text, "Hello evidence")
-	assert.NotContains(t, text, "ignored")
+	assert.Contains(t, content.Text, "Chapter One")
+	assert.Contains(t, content.Text, "Hello evidence")
+	assert.NotContains(t, content.Text, "ignored")
+	assert.Equal(t, "Chapter One", content.Heading)
+}
+
+func TestXHTMLHeadingUsesFirstNonEmptySectionHeading(t *testing.T) {
+	cases := map[string]struct {
+		body    string
+		heading string
+	}{
+		"nested inline markup": {
+			body:    `<h2><span>3.2</span>  <em>Channels</em></h2><h1>Later</h1>`,
+			heading: "3.2 Channels",
+		},
+		"skips h4 and empty headings": {
+			body:    `<h4>Aside</h4><h1> </h1><h3>Real heading</h3>`,
+			heading: "Real heading",
+		},
+		"no heading": {
+			body:    `<p>Only prose.</p>`,
+			heading: "",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			content, err := xhtmlToPlainText([]byte("<html><body>" + tc.body + "</body></html>"))
+			require.NoError(t, err)
+			assert.Equal(t, tc.heading, content.Heading)
+		})
+	}
 }
 
 func TestExtractSpineItemTextTruncatesOversizedSection(t *testing.T) {
@@ -153,9 +181,9 @@ func TestExtractSpineItemTextTruncatesOversizedSection(t *testing.T) {
 	reader, err := zip.OpenReader(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = reader.Close() })
-	text, err := pkg.extractSpineItemText(&reader.Reader, pkg.Spine[0])
+	content, err := pkg.extractSpineItemText(&reader.Reader, pkg.Spine[0])
 	require.NoError(t, err)
-	assert.LessOrEqual(t, len(text), maxBookPageTextBytes)
+	assert.LessOrEqual(t, len(content.Text), maxBookPageTextBytes)
 }
 
 func TestExtractCoverReturnsImageBytes(t *testing.T) {

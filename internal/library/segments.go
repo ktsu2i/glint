@@ -137,6 +137,24 @@ func (store *Store) SaveBookSegments(
 	return store.BookSegmentCount(ctx, bookID)
 }
 
+func (store *Store) FirstMissingOrdinal(ctx context.Context, bookID string) (int, error) {
+	var next int
+	err := store.db.WithContext(ctx).Raw(`
+        SELECT CASE
+                 WHEN NOT EXISTS (SELECT 1 FROM book_segments WHERE book_id = ? AND ordinal = 1) THEN 1
+                 ELSE (SELECT MIN(s.ordinal) + 1
+                         FROM book_segments s
+                        WHERE s.book_id = ?
+                          AND NOT EXISTS (
+                              SELECT 1 FROM book_segments n
+                               WHERE n.book_id = s.book_id AND n.ordinal = s.ordinal + 1))
+               END`, bookID, bookID).Row().Scan(&next)
+	if err != nil {
+		return 0, fmt.Errorf("find first missing segment: %w", err)
+	}
+	return next, nil
+}
+
 func validSegment(segment BookSegment, total int) bool {
 	if segment.Ordinal < 1 || segment.Ordinal > total {
 		return false

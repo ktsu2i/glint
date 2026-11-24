@@ -1,12 +1,13 @@
-import { createPdfLoadingTask, extractPdfPage } from "../reader/loadPdf";
-import { saveBookPages, type BookPageInput } from "../../shared/api/backend";
+import { createPdfLoadingTask, extractPdfPage, loadPdfOutline } from "../reader/loadPdf";
+import type { OutlineNode } from "../reader/loadPdf";
+import { saveBookSegments, type BookSegmentInput } from "../../shared/api/backend";
 
 const pageIndexBatchSize = 16;
 
 export type IndexableBook = {
   id: string;
   url: string;
-  indexedPageCount: number;
+  nextSegment: number;
   format?: "pdf" | "epub";
 };
 
@@ -36,28 +37,34 @@ export async function indexBookPages(
   }
   try {
     const pageCount = document.numPages;
-    const startingCount = Math.min(pageCount, Math.max(0, book.indexedPageCount));
+    const firstMissingPage = Math.max(1, book.nextSegment);
+    const startingCount = Math.min(pageCount, firstMissingPage - 1);
     onProgress?.(startingCount, pageCount);
-    const firstMissingPage = startingCount + 1;
     if (firstMissingPage > pageCount) {
-      return { pageCount, persistedCount: startingCount };
+      return { pageCount, persistedCount: pageCount };
     }
 
+    const outline = await loadPdfOutline(document).catch((): OutlineNode[] => []);
     let persistedCount = startingCount;
-    let batch: BookPageInput[] = [];
+    let batch: BookSegmentInput[] = [];
     for (let number = firstMissingPage; number <= pageCount; number += 1) {
       if (signal.aborted) {
         throw new AbortError();
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- page 順に逐次抽出し、batch 単位で保存する。
       const page = await extractPdfPage(document, number);
-      batch.push(page);
+      batch.push({
+        ordinal: number,
+        location: `page:${number}`,
+        headingPath: headingPathForPage(outline, number),
+        text: page.text,
+      });
       if (batch.length === pageIndexBatchSize || number === pageCount) {
         if (signal.aborted) {
           throw new AbortError();
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- batch は順番に保存する必要がある。
-        persistedCount = await saveBookPages(book.id, batch, pageCount);
+        persistedCount = await saveBookSegments(book.id, batch, pageCount);
         onProgress?.(persistedCount, pageCount);
         batch = [];
       }
@@ -68,6 +75,31 @@ export async function indexBookPages(
       await loadingTask.destroy();
     } catch {}
   }
+}
+
+export function headingPathForPage(outline: OutlineNode[], pageNumber: number): string {
+  const titles: string[] = [];
+  let level = outline;
+  while (level.length > 0) {
+    let match: OutlineNode | undefined;
+    for (const node of level) {
+      if (node.pageNumber === null || node.pageNumber > pageNumber) {
+        continue;
+      }
+      if (!match || match.pageNumber === null || node.pageNumber >= match.pageNumber) {
+        match = node;
+      }
+    }
+    if (!match) {
+      break;
+    }
+    const title = match.title.trim();
+    if (title) {
+      titles.push(title);
+    }
+    level = match.children;
+  }
+  return titles.join(" > ");
 }
 
 export class AbortError extends Error {
