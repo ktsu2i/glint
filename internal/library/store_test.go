@@ -1,7 +1,9 @@
 package library
 
 import (
+	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +12,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+
+	"github.com/kaito/glint/migrations"
 )
+
+func latestMigrationVersion(t *testing.T) int {
+	t.Helper()
+	names, err := fs.Glob(migrations.FS, "*.sql")
+	require.NoError(t, err)
+	require.NotEmpty(t, names)
+	latest := 0
+	for _, name := range names {
+		version, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0])
+		require.NoError(t, err)
+		latest = max(latest, version)
+	}
+	return latest
+}
 
 func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite3")
@@ -19,7 +37,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 8, version)
+	assert.Equal(t, latestMigrationVersion(t), version)
 
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Go Guide.pdf", "hash-1", "pdf", 120, now)
 	require.NoError(t, err)
@@ -101,7 +119,7 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 8, version)
+	assert.Equal(t, latestMigrationVersion(t), version)
 	var settingsTable string
 	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
 	assert.Equal(t, "app_settings", settingsTable)
@@ -387,7 +405,7 @@ func TestStoreReopeningAppliesFormatMigrationIdempotently(t *testing.T) {
 
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 8, version)
+	assert.Equal(t, latestMigrationVersion(t), version)
 
 	var defaultValue string
 	require.NoError(t, store.db.Raw(
