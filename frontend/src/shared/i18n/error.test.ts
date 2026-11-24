@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { localizeBackendError } from "./error";
+import { LocalizedError, translateLocalizedError } from "./error";
 import { resources, type TranslationKey } from "./i18n";
 
 function translate(language: "en" | "ja") {
@@ -13,20 +13,19 @@ function translate(language: "en" | "ja") {
   };
 }
 
-describe("localizeBackendError", () => {
-  it("localizes provider-specific API key errors", () => {
-    expect(localizeBackendError("Anthropic API keyを確認してください。", translate("en"))).toBe(
-      "Check the Anthropic API key.",
+describe("translateLocalizedError", () => {
+  it("translates the key with its values", () => {
+    const error = new LocalizedError("error.fetchPdf", { status: 404 });
+
+    expect(translateLocalizedError(error, translate("en"))).toBe(
+      resources.en.translation["error.fetchPdf"].replaceAll("{status}", "404"),
     );
   });
 
-  it("localizes generic stream errors with the provider name", () => {
-    expect(
-      localizeBackendError("Googleのstreamが完了通知なしで終了しました。", translate("en")),
-    ).toBe("The Google stream ended without a completion event.");
-  });
+  it("keeps the translation key as the error message", () => {
+    const error = new LocalizedError("error.invalidPdf");
 
-  it("preserves unknown provider details", () => {
-    expect(localizeBackendError("model overloaded", translate("en"))).toBe("model overloaded");
+    expect(error.message).toBe("error.invalidPdf");
+    expect(error.name).toBe("LocalizedError");
   });
 });

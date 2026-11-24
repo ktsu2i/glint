@@ -17,24 +17,12 @@ import {
   SearchBook,
   SearchLibrary,
 } from "../../../wailsjs/go/books/Service";
-import { CancelChat, StartChat } from "../../../wailsjs/go/chat/Service";
-import { llm as wailsLLM } from "../../../wailsjs/go/models";
 import {
-  AddCustomModel,
-  DeleteProviderSettings,
   GetAppearanceSettings,
   GetLanguageSettings,
-  GetLLMConfig,
-  ListProviderModels,
-  RemoveCustomModel,
   SaveAppearanceSettings,
   SaveLanguageSettings,
-  SetActiveModel,
-  SetActiveProvider,
-  TestProviderConnection,
-  UpsertProviderSettings,
 } from "../../../wailsjs/go/settings/Service";
-import { EventsOff, EventsOn } from "../../../wailsjs/runtime/runtime";
 
 export type BookFormat = "pdf" | "epub";
 
@@ -96,124 +84,6 @@ export type LibrarySearchHit = {
   book: BookSummary;
   totalMatches: number;
   pages: BookSearchResult[];
-};
-
-export type BudgetSource = "model" | "fallback";
-
-export type ContextBudget = {
-  promptRunes: number;
-  answerTokens: number;
-  retrievalShare: number;
-  source: BudgetSource;
-  limit: number;
-};
-
-export type ChatRequest = {
-  requestId: string;
-  question: string;
-  contextText: string;
-  bookName: string;
-  pageNumber: number;
-  budgetUsed?: ContextBudget;
-};
-
-export type AnswerDelta = {
-  requestId: string;
-  content?: string;
-  done: boolean;
-  error?: string;
-};
-
-export type ProviderAuthKind = "bearer" | "x-api-key" | "query-key" | "none";
-
-export type ProviderOptionType = "string" | "bool" | "url" | "headers";
-
-export type ProviderOption = {
-  key: string;
-  label: string;
-  type: ProviderOptionType;
-  required: boolean;
-  default?: unknown;
-  helpText?: string;
-};
-
-export type ProviderCapabilities = {
-  streaming: boolean;
-  tools: boolean;
-  images: boolean;
-};
-
-export type ProviderDescriptor = {
-  id: string;
-  displayName: string;
-  authKind: ProviderAuthKind;
-  defaultBaseUrl?: string;
-  optionSchema: ProviderOption[];
-  capabilities: ProviderCapabilities;
-  notes?: string;
-};
-
-export type CredentialSource = "env" | "keyring" | "none";
-
-export type ProviderSettings = {
-  providerId: string;
-  displayLabel?: string;
-  model: string;
-  models?: string[];
-  options?: Record<string, unknown>;
-  hasApiKey: boolean;
-  configured: boolean;
-  isActive: boolean;
-  credentialSource?: CredentialSource;
-};
-
-export type ActiveModelRef = {
-  providerId: string;
-  modelId: string;
-};
-
-export type LLMConfig = {
-  activeProviderId: string;
-  activeModelRef?: ActiveModelRef;
-  providers: ProviderSettings[];
-  catalog: ProviderDescriptor[];
-  recentProviderIds: string[];
-  recentModels: ActiveModelRef[];
-};
-
-export type UpsertProviderRequest = {
-  providerId: string;
-  displayLabel?: string;
-  options?: Record<string, unknown>;
-  apiKey?: string;
-  clearApiKey?: boolean;
-};
-
-export type TestProviderConnectionResult = {
-  providerId: string;
-  ok: boolean;
-  error?: string;
-};
-
-export type ModelSource = "api" | "cache" | "builtin";
-
-export type ModelDescriptor = {
-  id: string;
-  displayName?: string;
-  contextWindow?: number;
-  maxOutputTokens?: number;
-  supportsTools?: boolean;
-  supportsImages?: boolean;
-  source?: ModelSource;
-  notes?: string;
-};
-
-export type ModelListingResult = {
-  providerId: string;
-  models: ModelDescriptor[];
-  source: ModelSource;
-  fetchedAt?: string;
-  error?: string;
 };
 
 export type ThemePreference = "light" | "dark" | "system";
@@ -308,55 +178,6 @@ export async function markBookCoverFailed(bookId: string): Promise<void> {
   await MarkBookCoverFailed(bookId);
 }
 
-export async function startChat(request: ChatRequest): Promise<void> {
-  await StartChat(new wailsLLM.ChatRequest(request));
-}
-
-export async function cancelChat(requestId: string): Promise<void> {
-  await CancelChat(requestId);
-}
-
-export async function getLLMConfig(): Promise<LLMConfig> {
-  return (await GetLLMConfig()) as LLMConfig;
-}
-
-export async function upsertProviderSettings(request: UpsertProviderRequest): Promise<LLMConfig> {
-  return (await UpsertProviderSettings(request)) as LLMConfig;
-}
-
-export async function deleteProviderSettings(providerId: string): Promise<LLMConfig> {
-  return (await DeleteProviderSettings(providerId)) as LLMConfig;
-}
-
-export async function setActiveProvider(providerId: string): Promise<LLMConfig> {
-  return (await SetActiveProvider(providerId)) as LLMConfig;
-}
-
-export async function setActiveModel(providerId: string, modelId: string): Promise<LLMConfig> {
-  return (await SetActiveModel(providerId, modelId)) as LLMConfig;
-}
-
-export async function listProviderModels(
-  providerId: string,
-  opts: { force?: boolean } = {},
-): Promise<ModelListingResult> {
-  return (await ListProviderModels(providerId, opts.force ?? false)) as ModelListingResult;
-}
-
-export async function addCustomModel(providerId: string, modelId: string): Promise<LLMConfig> {
-  return (await AddCustomModel(providerId, modelId)) as LLMConfig;
-}
-
-export async function removeCustomModel(providerId: string, modelId: string): Promise<LLMConfig> {
-  return (await RemoveCustomModel(providerId, modelId)) as LLMConfig;
-}
-
-export async function testProviderConnection(
-  providerId: string,
-): Promise<TestProviderConnectionResult> {
-  return TestProviderConnection(providerId);
-}
-
 export async function getAppearanceSettings(): Promise<AppearanceSettings> {
   return (await GetAppearanceSettings()) as AppearanceSettings;
 }
@@ -373,9 +194,4 @@ export async function saveLanguageSettings(
   language: LanguagePreference,
 ): Promise<LanguageSettings> {
   return (await SaveLanguageSettings({ language })) as LanguageSettings;
-}
-
-export function onAnswerDelta(callback: (delta: AnswerDelta) => void): () => void {
-  EventsOn("chat:delta", callback);
-  return () => EventsOff("chat:delta");
 }

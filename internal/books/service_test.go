@@ -64,7 +64,7 @@ func TestSelectPDFRegistersAssetAndReturnsBookFile(t *testing.T) {
 
 func TestServiceLocalizesNativeCopyFromSavedLanguage(t *testing.T) {
 	h := newHarness(t)
-	manager := settings.NewManager(h.store, nil)
+	manager := settings.NewManager(h.store)
 	service := New(h.store, h.assets, h.dataDir, manager)
 
 	assert.Equal(t, "Remove", service.localized("Remove", "削除"))

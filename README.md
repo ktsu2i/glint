@@ -2,11 +2,9 @@
 
 **English** | [日本語](README.ja.md)
 
-Glint is a desktop reading app for technical books. Open a PDF, read it the way you would in a proper reader — table of contents, bookmarks, spreads, full-text search — and ask an AI assistant about the page in front of you without leaving the book.
+Glint is a desktop reading app for technical books. Open a PDF and read it the way you would in a proper reader — table of contents, bookmarks, spreads, full-text search.
 
-Your books, your reading positions, and your API keys stay on your machine. Nothing is sent to an AI provider unless you attach it to a question yourself.
-
-![Reading a technical book in Glint, with a selected passage attached to the assistant as context](assets/reader-en.png)
+Your books and your reading positions stay on your machine.
 
 ## What you can do
 
@@ -34,27 +32,6 @@ Your books, your reading positions, and your API keys stay on your machine. Noth
 
 - Search inside the book you are reading with `⌘F` and jump to any matching page.
 - Search across every book you have imported and open the right book at the right page.
-
-### Ask about what you are reading
-
-- A chat sidebar sits next to the page, so a question never takes you out of the book.
-- Select text on the page and attach it to your question — or ask with no context at all.
-- Attached context is shown to you before you send it, so you always know what leaves your machine.
-- Answers stream in as they are generated, and you can cancel a response mid-flight.
-- Switch models per conversation from the composer without opening settings.
-
-### Bring your own model
-
-Glint talks to the provider you choose:
-
-- OpenRouter
-- OpenAI
-- Anthropic
-- Google Gemini
-- Ollama (runs locally, no API key)
-- Any OpenAI-compatible endpoint you add yourself
-
-The library, reader, and search all work with no provider configured. AI features are the only part that needs one.
 
 ### EPUB, for now
 
@@ -119,25 +96,14 @@ ghalint run
 zizmor .
 ```
 
-## Setting up an AI provider
-
-1. Open **Settings** from the sidebar.
-2. Under **LLM Providers**, pick a provider and paste its API key. Ollama needs no key — it uses your local endpoint.
-3. To use a service that speaks the OpenAI API but isn't listed, choose **Add OpenAI-compatible endpoint** and enter its base URL, an optional API key, and any custom headers.
-4. Press **Test connection** to confirm the key and model work before you rely on them.
-5. Back in the reader, choose the provider and model you want from the model selector in the chat composer.
-
 ## What leaves your machine
 
-- **Your books never leave.** PDFs, EPUBs, covers, reading positions, and bookmarks are stored locally on your Mac.
-- **Only what you send.** Your question and any page text you explicitly attach go to the provider you selected. Nothing else is transmitted, and nothing is sent at all until you press send.
-- **Keys are kept in the OS credential store,** not in Glint's own database. Once saved, a key is never read back into the interface.
-- **OpenRouter requests are pinned to zero-data-retention endpoints**, so they are not routed through providers that retain your prompts.
-- Glint manages the endpoint, API version, and authentication for the built-in providers, so there is nothing to misconfigure.
+- **Your books never leave.** PDFs, EPUBs, covers, reading positions, bookmarks, and settings are stored locally on your Mac.
+- **The only network request is the update check.** It asks GitHub for the latest release and sends nothing about your books.
 
 ## Where Glint is going
 
-Reading and asking questions is the foundation. The goal is a reader that connects a book to your own code: point Glint at one of your repositories, and go from a chapter you are reading to the files, symbols, and patterns in your codebase that it describes — with citations back to both the book and the code. That work is in progress and not part of the app yet.
+Reading is the foundation. The goal is a reader that connects a book to your own code: point Glint at one of your repositories, and go from a chapter you are reading to the files, symbols, and patterns in your codebase that it describes — with citations back to both the book and the code. That work is in progress and not part of the app yet.
 
 ## Working on Glint
 

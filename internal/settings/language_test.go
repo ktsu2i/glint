@@ -6,7 +6,7 @@ import (
 )
 
 func TestLanguageDefaultsToEnglish(t *testing.T) {
-	manager, _, _ := newTestManager()
+	manager, _ := newTestManager()
 
 	settings, err := manager.GetLanguage(context.Background())
 	if err != nil {
@@ -18,7 +18,7 @@ func TestLanguageDefaultsToEnglish(t *testing.T) {
 }
 
 func TestLanguagePersistsSupportedPreference(t *testing.T) {
-	manager, store, _ := newTestManager()
+	manager, store := newTestManager()
 
 	saved, err := manager.SaveLanguage(context.Background(), SaveLanguageSettingsRequest{Language: LanguageJapanese})
 	if err != nil {
