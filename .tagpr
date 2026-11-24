@@ -1,10 +1,10 @@
 # tagpr の設定 (https://github.com/Songmu/tagpr)
 # versionFile は各ファイルで最初に出てくる現在のバージョン文字列を書き換える。
-# 先頭の wails.json がリリースバージョンの基準になる。
+# frontend/package.json がリリースバージョンの基準になる。
 [tagpr]
 	vPrefix = true
 	releaseBranch = main
-	versionFile = wails.json,frontend/package.json
+	versionFile = frontend/package.json
 	# draft で作成し、release workflow が asset を添付してから公開する。
 	release = draft
 	minorLabels = minor,enhancement

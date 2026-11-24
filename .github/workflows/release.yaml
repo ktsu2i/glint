@@ -56,14 +56,14 @@ jobs:
           persist-credentials: false
 
       # 公開する asset を作る job なので、cache poisoning を避けて cache は使わない。
-      # Wails CLI は go.mod の tool directive で固定しているので go tool wails で呼ぶ。
+      # Wails CLI は go.mod の tool directive で固定しているので go tool wails3 で呼ぶ。
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
           cache: false
 
-      # wails build の frontend:install が依存を入れるので、ここでは pnpm と Node.js だけ用意する。
+      # Taskfile の frontend:install が依存を入れるので、ここでは pnpm と Node.js だけ用意する。
       - name: Set up pnpm and Node.js
         uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
         with:
@@ -78,11 +78,11 @@ jobs:
             echo "::error::Unexpected release tag: ${TAG}"
             exit 1
           fi
-          # Info.plist の CFBundleShortVersionString は wails.json の productVersion から入る。
+          # Info.plist のバージョンは frontend/package.json から入る。
           # tagpr が versionFile として更新しているはずなので、ずれていたら止める。
-          product_version="$(jq -r '.info.productVersion' wails.json)"
+          product_version="$(jq -r '.version' frontend/package.json)"
           if [[ "$product_version" != "$version" ]]; then
-            echo "::error::wails.json productVersion (${product_version}) does not match ${TAG}"
+            echo "::error::frontend/package.json version (${product_version}) does not match ${TAG}"
             exit 1
           fi
           echo "VERSION=${version}" >> "$GITHUB_ENV"
@@ -102,26 +102,13 @@ jobs:
           tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/sparkle"
           echo "SPARKLE_DIR=$RUNNER_TEMP/sparkle" >> "$GITHUB_ENV"
 
-      # sparkle build tag で Sparkle.framework にリンクする (internal/update)。
-      # Wails の bindings 生成は一時バイナリを実行するが、そこから Sparkle.framework を
-      # 読み込めずに失敗するため -skipbindings を付ける。bindings は frontend/wailsjs に
-      # commit 済みのものを使う。
+      # v3 の bindings は静的解析で生成する。Sparkle はビルド時にリンク・同梱する。
       - name: Build universal app
         run: |
-          # Go 1.27 は macOS 13 以上が前提。cgo 部分の deployment target も揃える。
-          export CGO_CFLAGS="-mmacosx-version-min=13.0 -F${SPARKLE_DIR}"
-          export CGO_LDFLAGS="-mmacosx-version-min=13.0 -F${SPARKLE_DIR} -Wl,-rpath,@executable_path/../Frameworks"
-          go tool wails build -platform darwin/universal -clean -tags sparkle -skipbindings
-
-      # Sparkle.framework を app に同梱し、app 全体を ad-hoc 署名し直す。
-      - name: Embed Sparkle.framework
-        run: |
-          app=build/bin/Glint.app
-          mkdir -p "$app/Contents/Frameworks"
-          ditto "$SPARKLE_DIR/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
-          codesign --force --deep --sign - "$app"
-          codesign --verify --deep --strict "$app"
-          otool -L "$app/Contents/MacOS/Glint" | grep -q '@rpath/Sparkle.framework'
+          export CGO_CFLAGS="-F${SPARKLE_DIR}"
+          export CGO_LDFLAGS="-F${SPARKLE_DIR} -Wl,-rpath,@executable_path/../Frameworks"
+          go tool wails3 task build ARCH=universal EXTRA_TAGS=sparkle
+          otool -L build/bin/Glint.app/Contents/MacOS/Glint | grep -q '@rpath/Sparkle.framework'
 
       - name: Package app
         run: |

@@ -1,0 +1,37 @@
+version: '3'
+
+tasks:
+  bindings:
+    cmds:
+      - go tool wails3 generate bindings -ts -i
+
+  frontend:install:
+    dir: frontend
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  frontend:dev:
+    dir: frontend
+    cmds:
+      - pnpm dev --port {{.WAILS_VITE_PORT | default "9245"}}
+
+  build:
+    platforms: [darwin]
+    cmds:
+      - task: frontend:install
+      - task: bindings
+      - cmd: pnpm --dir frontend build
+      - bash scripts/build-macos.sh
+    env:
+      GLINT_DEV: '{{.DEV | default "false"}}'
+      GLINT_ARCH: '{{.ARCH | default ARCH}}'
+      EXTRA_TAGS: '{{.EXTRA_TAGS | default ""}}'
+
+  package:
+    cmds:
+      - task: build
+
+  run:
+    platforms: [darwin]
+    cmds:
+      - build/bin/Glint.dev.app/Contents/MacOS/Glint

@@ -21,7 +21,7 @@ const bindings = vi.hoisted(() => ({
   saveAppearanceSettings: vi.fn(),
 }));
 
-vi.mock("../../../wailsjs/go/app/BooksService", () => ({
+vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
   AddBookmark: bindings.addBookmark,
   ListBookmarks: bindings.listBookmarks,
   ListBooks: bindings.listBooks,
@@ -40,7 +40,7 @@ vi.mock("../../../wailsjs/go/app/BooksService", () => ({
   SearchLibrary: bindings.searchLibrary,
 }));
 
-vi.mock("../../../wailsjs/go/app/SettingsService", () => ({
+vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice", () => ({
   GetAppearanceSettings: bindings.getAppearanceSettings,
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
 }));
@@ -71,6 +71,16 @@ beforeEach(() => {
 });
 
 describe("backend facade", () => {
+  it("normalizes nullable slices from v3 bindings to empty lists", async () => {
+    bindings.listBookmarks.mockResolvedValue(null);
+    bindings.pendingIndexBooks.mockResolvedValue(null);
+    bindings.searchBook.mockResolvedValue(null);
+
+    await expect(listBookmarks("book-1")).resolves.toEqual([]);
+    await expect(pendingIndexBooks()).resolves.toEqual([]);
+    await expect(searchBook("book-1", "missing")).resolves.toEqual([]);
+  });
+
   it("delegates book file selection to Wails bindings", async () => {
     const book = {
       id: "book-1",

@@ -1,0 +1,57 @@
+name: Build
+
+# macOS app の build は macOS runner が必要で待ち時間が長いので、main への push と、
+# native の build に関わるファイルを変えた PR のときだけ動かす。
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - main.go
+      - link_darwin.go
+      - go.mod
+      - go.sum
+      - internal/update/**
+      - build/**
+      - scripts/build-macos.sh
+      - Taskfile.yml
+      - frontend/package.json
+      - frontend/pnpm-lock.yaml
+      - .github/workflows/build.yaml
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-build:
+    name: macOS build
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # Taskfile の frontend:install が依存を入れるので、ここでは pnpm と Node.js だけ用意する。
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
+        with:
+          working-directory: frontend
+          cache: true
+          install: false
+
+      - name: Build universal macOS app
+        run: go tool wails3 task build ARCH=universal

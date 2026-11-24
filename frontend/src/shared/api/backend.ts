@@ -15,13 +15,13 @@ import {
   SaveReadingPosition,
   SearchBook,
   SearchLibrary,
-} from "../../../wailsjs/go/app/BooksService";
+} from "../../../bindings/github.com/kaito/glint/internal/app/booksservice";
 import {
   GetAppearanceSettings,
   GetLanguageSettings,
   SaveAppearanceSettings,
   SaveLanguageSettings,
-} from "../../../wailsjs/go/app/SettingsService";
+} from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
 
 export type BookFormat = "pdf" | "epub";
 
@@ -140,7 +140,7 @@ export async function saveReadingPosition(
 }
 
 export async function listBookmarks(bookId: string): Promise<BookBookmark[]> {
-  return ListBookmarks(bookId);
+  return (await ListBookmarks(bookId)) ?? [];
 }
 
 export async function addBookmark(
@@ -164,11 +164,11 @@ export async function saveBookSegments(
 }
 
 export async function pendingIndexBooks(): Promise<IndexTarget[]> {
-  return PendingIndexBooks();
+  return (await PendingIndexBooks()) ?? [];
 }
 
 export async function searchBook(bookId: string, query: string): Promise<BookSearchResult[]> {
-  return SearchBook(bookId, query);
+  return (await SearchBook(bookId, query)) ?? [];
 }
 
 export async function searchLibrary(query: string): Promise<LibrarySearchHit[]> {

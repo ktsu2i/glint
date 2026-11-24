@@ -71,11 +71,11 @@ You need:
 The other tools are pinned in the repository, so you don't install them yourself:
 
 - Go fetches the toolchain version in `go.mod` when yours is older.
-- The Wails CLI (v2.17.1) is a tool dependency in `go.mod`. Run it with `go tool wails`.
+- The Wails CLI (v3.1.0) is a tool dependency in `go.mod`. Run it with `go tool wails3`.
 - sqlc (v1.31.1) is a tool dependency in `go.mod` too. Run it with `go tool sqlc`.
 - pnpm downloads Node.js 26.13.1 for the frontend, as `devEngines.runtime` in `frontend/package.json` asks.
 
-Wails may need a few extra system tools; see the [Wails installation guide](https://wails.io/docs/gettingstarted/installation) if the build complains.
+Wails may need a few extra system tools; see the [Wails installation guide](https://wails.io/getting-started/installation/) if the build complains.
 
 Then build the app:
 
@@ -83,8 +83,10 @@ Then build the app:
 cd frontend
 pnpm install --frozen-lockfile
 cd ..
-go tool wails build
+go tool wails3 build
 ```
+
+The build runs the tasks in `Taskfile.yml`: install frontend dependencies, generate bindings, build the frontend, and package/sign the macOS app. Use `go tool wails3 task build ARCH=universal` for both Apple Silicon and Intel. The bundle version comes from `frontend/package.json`; Sparkle settings and the bundle identifier stay in `build/darwin/Info.plist`.
 
 The finished app lands at `build/bin/Glint.app`. Move it to your Applications folder and open it like any other Mac app.
 
@@ -121,14 +123,16 @@ Reading is the foundation. The goal is a reader that connects a book to your own
 
 ## Working on Glint
 
-Glint is built with Wails v2, Go, React 19 + TypeScript, PDF.js, and SQLite. To run it from source with live reload, install the prerequisites above, then:
+Glint is built with Wails v3, Go, React 19 + TypeScript, PDF.js, and SQLite. To run it from source with live reload, install the prerequisites above, then:
 
 ```bash
 cd frontend
 pnpm install --frozen-lockfile
 cd ..
-wails dev
+go tool wails3 dev
 ```
+
+Development mode uses `build/config.yml` and launches `build/bin/Glint.dev.app` with a Vite server. Generated bindings live in `frontend/bindings` and are not committed; generate them before running frontend checks on a fresh checkout (CI does this too).
 
 The frontend is pinned to pnpm 12.21.0; `npm install` and `npm run` fail by design.
 
@@ -136,6 +140,7 @@ Tests:
 
 ```bash
 go test ./...
+go tool wails3 generate bindings -ts -i
 cd frontend
 pnpm test
 pnpm run build
@@ -152,8 +157,8 @@ pnpm format     # format with oxfmt
 
 ### Releasing
 
-Releases are managed by [tagpr](https://github.com/Songmu/tagpr). After each merge to `main`, tagpr opens or updates a release PR. The PR bumps the version in `wails.json` and `frontend/package.json` and adds the merged pull requests to `CHANGELOG.md`. Merging the release PR tags the release, builds the universal macOS app, attaches it to the GitHub release, and publishes the release. The workflow then triggers the update workflow in [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap), which bumps the cask, checks that it installs, and merges the change, so `brew upgrade --cask glint` sees the new version within a few minutes. This needs the `HOMEBREW_TAP_TOKEN` secret, a fine-grained PAT with Actions: write on `ktsu2i/homebrew-tap`. Without it, the tap still picks up the release on its scheduled run twice a day.
+Releases are managed by [tagpr](https://github.com/Songmu/tagpr). After each merge to `main`, tagpr opens or updates a release PR. The PR bumps the version in `frontend/package.json` and adds the merged pull requests to `CHANGELOG.md`. Merging the release PR tags the release, builds the universal macOS app, attaches it to the GitHub release, and publishes the release. The workflow then triggers the update workflow in [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap), which bumps the cask, checks that it installs, and merges the change, so `brew upgrade --cask glint` sees the new version within a few minutes. This needs the `HOMEBREW_TAP_TOKEN` secret, a fine-grained PAT with Actions: write on `ktsu2i/homebrew-tap`. Without it, the tap still picks up the release on its scheduled run twice a day.
 
 The release workflow also builds Glint with [Sparkle](https://sparkle-project.org/) (the `sparkle` build tag), signs the zip with the EdDSA key in the `SPARKLE_ED_PRIVATE_KEY` secret, and attaches `appcast.xml` to the release. Installed copies read `appcast.xml` from the latest release and verify the signature with the public key in `build/darwin/Info.plist`. Keep a backup of the private key: without it, installed copies cannot be updated from inside the app.
 
-The next version is a patch bump by default. Label a pull request `enhancement` (or `minor`) for a minor bump, or `major` for a major bump. You can also add `tagpr:minor` / `tagpr:major` to the release PR, or edit the version in `wails.json` on the release PR directly.
+The next version is a patch bump by default. Label a pull request `enhancement` (or `minor`) for a minor bump, or `major` for a major bump. You can also add `tagpr:minor` / `tagpr:major` to the release PR, or edit the version in `frontend/package.json` on the release PR directly.
