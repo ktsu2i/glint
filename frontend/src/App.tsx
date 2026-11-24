@@ -340,8 +340,8 @@ function AppContent() {
     }
   }
 
-  const handlePageContextChange = useCallback(
-    (pageNumber: number, _text: string, pageCount: number) => {
+  const handlePageChange = useCallback(
+    (pageNumber: number, pageCount: number) => {
       setCurrentPage(pageNumber);
       if (!book || pageNumber < 1 || pageCount < 1) {
         return;
@@ -528,7 +528,7 @@ function AppContent() {
                   <PdfReader
                     book={book}
                     initialPage={book?.initialPage ?? 1}
-                    onPageContextChange={handlePageContextChange}
+                    onPageChange={handlePageChange}
                   />
                 )}
               </div>

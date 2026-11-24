@@ -34,7 +34,7 @@ func newHarness(t *testing.T) *harness {
 	store, err := library.Open(filepath.Join(dataDir, "library.sqlite3"))
 	require.NoError(t, err)
 	assets := assetserver.New()
-	service := New(store, assets, dataDir)
+	service := New(store, assets, dataDir, nil)
 	t.Cleanup(func() { _ = store.Close() })
 	return &harness{t: t, root: root, dataDir: dataDir, store: store, assets: assets, service: service}
 }
@@ -50,7 +50,7 @@ func TestSelectPDFRegistersAssetAndReturnsBookFile(t *testing.T) {
 	content := "%PDF-1.7\nfixture"
 	path := h.writePDF("sample.pdf", content)
 
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "sample.pdf", book.Name)
 	assert.True(t, strings.HasPrefix(book.URL, assetserver.BookRoutePrefix))
@@ -78,7 +78,7 @@ func TestServiceLocalizesNativeCopyFromSavedLanguage(t *testing.T) {
 func TestSelectPDFRejectsInvalidHeader(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("invalid.pdf", "not a pdf")
-	_, err := h.service.selectPDF(path)
+	_, err := h.service.selectBookFile(path)
 	assert.Error(t, err)
 }
 
@@ -92,9 +92,9 @@ func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
 	store, err := library.Open(filepath.Join(dataDir, "library.sqlite3"))
 	require.NoError(t, err)
 	assets := assetserver.New()
-	service := New(store, assets, dataDir)
+	service := New(store, assets, dataDir, nil)
 
-	book, err := service.selectPDF(path)
+	book, err := service.selectBookFile(path)
 	require.NoError(t, err)
 	assert.NotEmpty(t, book.ID)
 	assert.Equal(t, "Persistent Guide", book.Title)
@@ -108,7 +108,7 @@ func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	assets = assetserver.New()
-	service = New(store, assets, dataDir)
+	service = New(store, assets, dataDir, nil)
 
 	books, err := service.ListBooks()
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
 func TestLibraryReportsMissingSourceWithoutExposingPath(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Moved.pdf", "%PDF-1.7\nfixture")
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(path))
 	books, err := h.service.ListBooks()
@@ -148,7 +148,7 @@ func TestLibraryReportsMissingSourceWithoutExposingPath(t *testing.T) {
 func TestRemoveBookDeletesRecordAndCoverButKeepsSourcePDF(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Removable.pdf", "%PDF-1.7\nfixture")
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 	png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("cover")...)
 	require.NoError(t, h.service.SaveBookCover(book.ID, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)))
@@ -174,7 +174,7 @@ func TestRemoveBookDeletesRecordAndCoverButKeepsSourcePDF(t *testing.T) {
 func TestRenameBookUpdatesDisplayedTitleWithoutTouchingFileName(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Original Title.pdf", "%PDF-1.7\nfixture")
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "Original Title", book.Title)
 	assert.Equal(t, "Original Title.pdf", book.Name)
@@ -208,7 +208,7 @@ func TestSaveBookCoverRejectsInvalidContent(t *testing.T) {
 func TestLibraryRegeneratesCoverWhenCacheOrPDFChanges(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Changing.pdf", "%PDF-1.7\nfirst")
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 	png := append([]byte("\x89PNG\r\n\x1a\n"), []byte("cover")...)
 	require.NoError(t, h.service.SaveBookCover(book.ID, "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)))
@@ -232,7 +232,7 @@ func TestLibraryRegeneratesCoverWhenCacheOrPDFChanges(t *testing.T) {
 func TestServiceIndexesAndSearchesBookPages(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Searchable.pdf", "%PDF-1.7\nfixture")
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 	assert.Zero(t, book.IndexedPageCount)
 
@@ -261,11 +261,11 @@ func TestServiceSearchesLibraryAcrossBooks(t *testing.T) {
 	cookbookPath := h.writePDF("Cookbook.pdf", "%PDF-1.7\ncookbook")
 	notesPath := h.writePDF("Notes.pdf", "%PDF-1.7\nnotes")
 
-	guide, err := h.service.selectPDF(guidePath)
+	guide, err := h.service.selectBookFile(guidePath)
 	require.NoError(t, err)
-	cookbook, err := h.service.selectPDF(cookbookPath)
+	cookbook, err := h.service.selectBookFile(cookbookPath)
 	require.NoError(t, err)
-	notes, err := h.service.selectPDF(notesPath)
+	notes, err := h.service.selectBookFile(notesPath)
 	require.NoError(t, err)
 
 	_, err = h.service.SaveBookPages(guide.ID, []BookPageInput{
@@ -340,7 +340,7 @@ func TestServiceRejectsDRMProtectedEPUB(t *testing.T) {
 func TestServicePersistsPageBookmarks(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Bookmarks.pdf", "%PDF-1.7\nfixture")
-	book, err := h.service.selectPDF(path)
+	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
 
 	saved, err := h.service.AddBookmark(book.ID, 5, 12)

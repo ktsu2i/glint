@@ -2,7 +2,6 @@ package books
 
 import (
 	"archive/zip"
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -32,7 +31,7 @@ func (s *Service) SaveBookCover(bookID, dataURL string) error {
 	if len(content) < 8 || string(content[:8]) != "\x89PNG\r\n\x1a\n" {
 		return errors.New("cover image is not a PNG")
 	}
-	book, err := s.library.Get(context.Background(), bookID)
+	book, err := s.library.Get(s.appContext(), bookID)
 	if err != nil {
 		return err
 	}
@@ -53,11 +52,11 @@ func (s *Service) SaveBookCover(bookID, dataURL string) error {
 		_ = os.Remove(temporaryPath)
 		return fmt.Errorf("store cover image: %w", err)
 	}
-	return s.library.SaveCover(context.Background(), bookID, path, time.Now())
+	return s.library.SaveCover(s.appContext(), bookID, path, time.Now())
 }
 
 func (s *Service) MarkBookCoverFailed(bookID string) error {
-	return s.library.MarkCoverFailed(context.Background(), bookID, time.Now())
+	return s.library.MarkCoverFailed(s.appContext(), bookID, time.Now())
 }
 
 func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
@@ -97,7 +96,7 @@ func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
 		_ = os.Remove(temporary)
 		return fmt.Errorf("store EPUB cover: %w", err)
 	}
-	return s.library.SaveCover(context.Background(), book.ID, target, time.Now())
+	return s.library.SaveCover(s.appContext(), book.ID, target, time.Now())
 }
 
 func coverExtension(mediaType, href string) string {
