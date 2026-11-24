@@ -71,7 +71,7 @@ func run() error {
 		URL:              "/",
 		BackgroundColour: application.NewRGB(221, 230, 227),
 		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBarHiddenInset,
+			TitleBar: application.MacTitleBarHiddenInsetUnified,
 		},
 	})
 	return desktop.Run()
