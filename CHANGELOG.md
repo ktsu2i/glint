@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.2.2](https://github.com/ktsu2i/glint/compare/v0.2.1...v0.2.2) - 2026-11-24
+
+### Other Changes
+- refactor: replace GORM with sqlc for the library store by @ktsu2i in https://github.com/ktsu2i/glint/pull/35
+- refactor: move Wails bindings into an app layer by @ktsu2i in https://github.com/ktsu2i/glint/pull/38
+- docs: document backend architecture rules in AGENTS.md by @ktsu2i in https://github.com/ktsu2i/glint/pull/39
+
 ## [v0.2.1](https://github.com/ktsu2i/glint/compare/v0.2.0...v0.2.1) - 2026-11-24
 
 ### Other Changes
