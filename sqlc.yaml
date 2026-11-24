@@ -1,0 +1,10 @@
+version: "2"
+sql:
+  - engine: sqlite
+    schema: migrations
+    queries: internal/library/queries
+    gen:
+      go:
+        package: librarydb
+        out: internal/library/librarydb
+        emit_empty_slices: true

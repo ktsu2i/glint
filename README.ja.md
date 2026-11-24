@@ -72,6 +72,7 @@ Glint は [Sparkle](https://sparkle-project.org/) を使って、1日1回アッ�
 
 - 手元の Go が古い場合は、Go が `go.mod` の版の toolchain を自動で取得します。
 - Wails CLI（v2.17.1）は `go.mod` の tool 依存です。`go tool wails` で実行します。
+- sqlc（v1.31.1）も `go.mod` の tool 依存です。`go tool sqlc` で実行します。
 - frontend 用の Node.js 26.13.1 は、`frontend/package.json` の `devEngines.runtime` に従って pnpm が取得します。
 
 Wails が追加のツールを要求することがあります。build が失敗する場合は [Wails installation guide](https://wails.io/docs/gettingstarted/installation) を確認してください。
@@ -101,6 +102,12 @@ Go のコードを変更した場合は、CI と同じく golangci-lint を実�
 ```bash
 golangci-lint run ./...
 golangci-lint fmt ./...
+```
+
+DB の query は `internal/library/queries/*.sql` に書き、sqlc がそれと `migrations/` から `internal/library/librarydb` の Go コードを生成します。query を変更した場合や migration を追加した場合は、コードを再生成して commit してください。生成漏れは CI の `go tool sqlc diff` で検出します。
+
+```bash
+go tool sqlc generate
 ```
 
 ## 手元から出ていくもの

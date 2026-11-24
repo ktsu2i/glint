@@ -72,6 +72,7 @@ The other tools are pinned in the repository, so you don't install them yourself
 
 - Go fetches the toolchain version in `go.mod` when yours is older.
 - The Wails CLI (v2.17.1) is a tool dependency in `go.mod`. Run it with `go tool wails`.
+- sqlc (v1.31.1) is a tool dependency in `go.mod` too. Run it with `go tool sqlc`.
 - pnpm downloads Node.js 26.13.1 for the frontend, as `devEngines.runtime` in `frontend/package.json` asks.
 
 Wails may need a few extra system tools; see the [Wails installation guide](https://wails.io/docs/gettingstarted/installation) if the build complains.
@@ -101,6 +102,12 @@ If you change Go code, run golangci-lint as CI does. It is pinned in `aqua.yaml`
 ```bash
 golangci-lint run ./...
 golangci-lint fmt ./...
+```
+
+Database queries live in `internal/library/queries/*.sql`, and sqlc generates the Go code in `internal/library/librarydb` from them and `migrations/`. If you change a query or add a migration, regenerate the code and commit it. CI runs `go tool sqlc diff` to catch stale code:
+
+```bash
+go tool sqlc generate
 ```
 
 ## What leaves your machine

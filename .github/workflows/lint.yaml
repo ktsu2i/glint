@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -75,3 +75,7 @@ jobs:
 
       - name: Format check
         run: golangci-lint fmt --diff ./...
+
+      # sqlc は go.mod の tool directive で固定している。生成コードが queries / migrations と一致するか確認する。
+      - name: Check sqlc generated code
+        run: go tool sqlc diff
