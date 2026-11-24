@@ -36,7 +36,7 @@ type SelectableEntry = {
   providerLabel: string;
   isActive: boolean;
   isRecent: boolean;
-  isCustom: boolean; // openai_compatible:<slug> の手動登録 model
+  isCustom: boolean;
 };
 
 const OPENAI_COMPATIBLE_PREFIX = "openai_compatible:";
@@ -164,9 +164,6 @@ function entryKey(entry: SelectableEntry): string {
   return `${entry.providerId} ${entry.modelId}`;
 }
 
-// sourceLabelFor は ModelSource → i18n の static lookup。
-// テンプレートリテラルでキーを動的生成すると `TranslationKey` literal-union
-// から外れて TS が拒むので、明示的にマップする。
 function sourceLabelFor(translate: TFunction, source: ModelSource): string {
   switch (source) {
     case "api":
@@ -261,8 +258,6 @@ export function ModelSelector({
     searchRef.current?.focus();
   }, [open]);
 
-  // popover open 時に、まだ listing が無い configured built-in provider 全部を並行 fetch。
-  // 既存 (loaded) は触らない -> 短時間連打しても backend には 1 回しか hit しない。
   useEffect(() => {
     if (!open || !config) return;
     let cancelled = false;
@@ -281,9 +276,7 @@ export function ModelSelector({
             next.set(provider.providerId, result);
             return next;
           });
-        } catch {
-          // listing failure は致命ではない。fallback は provider.model 単独表示。
-        }
+        } catch {}
       }),
     );
     return () => {
@@ -425,8 +418,6 @@ export function ModelSelector({
       return;
     }
     if (event.key === "Enter") {
-      // Enter は search input の場合のみ option を選択。
-      // Refresh/Add などの button 上では default 動作（click）を許可。
       const { target } = event;
       if (!(target instanceof HTMLInputElement) || target.type !== "text") {
         return;
@@ -459,7 +450,6 @@ export function ModelSelector({
 
   // oxlint-disable-next-line react/purity -- 相対時刻表示用。描画ごとに現在時刻を取る。
   const now = new Date();
-  // flatItems の index を追跡しながら描画する。recent → groups の順で並べる。
   let cursor = 0;
   const recentKeys = new Set(recentEntries.map((entry) => entryKey(entry)));
 

@@ -22,10 +22,6 @@ function customGlyph(displayLabel: string, providerId: string): string {
   return source.charAt(0).toUpperCase();
 }
 
-// ProviderIcon renders a monochrome glyph for a provider so the composer's
-// model selector can identify the route without using brand colors. Built-in
-// providers map to a phosphor icon; custom OpenAI-compatible providers fall
-// back to a neutral letter glyph derived from the display label.
 export function ProviderIcon({ providerId, displayLabel = "", size = 12 }: ProviderIconProps) {
   if (providerId.startsWith(OPENAI_COMPATIBLE_PREFIX)) {
     return (

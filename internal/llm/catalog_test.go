@@ -50,7 +50,6 @@ func TestRegistryResolvesOpenAICompatibleSlugToTemplate(t *testing.T) {
 
 func TestRegistryValidatesOpenRouterModel(t *testing.T) {
 	registry := NewRegistry()
-	// F10: 空 model は upsert で許容（後で SetActiveModel が指定する）。
 	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderOpenRouter}),
 	)
@@ -130,7 +129,6 @@ func TestRegistryBuildDispatchesToAnthropicFactory(t *testing.T) {
 
 func TestRegistryValidatesAnthropicModel(t *testing.T) {
 	registry := NewRegistry()
-	// F10: model 入力は SetActiveModel に移った。upsert 時の Validate は空 model を許容する。
 	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderAnthropic}),
 	)
@@ -173,7 +171,6 @@ func TestRegistryBuildDispatchesToGoogleFactory(t *testing.T) {
 
 func TestRegistryValidatesGoogleModel(t *testing.T) {
 	registry := NewRegistry()
-	// F10: empty model is now allowed at upsert time (selection moved into the composer).
 	assert.NoError(t,
 		registry.Validate(ProviderConfig{ProviderID: ProviderGoogle}),
 	)

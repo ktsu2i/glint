@@ -8,20 +8,17 @@ import (
 	"strings"
 )
 
-// ProviderID は registry 上の安定キー。設定の名前空間と credential entry 名の両方に使う。
 type ProviderID string
 
-// F4 までに対応する built-in provider id。
 const (
 	ProviderOpenRouter       ProviderID = "openrouter"
 	ProviderOpenAI           ProviderID = "openai"
 	ProviderAnthropic        ProviderID = "anthropic"
 	ProviderGoogle           ProviderID = "google"
 	ProviderOllama           ProviderID = "ollama"
-	ProviderOpenAICompatible ProviderID = "openai_compatible" // template id。実体は :slug 付き id で扱う。
+	ProviderOpenAICompatible ProviderID = "openai_compatible"
 )
 
-// AuthKind は frontend が credential 入力 UI を組み立てるためのヒント。
 type AuthKind string
 
 const (
@@ -31,7 +28,6 @@ const (
 	AuthKindNone     AuthKind = "none"
 )
 
-// ProviderOptionType は ProviderOption.Type の列挙値。
 type ProviderOptionType string
 
 const (
@@ -41,7 +37,6 @@ const (
 	ProviderOptionHeaders ProviderOptionType = "headers"
 )
 
-// ProviderOption は frontend がフォームを動的に組み立てるための declarative 記述。
 type ProviderOption struct {
 	Key      string             `json:"key"`
 	Label    string             `json:"label"`
@@ -51,14 +46,12 @@ type ProviderOption struct {
 	HelpText string             `json:"helpText,omitempty"`
 }
 
-// ProviderCapabilities は将来 UI 上で機能差を示すためのフラグ。
 type ProviderCapabilities struct {
 	Streaming bool `json:"streaming"`
 	Tools     bool `json:"tools"`
 	Images    bool `json:"images"`
 }
 
-// ProviderDescriptor は registry の公開メタデータ。UI と factory が共有する。
 type ProviderDescriptor struct {
 	ID             ProviderID           `json:"id"`
 	DisplayName    string               `json:"displayName"`
@@ -69,7 +62,6 @@ type ProviderDescriptor struct {
 	Notes          string               `json:"notes,omitempty"`
 }
 
-// ProviderConfig は1つの provider に対するユーザー設定。secret は含まない。
 type ProviderConfig struct {
 	ProviderID   ProviderID     `json:"providerId"`
 	DisplayLabel string         `json:"displayLabel,omitempty"`
@@ -77,21 +69,13 @@ type ProviderConfig struct {
 	Options      map[string]any `json:"options,omitempty"`
 }
 
-// Deps は factory が gateway を組み立てるために必要な runtime 依存値。
 type Deps struct {
 	APIKey string
-	// Model は active な (provider, model) の listing / builtin metadata。
-	// F11 で context budget の推定に使う。zero value は ContextWindow=0 と
-	// なり、FallbackBudget に落ちる（Custom OpenAI-compatible や cache 未収録
-	// model はこの経路）。
-	Model ModelDescriptor
+	Model  ModelDescriptor
 }
 
 type gatewayFactory func(cfg ProviderConfig, deps Deps) (Gateway, error)
 
-// modelLister は provider が listing API を持つときに登録する関数。
-// builtin catalog しか持たない provider (Google など) や、ローカル設定だけで
-// 一覧を決める provider (custom OpenAI-compatible) は nil でよい。
 type modelLister func(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error)
 
 type providerEntry struct {
@@ -101,7 +85,6 @@ type providerEntry struct {
 	lister     modelLister
 }
 
-// Registry は built-in provider と将来的な user-defined slot を保持する。
 type Registry struct {
 	entries map[ProviderID]providerEntry
 }
@@ -125,7 +108,6 @@ func (r *Registry) register(descriptor ProviderDescriptor, factory gatewayFactor
 	r.entries[descriptor.ID] = providerEntry{descriptor: descriptor, factory: factory, validate: validate, lister: lister}
 }
 
-// Descriptors は frontend が UI を組むための provider 一覧を返す。
 func (r *Registry) Descriptors() []ProviderDescriptor {
 	out := make([]ProviderDescriptor, 0, len(r.entries))
 	for _, entry := range r.entries {
@@ -150,7 +132,6 @@ func (r *Registry) Descriptor(id ProviderID) (ProviderDescriptor, bool) {
 	return entry.descriptor, true
 }
 
-// Validate は provider 固有のフィールド検証を行う。
 func (r *Registry) Validate(cfg ProviderConfig) error {
 	entry, ok := r.lookupEntry(cfg.ProviderID)
 	if !ok {
@@ -162,7 +143,6 @@ func (r *Registry) Validate(cfg ProviderConfig) error {
 	return entry.validate(cfg)
 }
 
-// Build は active provider の Gateway を組み立てる。
 func (r *Registry) Build(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	entry, ok := r.lookupEntry(cfg.ProviderID)
 	if !ok {
@@ -171,9 +151,6 @@ func (r *Registry) Build(cfg ProviderConfig, deps Deps) (Gateway, error) {
 	return entry.factory(cfg, deps)
 }
 
-// HasListing は provider が listing API を持つか（= ListModels が API 値を
-// 返し得るか）を返す。Manager はこれを見て api → cache → builtin の fallback
-// 順を決める。
 func (r *Registry) HasListing(id ProviderID) bool {
 	entry, ok := r.lookupEntry(id)
 	if !ok {
@@ -182,9 +159,6 @@ func (r *Registry) HasListing(id ProviderID) bool {
 	return entry.lister != nil
 }
 
-// ListModels は provider の listing API を呼んで結果を返す。lister が登録されて
-// いない provider は nil, nil を返し、呼び出し側が builtin / cache fallback に
-// 進める。
 func (r *Registry) ListModels(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
 	entry, ok := r.lookupEntry(cfg.ProviderID)
 	if !ok {
@@ -205,7 +179,6 @@ func (r *Registry) lookupEntry(id ProviderID) (providerEntry, bool) {
 	return entry, ok
 }
 
-// RequiresAPIKey は AuthKindNone 以外なら true。
 func (descriptor ProviderDescriptor) RequiresAPIKey() bool {
 	return descriptor.AuthKind != AuthKindNone
 }
@@ -233,8 +206,6 @@ func openRouterFactory(cfg ProviderConfig, deps Deps) (Gateway, error) {
 func validateOpenRouter(cfg ProviderConfig) error {
 	model := strings.TrimSpace(cfg.Model)
 	if model == "" {
-		// F10: model id は SetActiveModel / AddCustomModel 経由で別に管理される。
-		// Upsert 時点で空のときは options だけ確認すれば良い。
 		return nil
 	}
 	if !strings.Contains(model, "/") {
@@ -401,7 +372,6 @@ func validateOpenAICompatible(cfg ProviderConfig) error {
 	if strings.TrimSpace(optionString(cfg.Options, "base_url", "")) == "" {
 		return errors.New("base URLを入力してください。")
 	}
-	// model は AddCustomModel で別管理する（F10）。
 	return nil
 }
 

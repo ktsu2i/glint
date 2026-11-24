@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// httpClientForListing は listing API 呼び出し専用の short-timeout client。
-// streaming endpoint と違って待ち時間は最小で良い。
 func httpClientForListing() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 15 * time.Second
@@ -22,8 +20,6 @@ func httpClientForListing() *http.Client {
 	}
 }
 
-// fetchJSON は listing API への共通 GET 呼び出し。auth header やクエリは
-// provider 側で組み立て済みのものを渡す。
 func fetchJSON(ctx context.Context, client *http.Client, endpoint string, headers map[string]string, out any) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -48,7 +44,6 @@ func fetchJSON(ctx context.Context, client *http.Client, endpoint string, header
 	return json.NewDecoder(response.Body).Decode(out)
 }
 
-// anthropicModelLister は Anthropic の `/v1/models` を叩く。
 func anthropicModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
 	endpoint, headers, err := anthropicModelListingRequest(cfg, deps)
 	if err != nil {
@@ -78,7 +73,6 @@ func anthropicModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([
 	return models, nil
 }
 
-// openAIModelLister は OpenAI の `/v1/models` を叩く。
 func openAIModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
 	endpoint, headers, err := openAIModelListingRequest(cfg, deps)
 	if err != nil {
@@ -106,8 +100,6 @@ func openAIModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]Mo
 	return models, nil
 }
 
-// openRouterLister は OpenRouter の `/api/v1/models` を叩く。
-// OpenRouter は API key 不要でも一覧を返すが、念のため key があれば付ける。
 func openRouterLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
 	_ = cfg
 	endpoint := "https://openrouter.ai/api/v1/models"
@@ -141,9 +133,6 @@ func openRouterLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]Mod
 	return models, nil
 }
 
-// ollamaModelLister は Ollama の `/api/tags` を叩く。
-// Ollama は `/v1/chat/completions` を提供する一方で、tags endpoint は
-// `/api/tags`（OpenAI 互換 namespace 外）にある点に注意。
 func ollamaModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]ModelDescriptor, error) {
 	_ = deps
 	endpoint, err := ollamaModelListingEndpoint(cfg)
@@ -177,7 +166,7 @@ func ollamaModelLister(ctx context.Context, cfg ProviderConfig, deps Deps) ([]Mo
 }
 
 func anthropicModelListingRequest(cfg ProviderConfig, deps Deps) (string, map[string]string, error) {
-	_ = cfg // legacy options are deliberately ignored for built-in providers.
+	_ = cfg
 	if strings.TrimSpace(deps.APIKey) == "" {
 		return "", nil, fmt.Errorf("anthropic API key is required for model listing")
 	}
@@ -188,7 +177,7 @@ func anthropicModelListingRequest(cfg ProviderConfig, deps Deps) (string, map[st
 }
 
 func openAIModelListingRequest(cfg ProviderConfig, deps Deps) (string, map[string]string, error) {
-	_ = cfg // legacy endpoint / organization options are deliberately ignored.
+	_ = cfg
 	if strings.TrimSpace(deps.APIKey) == "" {
 		return "", nil, fmt.Errorf("openai API key is required for model listing")
 	}
@@ -198,7 +187,7 @@ func openAIModelListingRequest(cfg ProviderConfig, deps Deps) (string, map[strin
 }
 
 func ollamaModelListingEndpoint(cfg ProviderConfig) (string, error) {
-	_ = cfg // alternate hosts are represented as Custom OpenAI-compatible providers.
+	_ = cfg
 	root := strings.TrimRight(OllamaDefaultBaseURL, "/")
 	if trimmed, ok := strings.CutSuffix(root, "/v1"); ok {
 		root = trimmed

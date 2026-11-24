@@ -87,8 +87,6 @@ function isOpenAICompatibleInstance(providerId: string): boolean {
   );
 }
 
-// Mirror of internal/settings.envVarNameFor — the UI shows this string so users
-// know which env var is currently overriding the keyring value.
 function envVarNameFor(providerId: string): string {
   const trimmed = providerId.trim();
   if (!trimmed) return "";
@@ -170,9 +168,6 @@ function endpointHintFor(
   return "";
 }
 
-// rows are sorted: configured built-ins (catalog order) -> configured customs ->
-// unconfigured built-ins (catalog order). Custom (openai_compatible:*) providers
-// only ever appear when explicitly added, so they have no unconfigured group.
 function buildRows(config: LLMConfig, staged: StagedCustom | null): ProviderRowDescriptor[] {
   const builtIns = config.catalog.filter(
     (descriptor) => descriptor.id !== OPENAI_COMPATIBLE_TEMPLATE_ID,
@@ -384,7 +379,6 @@ export function LLMSettingsPage({
         ...(trimmedLabel ? { displayLabel: trimmedLabel } : {}),
       });
       setConfig(next);
-      // Staged custom is now persisted; drop the placeholder marker.
       setStaged(null);
       const refreshedStored =
         next.providers.find((provider) => provider.providerId === managedProviderId) ?? null;
@@ -403,8 +397,6 @@ export function LLMSettingsPage({
     setConnectionTest(null);
     setConnectionTestError("");
     try {
-      // Ollama has no credential form, so on first test we persist a row
-      // entry so the composer model selector becomes aware of it.
       if (managedDescriptor.authKind === "none" && !managedStored) {
         const next = await upsertProviderSettings({
           providerId: managedProviderId,
@@ -518,7 +510,6 @@ export function LLMSettingsPage({
     try {
       await changeLanguage(next);
     } catch {
-      // The provider exposes the persistence error next to these controls.
     } finally {
       setSavingLanguage(false);
     }

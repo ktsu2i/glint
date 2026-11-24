@@ -17,11 +17,6 @@ export type IndexBookOptions = {
   onProgress?: IndexProgressCallback;
 };
 
-// indexBookPages drives PDF.js text extraction outside of the reader so a book
-// becomes searchable as soon as it is imported, not only after the user opens
-// it. The function is idempotent: it resumes from book.indexedPageCount, so
-// running it twice for the same book is wasteful but never corrupting (the
-// underlying SaveBookPages uses ON CONFLICT DO UPDATE).
 export async function indexBookPages(
   book: IndexableBook,
   { signal, onProgress }: IndexBookOptions,
@@ -71,9 +66,7 @@ export async function indexBookPages(
   } finally {
     try {
       await loadingTask.destroy();
-    } catch {
-      // PDF.js can throw when the worker is already torn down; ignore.
-    }
+    } catch {}
   }
 }
 

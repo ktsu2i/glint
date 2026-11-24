@@ -1,5 +1,3 @@
-// style prop で CSS custom property (`--foo`) を型安全に渡せるようにする。
-// declaration merging のため interface を使う。
 export {};
 
 declare module "react" {

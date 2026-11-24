@@ -22,9 +22,6 @@ const (
 	maxEPUBCoverBytes     = 8 << 20
 )
 
-// SpineItem describes a single reading-order item from an EPUB's OPF. Index is
-// zero-based and maps to the book_pages.page_number = index + 1 convention used
-// when EPUB content is persisted alongside PDF pages.
 type SpineItem struct {
 	Index     int    `json:"index"`
 	ID        string `json:"id"`
@@ -33,15 +30,12 @@ type SpineItem struct {
 	Title     string `json:"title"`
 }
 
-// epubPackage carries the parsed OPF plus enough archive context to extract
-// per-spine text and the cover image on demand without re-reading the whole
-// file twice.
 type epubPackage struct {
-	OPFDirectory  string
-	Manifest      map[string]epubManifestItem
-	Spine         []SpineItem
-	Metadata      EPUBMetadata
-	CoverItemHref string
+	OPFDirectory   string
+	Manifest       map[string]epubManifestItem
+	Spine          []SpineItem
+	Metadata       EPUBMetadata
+	CoverItemHref  string
 	CoverMediaType string
 }
 
@@ -99,9 +93,6 @@ type opfSpineItem struct {
 	IDRef string `xml:"idref,attr"`
 }
 
-// inspectEPUB validates the file, parses metadata + spine, locates the cover
-// item, and reports whether the EPUB advertises encryption. It returns a hash
-// of the entire file so the library can use the same dedupe key as PDFs.
 func inspectEPUB(filePath string) (Inspection, *epubPackage, error) {
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -245,9 +236,6 @@ func resolveCoverItem(manifest map[string]epubManifestItem, coverID string) (str
 	return "", ""
 }
 
-// extractSpineItemText reads one spine item from the archive and reduces it to
-// plain text suitable for lexical search. Scripts and styles are stripped, and
-// block boundaries become line breaks so excerpts remain readable.
 func (pkg *epubPackage) extractSpineItemText(reader *zip.Reader, item SpineItem) (string, error) {
 	target := pkg.resolveHref(item.Href)
 	raw, err := readZipFile(reader, target, maxEPUBSpineItemBytes)
@@ -264,9 +252,6 @@ func (pkg *epubPackage) extractSpineItemText(reader *zip.Reader, item SpineItem)
 	return text, nil
 }
 
-// extractCover reads the OPF-referenced cover image straight from the archive.
-// It returns empty bytes when the EPUB has no usable cover so callers can mark
-// the thumbnail status as failed.
 func (pkg *epubPackage) extractCover(reader *zip.Reader) ([]byte, string, error) {
 	if pkg.CoverItemHref == "" {
 		return nil, "", nil
@@ -290,9 +275,6 @@ func (pkg *epubPackage) resolveHref(href string) string {
 	return path.Clean(pkg.OPFDirectory + "/" + href)
 }
 
-// maxBookPageTextBytes mirrors library.maxBookPageTextBytes so spine items that
-// exceed the SQLite-side limit get truncated before they reach SaveBookPages.
-// Keeping a local constant avoids a package import cycle.
 const maxBookPageTextBytes = 4 * 1024 * 1024
 
 func xhtmlToPlainText(raw []byte) (string, error) {

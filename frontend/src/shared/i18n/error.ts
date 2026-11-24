@@ -16,8 +16,6 @@ export class LocalizedError extends Error {
 
 type Translate = (key: TranslationKey, values?: Record<string, string | number>) => string;
 
-// i18next v27 の strictInterpolationChecks は、静的な key に対して interpolation 変数を必須にする。
-// ここで扱う key は実行時に決まるため型で絞れない。型の緩和はこのファイル内に閉じ込める。
 type DynamicTranslate = Translate | TFunction;
 
 function group(match: RegExpMatchArray, index: number): string {
@@ -25,7 +23,7 @@ function group(match: RegExpMatchArray, index: number): string {
 }
 
 function asTranslate(translate: DynamicTranslate): Translate {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 上記コメントの通り、動的 key 用に型を意図的に緩める。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 実行時に決まる動的 key を扱うため、型を意図的に緩める。
   return translate as Translate;
 }
 

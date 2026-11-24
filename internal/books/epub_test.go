@@ -39,16 +39,16 @@ const sampleOPF = `<?xml version="1.0" encoding="UTF-8"?>
 func newSampleEPUB(t *testing.T, opts ...func(map[string]string)) string {
 	t.Helper()
 	files := map[string]string{
-		"mimetype":              "application/epub+zip",
+		"mimetype": "application/epub+zip",
 		"META-INF/container.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
 			"<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">\n" +
 			"  <rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles>\n" +
 			"</container>",
-		"OEBPS/content.opf":           sampleOPF,
-		"OEBPS/text/chapter1.xhtml":   `<?xml version="1.0" encoding="UTF-8"?><html><body><h1>Chapter One</h1><p>Hello evidence.</p><script>ignored.</script></body></html>`,
-		"OEBPS/text/chapter2.xhtml":   `<?xml version="1.0" encoding="UTF-8"?><html><body><h1>Chapter Two</h1><p>Retrieval pipeline evidence.</p></body></html>`,
-		"OEBPS/text/chapter3.xhtml":   `<?xml version="1.0" encoding="UTF-8"?><html><body><h1>Chapter Three</h1><p>Mapping repo files to book sections.</p></body></html>`,
-		"OEBPS/images/cover.png":      string(pngFixture()),
+		"OEBPS/content.opf":         sampleOPF,
+		"OEBPS/text/chapter1.xhtml": `<?xml version="1.0" encoding="UTF-8"?><html><body><h1>Chapter One</h1><p>Hello evidence.</p><script>ignored.</script></body></html>`,
+		"OEBPS/text/chapter2.xhtml": `<?xml version="1.0" encoding="UTF-8"?><html><body><h1>Chapter Two</h1><p>Retrieval pipeline evidence.</p></body></html>`,
+		"OEBPS/text/chapter3.xhtml": `<?xml version="1.0" encoding="UTF-8"?><html><body><h1>Chapter Three</h1><p>Mapping repo files to book sections.</p></body></html>`,
+		"OEBPS/images/cover.png":    string(pngFixture()),
 	}
 	for _, opt := range opts {
 		opt(files)

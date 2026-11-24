@@ -69,9 +69,6 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite3")
 	db, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{})
 	require.NoError(t, err)
-	// Simulate a legacy library DB where migration 0001 was already applied
-	// under golang-migrate's (version, dirty) bookkeeping. The migrator must
-	// preserve the recorded version while moving to the new schema.
 	require.NoError(t, db.Exec(`CREATE TABLE books (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,

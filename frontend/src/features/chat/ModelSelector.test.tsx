@@ -149,7 +149,6 @@ describe("ModelSelector", () => {
       expect(screen.getByRole("option", { name: /claude-opus-4-7/ })).toBeTruthy(),
     );
     expect(screen.getByRole("option", { name: /local-7b/ })).toBeTruthy();
-    // ollama has no configured model => filtered out
     expect(screen.queryByText(/Ollama/)).toBeNull();
   });
 
@@ -195,8 +194,6 @@ describe("ModelSelector", () => {
     const search = screen.getByRole("textbox", { name: "modelを検索" });
     await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(1));
 
-    // The first focused entry is the recent (openai, gpt-5). ArrowDown moves to the
-    // next entry across sections.
     fireEvent.keyDown(search, { key: "ArrowDown" });
     fireEvent.keyDown(search, { key: "Enter" });
 
@@ -259,15 +256,12 @@ describe("ModelSelector", () => {
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
-  // 初回起動の backend は recentModels を null で返しうる。ここで throw すると
-  // error boundary がないため app 全体が blank になる。
   it("renders when the backend returns null recents on a fresh install", () => {
     const config = makeConfig({
       providers: [],
       activeProviderId: "",
     });
     delete config.activeModelRef;
-    // 型上は非 nullable なので、backend が実際に返す null を明示的に再現する。
     (config as unknown as { recentModels: unknown }).recentModels = null;
     (config as unknown as { recentProviderIds: unknown }).recentProviderIds = null;
 
@@ -310,7 +304,6 @@ describe("ModelSelector", () => {
     expect(options[2]).toContain("local-7b");
   });
 
-  // F14: listing source / fetched_at の表示
   it("shows the listing source badge and a relative fetched-at when listing has metadata", async () => {
     backend.listProviderModels.mockImplementation(async (providerId: string) => {
       if (providerId === "openai") {
@@ -333,12 +326,10 @@ describe("ModelSelector", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
     await waitFor(() => expect(screen.getByText("API取得")).toBeTruthy());
-    // The English / Japanese "30 seconds ago" varies, but the badge must show something next to it.
     const badge = screen.getByText("API取得");
     expect(badge.dataset.source).toBe("api");
   });
 
-  // F14: Refresh button で listProviderModels が force: true で呼ばれる
   it("re-fetches the provider listing with force when the Refresh button is pressed", async () => {
     render(
       <ModelSelector
@@ -360,7 +351,6 @@ describe("ModelSelector", () => {
     );
   });
 
-  // F14: + Add custom model で addCustomModel が呼ばれる
   it("adds a manual model id for a custom provider via the popover input", async () => {
     const onConfigChange = vi.fn();
     render(
@@ -386,7 +376,6 @@ describe("ModelSelector", () => {
     await waitFor(() => expect(onConfigChange).toHaveBeenCalled());
   });
 
-  // F14: custom model row の Remove で removeCustomModel が呼ばれる
   it("removes a custom model id via the trailing remove button", async () => {
     const onConfigChange = vi.fn();
     render(
@@ -409,7 +398,6 @@ describe("ModelSelector", () => {
     await waitFor(() => expect(onConfigChange).toHaveBeenCalled());
   });
 
-  // F14: keyboard 操作 - Tab で Refresh / Add / Remove 等が focusable
   it("keeps Refresh, Add, and Remove buttons reachable via keyboard focus", async () => {
     render(
       <ModelSelector
@@ -422,14 +410,12 @@ describe("ModelSelector", () => {
     fireEvent.click(screen.getByRole("button", { name: /gpt-5/ }));
     await waitFor(() => expect(screen.getByRole("option", { name: /local-7b/ })).toBeTruthy());
 
-    // Confirm each action button is a real <button> with a focusable target (not aria-hidden / disabled by default).
     const refresh = screen.getByRole("button", { name: /OpenAIのmodel一覧を再取得/ });
     const addButton = screen.getByRole("button", { name: "modelを追加" });
     const remove = screen.getByRole("button", { name: "local-7bを削除" });
 
     refresh.focus();
     expect(document.activeElement).toBe(refresh);
-    // disabled until the input has text
     expect(addButton.hasAttribute("disabled")).toBe(true);
     remove.focus();
     expect(document.activeElement).toBe(remove);

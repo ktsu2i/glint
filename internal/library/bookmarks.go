@@ -26,9 +26,6 @@ type bookBookmarkRecord struct {
 
 func (bookBookmarkRecord) TableName() string { return "book_bookmarks" }
 
-// SaveBookmark persists a page marker once per book and page. pageCount comes
-// from the loaded PDF so a bookmark can be saved before reading-position
-// persistence has populated the book metadata.
 func (store *Store) SaveBookmark(
 	ctx context.Context,
 	bookID string,

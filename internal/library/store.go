@@ -21,8 +21,6 @@ type Store struct {
 	db *gorm.DB
 }
 
-// BookFormat enumerates the supported book file formats. The library treats
-// "pdf" as the default for legacy rows imported before EPUB support landed.
 const (
 	BookFormatPDF  = "pdf"
 	BookFormatEPUB = "epub"
@@ -45,9 +43,6 @@ type Book struct {
 	LastPage             int
 }
 
-// Display returns the user-facing book title. DisplayName wins when set so the
-// auto-derived Title can keep tracking the underlying PDF file name without
-// overwriting a rename the user made.
 func (b Book) Display() string {
 	if b.DisplayName != "" {
 		return b.DisplayName
@@ -312,17 +307,10 @@ func (store *Store) ResetCover(ctx context.Context, id string, now time.Time) er
 	return requireChanged(result, "reset book cover")
 }
 
-// MaxDisplayNameLength bounds user-supplied book titles so renames cannot bloat
-// the SQLite row or the toolbar / library card layout.
 const MaxDisplayNameLength = 200
 
-// ErrInvalidDisplayName signals that a rename request would store an empty or
-// oversized title.
 var ErrInvalidDisplayName = errors.New("invalid book display name")
 
-// Rename persists a user-supplied display title for the given book. The
-// auto-derived Title (tracking the PDF file name) is left untouched so it can
-// keep serving as a fallback if the user later clears their custom name.
 func (store *Store) Rename(ctx context.Context, id, name string, now time.Time) (Book, error) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -395,8 +383,6 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 	return store.Get(ctx, id)
 }
 
-// Setting returns a non-secret application setting. Missing keys are returned
-// as an empty value so callers can apply their own defaults.
 func (store *Store) Setting(ctx context.Context, key string) (string, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
@@ -413,8 +399,6 @@ func (store *Store) Setting(ctx context.Context, key string) (string, error) {
 	return record.Value, nil
 }
 
-// SaveSetting persists non-secret configuration. Credentials must use the OS
-// credential store and must never be passed to this method.
 func (store *Store) SaveSetting(ctx context.Context, key, value string) error {
 	key = strings.TrimSpace(key)
 	if key == "" {

@@ -60,10 +60,6 @@ func (s *Service) MarkBookCoverFailed(bookID string) error {
 	return s.library.MarkCoverFailed(context.Background(), bookID, time.Now())
 }
 
-// extractEPUBCover pulls the OPF-referenced cover image out of the EPUB
-// archive and writes it next to the PDF thumbnails so the library shelf can
-// render a real image. Failures should not block import; callers handle the
-// fallback by marking the book's cover status as "failed".
 func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
 	if pkg == nil || pkg.CoverItemHref == "" {
 		return errors.New("EPUB has no cover image")

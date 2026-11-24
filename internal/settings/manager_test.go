@@ -73,9 +73,6 @@ func TestGetLLMConfigReturnsEmptyButCatalogOnFreshInstall(t *testing.T) {
 	assert.Contains(t, ids, "openai_compatible")
 }
 
-// frontend の LLMConfig 型は recentModels / recentProviderIds を非 nullable な
-// array として宣言している。nil slice をそのまま返すと JSON が null になり、
-// ModelSelector が初回起動で throw して app 全体が blank になる。
 func TestGetLLMConfigSerializesEmptyRecentsAsArraysOnFreshInstall(t *testing.T) {
 	manager, _, _ := newTestManager()
 	config, err := manager.GetLLMConfig(context.Background())
@@ -110,7 +107,6 @@ func TestUpsertProviderPersistsConfigAndCredentialSeparately(t *testing.T) {
 	assert.NotContains(t, settingStore.values[llmProvidersKey], "secret-value")
 	assert.Equal(t, "secret-value", secretStore.values[openRouterAccount()])
 
-	// Selecting an active (provider, model) is what wires the chat path up.
 	next, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
 	require.NoError(t, err)
 	require.NotNil(t, next.ActiveModel)
@@ -223,24 +219,18 @@ func TestSetActiveModelTracksRecentProvidersAsLRU(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openai", "openrouter"}, second.RecentProviderIDs)
 
-	// Re-activating openrouter promotes it back to the front without growing
-	// the list, proving the LRU updates rather than appends duplicates.
 	third, err := manager.SetActiveModel(context.Background(), "openrouter", "anthropic/claude-sonnet-4-6")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openrouter", "openai"}, third.RecentProviderIDs)
 
-	// Adding two more entries pushes the oldest out so the window stays at 3.
 	_, err = manager.SetActiveModel(context.Background(), "anthropic", "claude-opus-4-8")
 	require.NoError(t, err)
 	final, err := manager.SetActiveModel(context.Background(), "ollama", "llama3")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ollama", "anthropic", "openrouter"}, final.RecentProviderIDs)
 
-	// SQLite persistence proves the LRU survives a process restart.
 	assert.JSONEq(t, `["ollama","anthropic","openrouter"]`, settingStore.values[llmRecentProvidersKey])
 
-	// A fresh Manager (same store) reproduces the same recent list, as expected
-	// after re-mounting the frontend.
 	reborn := NewManager(settingStore, &memorySecretStore{values: map[string]string{}})
 	reloaded, err := reborn.GetLLMConfig(context.Background())
 	require.NoError(t, err)
@@ -261,8 +251,6 @@ func TestRecentProvidersPruneDroppedEntries(t *testing.T) {
 	_, err = manager.SetActiveModel(context.Background(), "openai", "gpt-5")
 	require.NoError(t, err)
 
-	// Deleting openrouter must drop it from the recent list so the composer
-	// never tries to switch to a vanished provider.
 	config, err := manager.DeleteProviderSettings(context.Background(), "openrouter")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"openai"}, config.RecentProviderIDs)
@@ -284,7 +272,6 @@ func TestRecentModelsLRUTracksPairs(t *testing.T) {
 	final, err := manager.SetActiveModel(context.Background(), "openrouter", "openai/gpt-5")
 	require.NoError(t, err)
 
-	// 同じ provider でも model id が違えば別エントリとして残る。
 	expected := []ActiveModelRef{
 		{ProviderID: "openrouter", ModelID: "openai/gpt-5"},
 		{ProviderID: "openai", ModelID: "gpt-5"},
@@ -325,8 +312,6 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	_, err := manager.GetLLMConfig(context.Background())
 	require.NoError(t, err)
 
-	// Manually flip the migration done flag off to verify the short-circuit works
-	// after a second invocation.
 	delete(settingStore.values, llmMigrationDoneKey)
 	manager.migrated = false
 	_, err = manager.GetLLMConfig(context.Background())
@@ -348,14 +333,12 @@ func TestMigrationV4PromotesActiveProviderToActiveModelRef(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "1", settingStore.values[llmModelsMigrationKey])
 
-	// active_model_ref が JSON で保存されている。
 	require.NotEmpty(t, settingStore.values[llmActiveModelKey])
 	var ref ActiveModelRef
 	require.NoError(t, json.Unmarshal([]byte(settingStore.values[llmActiveModelKey]), &ref))
 	assert.Equal(t, "openai", ref.ProviderID)
 	assert.Equal(t, "gpt-5", ref.ModelID)
 
-	// 旧 model 単独保存は models[] の先頭にも入れる。
 	stored, err := manager.loadStoredProviders(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"gpt-5"}, stored["openai"].Models)
@@ -372,7 +355,6 @@ func TestMigrationV4IsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	first := settingStore.values[llmActiveModelKey]
 
-	// 2回目の起動でも結果が変わらない。
 	manager.migrated = false
 	_, err = manager.GetLLMConfig(context.Background())
 	require.NoError(t, err)
@@ -515,12 +497,9 @@ func TestUpsertOpenAICompatibleStoresSlugInstance(t *testing.T) {
 	assert.Equal(t, "openai_compatible:groq", config.Providers[0].ProviderID)
 	assert.Equal(t, "Groq", config.Providers[0].DisplayLabel)
 	assert.True(t, config.Providers[0].HasAPIKey)
-	// custom provider は manual model 登録が前提なので、credential が揃っても
-	// model 登録までは「configured = false」のままにする。
 	assert.False(t, config.Providers[0].Configured)
 	assert.Equal(t, "secret", secretStore.values[secretKey(credentialService, "llm.openai_compatible:groq.api_key")])
 
-	// AddCustomModel すると configured = true になり、SetActiveModel もできる。
 	added, err := manager.AddCustomModel(context.Background(), "openai_compatible:groq", "llama-3.3-70b-versatile")
 	require.NoError(t, err)
 	require.Len(t, added.Providers, 1)
@@ -665,14 +644,10 @@ func TestListProviderModelsUsesAPIAndCachesResult(t *testing.T) {
 	assert.Contains(t, ids, "alpha-2")
 	require.NotNil(t, listing.FetchedAt)
 
-	// cache が SQLite に書かれていること。
 	assert.Contains(t, settingStore.values[llmModelCachePrefix+"openai"], "alpha-1")
 	assert.Equal(t, 1, requestCount)
 }
 
-// F14: composer popover が短時間に何度開閉されても、TTL 内なら ListProviderModels
-// は cache を返して上流 listing API を二度叩かない。Refresh button (force=true)
-// のときだけ upstream へ抜ける。
 func TestListProviderModelsServesCacheWithinTTLAndForceBypassesIt(t *testing.T) {
 	requestCount := 0
 	manager, _, _ := newTestManager()
@@ -686,7 +661,6 @@ func TestListProviderModelsServesCacheWithinTTLAndForceBypassesIt(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	// 初回 (force=false) は cache が無いので API hit する。以降 TTL 内は cache。
 	first, err := manager.ListProviderModels(context.Background(), "openai", false)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceAPI, first.Source)
@@ -699,7 +673,6 @@ func TestListProviderModelsServesCacheWithinTTLAndForceBypassesIt(t *testing.T) 
 	}
 	assert.Equal(t, 1, requestCount, "popover の連続 lazy fetch は cache を返して上流を叩かない")
 
-	// Refresh button (force=true) は cache を bypass して upstream を叩く。
 	refreshed, err := manager.ListProviderModels(context.Background(), "openai", true)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceAPI, refreshed.Source)
@@ -724,8 +697,6 @@ func TestListProviderModelsFallsBackToCacheWhenAPIFails(t *testing.T) {
 	encoded, _ := json.Marshal(cacheEntry)
 	settingStore.values[llmModelCachePrefix+"openai"] = string(encoded)
 
-	// force=true so we exercise the api → cache fallback rather than the
-	// TTL-fresh cache short-circuit.
 	listing, err := manager.ListProviderModels(context.Background(), "openai", true)
 	require.NoError(t, err)
 	assert.Equal(t, llm.ModelSourceCache, listing.Source)
@@ -792,7 +763,6 @@ func TestSetActiveProviderUsesLastUsedModel(t *testing.T) {
 	_, err = manager.SetActiveModel(context.Background(), "openrouter", "openai/gpt-5")
 	require.NoError(t, err)
 
-	// Switch away, then back: provider returns to its last model.
 	_, err = manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai", APIKey: "k",
 	})
@@ -808,15 +778,12 @@ func TestSetActiveProviderUsesLastUsedModel(t *testing.T) {
 }
 
 func TestResolveModelDescriptorPrefersCacheThenBuiltin(t *testing.T) {
-	// F11: gatewayForModel が context budget を計算するために、cache → builtin の
-	// 順で ModelDescriptor を解決する。listing API は呼ばない（fast path）。
 	manager, settingStore, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "anthropic", APIKey: "sk",
 	})
 	require.NoError(t, err)
 
-	// cache 経由: 直接 settings store に書き込んだ cache が優先される。
 	cacheEntry := storedModelCache{
 		Models: []llm.ModelDescriptor{{
 			ID:              "claude-sonnet-4-6",
@@ -834,11 +801,9 @@ func TestResolveModelDescriptorPrefersCacheThenBuiltin(t *testing.T) {
 	assert.Equal(t, 123_456, descriptor.ContextWindow)
 	assert.Equal(t, "Cached Sonnet", descriptor.DisplayName)
 
-	// builtin fallback: cache に無い model id は BuiltinModels から拾われる。
 	descriptor = manager.resolveModelDescriptor(context.Background(), "anthropic", "claude-haiku-4-5-20251001")
 	assert.Equal(t, 200_000, descriptor.ContextWindow)
 
-	// 完全に未知: 空 descriptor が返り、後段の EstimateBudget が fallback に落ちる。
 	descriptor = manager.resolveModelDescriptor(context.Background(), "anthropic", "totally-unknown-id")
 	assert.Equal(t, 0, descriptor.ContextWindow)
 	assert.Equal(t, "totally-unknown-id", descriptor.ID)
@@ -856,10 +821,8 @@ func TestEnvVarNameFor(t *testing.T) {
 	assert.Equal(t, "GLINT_ANTHROPIC_API_KEY", envVarNameFor("anthropic"))
 	assert.Equal(t, "GLINT_GOOGLE_API_KEY", envVarNameFor("google"))
 	assert.Equal(t, "GLINT_OLLAMA_API_KEY", envVarNameFor("ollama"))
-	// openai_compatible:<slug> normalizes the slug to uppercase + underscores.
 	assert.Equal(t, "GLINT_OPENAI_COMPATIBLE_GROQ_API_KEY", envVarNameFor("openai_compatible:groq"))
 	assert.Equal(t, "GLINT_OPENAI_COMPATIBLE_MY_TENANT_API_KEY", envVarNameFor("openai_compatible:my-tenant"))
-	// Template id without a slug must not produce a usable env var name.
 	assert.Equal(t, "", envVarNameFor("openai_compatible"))
 	assert.Equal(t, "", envVarNameFor(""))
 }
@@ -892,7 +855,6 @@ func TestResolveAPIKeyFallsBackToKeyringWhenEnvUnset(t *testing.T) {
 }
 
 func TestResolveAPIKeyIgnoresBlankEnvValues(t *testing.T) {
-	// A blank env var must not silently win over a real keyring entry.
 	manager, _, secretStore := newTestManager()
 	secretStore.values[secretKey(credentialService, apiKeyAccount("openai"))] = "keyring-value"
 	manager.lookupEnv = func(name string) (string, bool) {
@@ -948,9 +910,6 @@ func TestGatewayPrefersEnvKeyOverKeyring(t *testing.T) {
 		return "", false
 	}
 
-	// TestProviderConnection drives Gateway -> chat request through openai
-	// adapter, so the wire-level Authorization header reflects whichever key
-	// the manager handed to the gateway.
 	result, err := manager.TestProviderConnection(context.Background(), "openai_compatible:test")
 	require.NoError(t, err)
 	assert.True(t, result.OK, "expected env key to satisfy the upstream: %s", result.Error)
@@ -964,7 +923,6 @@ func TestProviderSettingsSurfacesCredentialSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Without an env var the source is keyring.
 	manager.lookupEnv = func(string) (string, bool) { return "", false }
 	config, err := manager.GetLLMConfig(context.Background())
 	require.NoError(t, err)
@@ -972,8 +930,6 @@ func TestProviderSettingsSurfacesCredentialSource(t *testing.T) {
 	assert.Equal(t, CredentialSourceKeyring, config.Providers[0].CredentialSource)
 	assert.True(t, config.Providers[0].HasAPIKey)
 
-	// With an env var override the source switches to env, and the API key
-	// itself is never returned over the Wails boundary (only the source flag).
 	manager.lookupEnv = func(name string) (string, bool) {
 		if name == "GLINT_OPENAI_API_KEY" {
 			return "env-only-secret", true
@@ -992,9 +948,6 @@ func TestProviderSettingsSurfacesCredentialSource(t *testing.T) {
 }
 
 func TestEnvVarMakesUnconfiguredProviderConfigured(t *testing.T) {
-	// A provider with no keyring entry still becomes configured when the env
-	// var supplies the credential. This is the dev / CI scenario the design
-	// optimizes for.
 	manager, _, _ := newTestManager()
 	_, err := manager.UpsertProviderSettings(context.Background(), UpsertProviderRequest{
 		ProviderID: "openai",

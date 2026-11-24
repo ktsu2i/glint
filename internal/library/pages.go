@@ -30,9 +30,6 @@ var (
 	ErrInvalidBookSearchQuery = errors.New("invalid book search query")
 )
 
-// BookPage is the locally persisted text representation of a PDF page.
-// Width and Height use PDF points at scale 1 and are retained for later
-// location-aware chunking without making search depend on the rendered size.
 type BookPage struct {
 	PageNumber int
 	Text       string
@@ -46,8 +43,6 @@ type BookPageSearchResult struct {
 	MatchCount int
 }
 
-// BookLibrarySearchHit groups search matches for one book so the UI can show
-// per-book context (cover, title) above its top pages instead of one flat list.
 type BookLibrarySearchHit struct {
 	BookID       string
 	TotalMatches int
@@ -66,9 +61,6 @@ type bookPageRecord struct {
 
 func (bookPageRecord) TableName() string { return "book_pages" }
 
-// SaveBookPages upserts one sequential extraction batch and returns the total
-// number of pages currently persisted for the book. Keeping the operation
-// batched lets the reader remain usable while a large PDF is indexed.
 func (store *Store) SaveBookPages(
 	ctx context.Context,
 	bookID string,
@@ -135,10 +127,6 @@ func (store *Store) BookPageCount(ctx context.Context, bookID string) (int, erro
 	return int(count), nil
 }
 
-// SearchBookPages performs a bounded, case-insensitive lexical search over one
-// book. SQL narrows candidates by every term; Go then ranks phrase frequency
-// and builds Unicode-safe excerpts. Substring matching keeps Japanese queries
-// useful before a language-specific tokenizer is introduced.
 func (store *Store) SearchBookPages(
 	ctx context.Context,
 	bookID, query string,
@@ -184,10 +172,6 @@ func (store *Store) SearchBookPages(
 	return results, nil
 }
 
-// SearchLibraryPages runs the same lexical match as SearchBookPages but across
-// every imported book. Results are grouped per book so the UI can keep the
-// "which book did this come from" context, then books are ordered by overall
-// match strength so the most relevant book surfaces first.
 func (store *Store) SearchLibraryPages(
 	ctx context.Context,
 	query string,

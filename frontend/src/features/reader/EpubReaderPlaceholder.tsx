@@ -6,10 +6,6 @@ type EpubReaderPlaceholderProps = {
   book: BookFile;
 };
 
-// EpubReaderPlaceholder fills the reader workspace until the foliate-js based
-// EpubReader lands in Phase E3. It keeps the rest of the workspace (toolbar,
-// chat sidebar, library navigation) usable so an EPUB import is not a dead
-// end even before the real renderer ships.
 export function EpubReaderPlaceholder({ book }: EpubReaderPlaceholderProps) {
   const { t } = useTranslation();
   const spineCount = book.spineItems?.length ?? 0;

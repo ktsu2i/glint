@@ -382,9 +382,7 @@ export function PdfReader({
       let nodes: OutlineNode[] = [];
       try {
         nodes = await loadPdfOutline(pdfDocument);
-      } catch {
-        // outline の読み込み失敗時は空の目次として扱う。
-      }
+      } catch {}
       if (active) {
         setOutline(nodes);
         setOutlineLoaded(true);
@@ -493,7 +491,6 @@ export function PdfReader({
           : Math.min(maxScale, Math.max(minScale, rawScale || 1));
 
       const outputScale = window.devicePixelRatio || 1;
-      // 各 page を offscreen canvas に描画し、終わってから表示用 canvas へまとめて転写する。
       const renderTargets = pages.map((page) => {
         const viewport = page.getViewport({ scale });
         const canvas = globalThis.document.createElement("canvas");
@@ -528,8 +525,6 @@ export function PdfReader({
         return;
       }
 
-      // Keep the current spread visible while both pages render. Committing both
-      // buffers without yielding prevents the right page from flashing behind the left.
       for (const { canvas, context, source } of visibleTargets) {
         canvas.width = source.canvas.width;
         canvas.height = source.canvas.height;
