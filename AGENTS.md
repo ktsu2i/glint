@@ -53,19 +53,79 @@ frontend/src/shared        Wails binding のラッパー、i18n、共通 compone
 frontend/wailsjs           Wails が生成する binding（手で編集しない）
 ```
 
-### 責務の分け方
-
-package は機能単位で分け、Wails との境界だけを `internal/app` に置きます。
-
-- `internal/app`（handler 相当）: frontend に公開する API。dialog を開き、エラーを利用者の言語に訳し、DTO（json tag 付き）に変換し、asset server に URL を登録する。処理そのものは機能 package に任せる。Wails の `runtime` を import してよいのはこの package だけです。
-- 機能 package（`internal/books`、`internal/settings`、将来の repo index / mapping）: usecase と domain。Wails を知らず、`context.Context` と path などの値を引数で受け取り、domain の型と sentinel error を返す。UI の文言は持たない。
-- `internal/library`（repo 相当）: SQLite の store。
-- `internal/assetserver`、`internal/update`: platform adapter。
-- interface は使う側に、test の fake などで必要になったときだけ定義する。
-- bind した struct の exported method はすべて frontend に公開されるため、公開しない処理は unexported にする（起動時の context は `app.Startup` で渡す）。
-- 時間のかかる処理は `context` で cancel できるようにし、進捗は Wails の events で frontend に push する。
-
 PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。
+
+## アーキテクチャ
+
+Go の backend は機能単位の package で縦に分け、Wails との境界だけを `internal/app` に置きます。Web の layered architecture に当てはめると、`internal/app` が handler、機能 package が usecase と model、`internal/library` が repository に当たります。
+
+### 依存の向き
+
+```text
+main.go ─→ internal/app ─→ 機能 package（books、settings、将来の repoindex / mapping）─→ internal/library
+                │                                                                          └→ internal/sqlite
+                └→ internal/assetserver（platform adapter）
+```
+
+- 逆向きの import は禁止です。機能 package から `internal/app` を、`internal/library` から機能 package を import しないでください。
+- 機能 package 同士の依存は最小限にし、循環させないでください。
+- `github.com/wailsapp/wails/v2/pkg/runtime` を import してよいのは `internal/app` だけです。`main.go` は `wails.Run` と `options` だけを使います。
+
+### `internal/app`（Wails の bind 層）
+
+frontend に公開する API です。bind した struct の exported method は、すべて TypeScript の binding として公開されます。
+
+- **ここで行うこと:** native dialog（ファイル選択、確認）、エラーをユーザーの言語に訳すこと、DTO への変換、asset server への URL 登録、Wails の events の送信。
+- **ここで行わないこと:** 業務ロジック、SQL、ファイルの解析。処理は機能 package の usecase を呼んで任せてください。
+- 返り値は `internal/app` に定義した DTO（json tag 付き）にします。domain の型（`library.Book` など）を直接返さないでください。
+- frontend に公開しない method は unexported にします。Wails の context は `app.Startup` で渡し、`startup` などの exported method を bind 対象の struct に生やさないでください。
+- dialog を開く method は、起動前に呼ばれたら `errNotReady` を返します。
+- エラーの翻訳は `errors.Is` で sentinel error を判定し、英語と日本語の両方を書きます（`localizer`）。翻訳しないエラーはそのまま返します。
+- frontend から受け取った値は信用せず、usecase 側で検証します。data URL のような転送用の形式は、`internal/app` で decode してから usecase に渡します。
+
+### 機能 package（usecase と domain）
+
+`internal/books`、`internal/settings`、将来の repo index や mapping が当たります。
+
+- Wails、`internal/app`、`internal/assetserver` に依存しません。
+- method は `ctx context.Context` を第 1 引数に取ります。context を struct に保持しないでください。
+- 入力は path や ID などの値で受け取ります。dialog を開く、ユーザーに確認する、といった UI 操作は `internal/app` で済ませ、結果だけを受け取ります。
+- 返り値は domain の型です。ユーザーが対処できる失敗は、package に定義した sentinel error（`var ErrXxx = errors.New(...)`）で返し、`fmt.Errorf("...: %w", err)` で包んでも `errors.Is` で判定できるようにします。
+- UI に表示する文言（日本語 / 英語）を持ちません。
+
+### `internal/library`（store）
+
+- SQLite への読み書きだけを行います。query は sqlc で生成し、動的な query だけ `database/sql` で手書きします。
+- 入力の形式的な検証（長さ、範囲）は store でも行い、sentinel error を返します。
+
+### interface
+
+- interface は使う側の package に、必要になったときだけ定義します。repository ごとに interface を用意しないでください。
+- 定義するのは、test で fake に差し替えたいもの（native dialog、外部プロセス、時計など）や、実装を切り替える必要があるものに限ります。例: `internal/app` の `dialogs`、`internal/settings` の `SettingStore`。
+- LLM provider、embedding provider、vector store を導入する場合は、retrieval logic から interface 越しに使い、具体的な実装に直接結合しないでください。
+
+### 時間のかかる処理
+
+repo の index のように時間のかかる処理は、次のように作ります。
+
+- usecase は `ctx` を受け取り、cancel されたら途中で止まるようにします。
+- 起動と終了は `main.go` の `OnStartup` / `OnShutdown` から管理し、終了時に止めます。
+- 進捗や完了は `internal/app` から Wails の events で frontend に push します。frontend に polling させないでください。
+
+### 新しい機能を追加するとき
+
+例として repo 接続を追加する場合は、次の順に作ります。
+
+1. `internal/<feature>` に usecase と domain の型、sentinel error を書き、test する。
+2. 永続化が必要なら `migrations/` に migration を追加し、`internal/library/queries` に query を書いて `go tool sqlc generate` する。
+3. `internal/app` に bind する service と DTO を追加し、dialog や翻訳、DTO 変換を書く。`app.Startup` に service を渡す。
+4. `main.go` で組み立て、`Bind` に追加する。
+5. `go tool wails generate module` で `frontend/wailsjs` を再生成し、`frontend/src/shared/api` の wrapper から呼ぶ。
+
+### test の分け方
+
+- 機能 package: usecase を実物の SQLite（`t.TempDir()`）と生成した fixture で test し、domain の型と sentinel error（`assert.ErrorIs`）を確認する。
+- `internal/app`: fake の dialog を使い、DTO への変換、asset URL の配信、エラーの翻訳、dialog のキャンセルや失敗の扱いを確認する。
 
 ## 作業方針
 
