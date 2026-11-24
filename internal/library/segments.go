@@ -10,8 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/kaito/glint/internal/library/librarydb"
 )
 
 const (
@@ -67,18 +66,14 @@ type LibrarySearchHit struct {
 	Segments     []SegmentSearchResult
 }
 
-type bookSegmentRecord struct {
-	ID          int64  `gorm:"column:id;primaryKey;autoIncrement"`
-	BookID      string `gorm:"column:book_id"`
-	Ordinal     int    `gorm:"column:ordinal"`
-	Kind        string `gorm:"column:kind"`
-	Location    string `gorm:"column:location"`
-	HeadingPath string `gorm:"column:heading_path"`
-	Text        string `gorm:"column:text"`
-	UpdatedAt   string `gorm:"column:updated_at"`
+// segmentMatch is a row of the hand-written search query in matchingSegments.
+type segmentMatch struct {
+	BookID      string
+	Ordinal     int
+	Location    string
+	HeadingPath string
+	Text        string
 }
-
-func (bookSegmentRecord) TableName() string { return "book_segments" }
 
 func (store *Store) SaveBookSegments(
 	ctx context.Context,
@@ -93,7 +88,7 @@ func (store *Store) SaveBookSegments(
 	}
 	seen := make(map[int]struct{}, len(segments))
 	timestamp := now.UTC().Format(time.RFC3339Nano)
-	records := make([]bookSegmentRecord, 0, len(segments))
+	params := make([]librarydb.UpsertBookSegmentParams, 0, len(segments))
 	for _, segment := range segments {
 		if !validSegment(segment, total) {
 			return 0, ErrInvalidSegmentBatch
@@ -102,9 +97,9 @@ func (store *Store) SaveBookSegments(
 			return 0, ErrInvalidSegmentBatch
 		}
 		seen[segment.Ordinal] = struct{}{}
-		records = append(records, bookSegmentRecord{
+		params = append(params, librarydb.UpsertBookSegmentParams{
 			BookID:      bookID,
-			Ordinal:     segment.Ordinal,
+			Ordinal:     int64(segment.Ordinal),
 			Kind:        segment.Kind,
 			Location:    segment.Location,
 			HeadingPath: strings.TrimSpace(segment.HeadingPath),
@@ -113,21 +108,19 @@ func (store *Store) SaveBookSegments(
 		})
 	}
 
-	err := store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&bookRecord{}).Where("id = ?", bookID).Updates(map[string]any{
-			"page_count": total,
-			"updated_at": timestamp,
+	err := store.inTx(ctx, func(queries *librarydb.Queries) error {
+		affected, err := queries.UpdateBookPageCount(ctx, librarydb.UpdateBookPageCountParams{
+			PageCount: int64(total),
+			UpdatedAt: timestamp,
+			ID:        bookID,
 		})
-		if err := requireChanged(result, "update indexed book segment count"); err != nil {
+		if err := requireChanged(affected, err, "update indexed book segment count"); err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "book_id"}, {Name: "ordinal"}},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"kind", "location", "heading_path", "text", "updated_at",
-			}),
-		}).Create(&records).Error; err != nil {
-			return fmt.Errorf("save book segments: %w", err)
+		for _, param := range params {
+			if err := queries.UpsertBookSegment(ctx, param); err != nil {
+				return fmt.Errorf("save book segments: %w", err)
+			}
 		}
 		return nil
 	})
@@ -138,21 +131,11 @@ func (store *Store) SaveBookSegments(
 }
 
 func (store *Store) FirstMissingOrdinal(ctx context.Context, bookID string) (int, error) {
-	var next int
-	err := store.db.WithContext(ctx).Raw(`
-        SELECT CASE
-                 WHEN NOT EXISTS (SELECT 1 FROM book_segments WHERE book_id = ? AND ordinal = 1) THEN 1
-                 ELSE (SELECT MIN(s.ordinal) + 1
-                         FROM book_segments s
-                        WHERE s.book_id = ?
-                          AND NOT EXISTS (
-                              SELECT 1 FROM book_segments n
-                               WHERE n.book_id = s.book_id AND n.ordinal = s.ordinal + 1))
-               END`, bookID, bookID).Row().Scan(&next)
+	next, err := store.queries.FirstMissingOrdinal(ctx, bookID)
 	if err != nil {
 		return 0, fmt.Errorf("find first missing segment: %w", err)
 	}
-	return next, nil
+	return int(next), nil
 }
 
 func validSegment(segment BookSegment, total int) bool {
@@ -169,9 +152,8 @@ func validSegment(segment BookSegment, total int) bool {
 }
 
 func (store *Store) BookSegmentCount(ctx context.Context, bookID string) (int, error) {
-	var count int64
-	if err := store.db.WithContext(ctx).Model(&bookSegmentRecord{}).
-		Where("book_id = ?", bookID).Count(&count).Error; err != nil {
+	count, err := store.queries.CountBookSegments(ctx, bookID)
+	if err != nil {
 		return 0, fmt.Errorf("count book segments: %w", err)
 	}
 	return int(count), nil
@@ -245,7 +227,7 @@ func (store *Store) SearchLibrarySegments(
 		return nil, fmt.Errorf("search library segments: %w", err)
 	}
 
-	grouped := make(map[string][]bookSegmentRecord)
+	grouped := make(map[string][]segmentMatch)
 	bookOrder := make([]string, 0)
 	for _, record := range records {
 		if _, seen := grouped[record.BookID]; !seen {
@@ -309,7 +291,8 @@ func (store *Store) SearchLibrarySegments(
 	return results, nil
 }
 
-func (store *Store) matchingSegments(ctx context.Context, bookID string, terms []string, limit int) ([]bookSegmentRecord, error) {
+// matchingSegments stays hand-written because the number of LIKE conditions depends on the query.
+func (store *Store) matchingSegments(ctx context.Context, bookID string, terms []string, limit int) ([]segmentMatch, error) {
 	var query strings.Builder
 	var args []any
 	match := ftsMatchExpression(terms)
@@ -344,11 +327,20 @@ func (store *Store) matchingSegments(ctx context.Context, bookID string, terms [
 		query.WriteString(" LIMIT ?")
 		args = append(args, limit)
 	}
-	var records []bookSegmentRecord
-	if err := store.db.WithContext(ctx).Raw(query.String(), args...).Scan(&records).Error; err != nil {
+	rows, err := store.db.QueryContext(ctx, query.String(), args...)
+	if err != nil {
 		return nil, err
 	}
-	return records, nil
+	defer func() { _ = rows.Close() }()
+	var matches []segmentMatch
+	for rows.Next() {
+		var match segmentMatch
+		if err := rows.Scan(&match.BookID, &match.Ordinal, &match.Location, &match.HeadingPath, &match.Text); err != nil {
+			return nil, err
+		}
+		matches = append(matches, match)
+	}
+	return matches, rows.Err()
 }
 
 const trigramLength = 3
@@ -371,7 +363,7 @@ type rankedSegmentResult struct {
 	score int
 }
 
-func rankSegmentMatches(records []bookSegmentRecord, phrase string, terms []string) []rankedSegmentResult {
+func rankSegmentMatches(records []segmentMatch, phrase string, terms []string) []rankedSegmentResult {
 	ranked := make([]rankedSegmentResult, 0, len(records))
 	for _, record := range records {
 		compact := strings.Join(strings.Fields(record.Text), " ")

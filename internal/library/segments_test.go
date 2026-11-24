@@ -1,16 +1,15 @@
 package library
 
 import (
+	"database/sql"
 	"io/fs"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
 	"time"
 
-	gormsqlite "github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kaito/glint/internal/sqlite"
 	"github.com/kaito/glint/migrations"
@@ -27,9 +26,13 @@ func pageSegment(pageNumber int, text string) BookSegment {
 
 func requireFTSInSync(t *testing.T, store *Store) {
 	t.Helper()
-	require.NoError(t, store.db.Exec(
-		"INSERT INTO book_segments_fts (book_segments_fts, rank) VALUES ('integrity-check', 1)",
-	).Error)
+	execSQL(t, store.db, "INSERT INTO book_segments_fts (book_segments_fts, rank) VALUES ('integrity-check', 1)")
+}
+
+func execSQL(t *testing.T, db *sql.DB, query string) {
+	t.Helper()
+	_, err := db.ExecContext(t.Context(), query)
+	require.NoError(t, err)
 }
 
 func TestFTSIndexFollowsPageInsertsUpdatesAndDeletes(t *testing.T) {
@@ -112,11 +115,9 @@ func TestSearchMatchesJapaneseShortTermsAndCaseInsensitively(t *testing.T) {
 	}
 }
 
-func migrateBefore(t *testing.T, path, firstSkipped string) (*gorm.DB, func()) {
+func migrateBefore(t *testing.T, path, firstSkipped string) (*sql.DB, func()) {
 	t.Helper()
-	db, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
+	db, err := sql.Open("sqlite", path)
 	require.NoError(t, err)
 	before := fstest.MapFS{}
 	names, err := fs.Glob(migrations.FS, "*.sql")
@@ -129,18 +130,18 @@ func migrateBefore(t *testing.T, path, firstSkipped string) (*gorm.DB, func()) {
 		require.NoError(t, err)
 		before[name] = &fstest.MapFile{Data: body}
 	}
-	require.NoError(t, (&sqlite.Migrator{DB: sqlDB, FS: before}).Up(t.Context()))
-	return db, func() { require.NoError(t, sqlDB.Close()) }
+	require.NoError(t, (&sqlite.Migrator{DB: db, FS: before}).Up(t.Context()))
+	return db, func() { require.NoError(t, db.Close()) }
 }
 
 func TestFTSMigrationIndexesExistingPages(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite3")
 	db, closeDB := migrateBefore(t, path, "0009")
-	require.NoError(t, db.Exec(`INSERT INTO books (id, title, file_name, source_path, file_hash, size_bytes, imported_at, updated_at)
-        VALUES ('book-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 10, 'now', 'now')`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO book_pages (id, book_id, page_number, text, updated_at)
+	execSQL(t, db, `INSERT INTO books (id, title, file_name, source_path, file_hash, size_bytes, imported_at, updated_at)
+        VALUES ('book-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 10, 'now', 'now')`)
+	execSQL(t, db, `INSERT INTO book_pages (id, book_id, page_number, text, updated_at)
         VALUES ('book-1:1', 'book-1', 1, 'Context builder trims prompts', 'now'),
-               ('book-1:2', 'book-1', 2, 'Unrelated page', 'now')`).Error)
+               ('book-1:2', 'book-1', 2, 'Unrelated page', 'now')`)
 	closeDB()
 
 	store, err := Open(path)
@@ -162,13 +163,13 @@ func TestFTSMigrationIndexesExistingPages(t *testing.T) {
 func TestSegmentMigrationMapsPDFPagesAndEPUBSpineItems(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite3")
 	db, closeDB := migrateBefore(t, path, "0010")
-	require.NoError(t, db.Exec(`INSERT INTO books (id, title, file_name, source_path, file_hash, format, size_bytes, imported_at, updated_at)
+	execSQL(t, db, `INSERT INTO books (id, title, file_name, source_path, file_hash, format, size_bytes, imported_at, updated_at)
         VALUES ('pdf-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 'pdf', 10, 'now', 'now'),
-               ('epub-1', 'Novel', 'Novel.epub', '/tmp/Novel.epub', 'hash-2', 'epub', 10, 'now', 'now')`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO book_pages (id, book_id, page_number, text, updated_at)
+               ('epub-1', 'Novel', 'Novel.epub', '/tmp/Novel.epub', 'hash-2', 'epub', 10, 'now', 'now')`)
+	execSQL(t, db, `INSERT INTO book_pages (id, book_id, page_number, text, updated_at)
         VALUES ('pdf-1:4', 'pdf-1', 4, 'Channels on page four', 'now'),
                ('epub-1:1', 'epub-1', 1, 'Opening chapter about channels', 'now'),
-               ('epub-1:2', 'epub-1', 2, 'Second chapter', 'now')`).Error)
+               ('epub-1:2', 'epub-1', 2, 'Second chapter', 'now')`)
 	closeDB()
 
 	store, err := Open(path)
@@ -176,16 +177,21 @@ func TestSegmentMigrationMapsPDFPagesAndEPUBSpineItems(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	requireFTSInSync(t, store)
 
-	var records []bookSegmentRecord
-	require.NoError(t, store.db.Order("book_id, ordinal").Find(&records).Error)
 	type row struct {
 		BookID, Kind, Location string
 		Ordinal                int
 	}
-	got := make([]row, len(records))
-	for i, record := range records {
-		got[i] = row{BookID: record.BookID, Kind: record.Kind, Location: record.Location, Ordinal: record.Ordinal}
+	rows, err := store.db.QueryContext(t.Context(),
+		"SELECT book_id, kind, location, ordinal FROM book_segments ORDER BY book_id, ordinal")
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	var got []row
+	for rows.Next() {
+		var r row
+		require.NoError(t, rows.Scan(&r.BookID, &r.Kind, &r.Location, &r.Ordinal))
+		got = append(got, r)
 	}
+	require.NoError(t, rows.Err())
 	assert.Equal(t, []row{
 		{BookID: "epub-1", Kind: SegmentKindSection, Location: "spine:0", Ordinal: 1},
 		{BookID: "epub-1", Kind: SegmentKindSection, Location: "spine:1", Ordinal: 2},

@@ -37,17 +37,19 @@ Glint は技術書を読むための macOS desktop app です。最終的には�
 ## リポジトリ構成
 
 ```text
-main.go                 Wails app の起動、service の bind
-internal/books          Wails に bind する books.Service（import、open、relink、検索、表紙、しおり）
-internal/library        SQLite store（books、読書位置、page index、しおり、app settings）
-internal/settings       外観と言語の設定
-internal/assetserver    ローカルの本・表紙を token 付き URL で配信する
-internal/sqlite         embed した SQL migration の適用
-internal/update         Sparkle（`sparkle` build tag のときだけ有効）
-migrations/             連番の SQL migration
-frontend/src/features   library / reader / settings の UI
-frontend/src/shared     Wails binding のラッパー、i18n、共通 component
-frontend/wailsjs        Wails が生成する binding（手で編集しない）
+main.go                    Wails app の起動、service の bind
+internal/books             Wails に bind する books.Service（import、open、relink、検索、表紙、しおり）
+internal/library           SQLite store（books、読書位置、page index、しおり、app settings）
+internal/library/queries   sqlc の query（`*.sql`）
+internal/library/librarydb sqlc が生成する Go コード（手で編集しない）
+internal/settings          外観と言語の設定
+internal/assetserver       ローカルの本・表紙を token 付き URL で配信する
+internal/sqlite            embed した SQL migration の適用
+internal/update            Sparkle（`sparkle` build tag のときだけ有効）
+migrations/                連番の SQL migration
+frontend/src/features      library / reader / settings の UI
+frontend/src/shared        Wails binding のラッパー、i18n、共通 component
+frontend/wailsjs           Wails が生成する binding（手で編集しない）
 ```
 
 PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。
@@ -75,7 +77,8 @@ PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wail
 - Frontend: React 19 + TypeScript + Vite、pnpm（`npm` は意図的に失敗する）
 - Backend: Go
 - PDF 表示 / 抽出: PDF.js
-- Store: SQLite（`glebarez/sqlite` = pure Go の modernc SQLite、GORM）。schema 変更は `migrations/` に新しい連番ファイルを追加する。
+- Store: SQLite（`glebarez/go-sqlite` = pure Go の modernc SQLite、`database/sql`）。query は sqlc で生成する（`sqlc.yaml`、`go tool sqlc`）。schema 変更は `migrations/` に新しい連番ファイルを追加する。sqlc で表せない動的な query（条件の数が変わる検索など）だけ `database/sql` で手書きする。
+- sqlc の SQLite parser の制約: FTS5 の `MATCH` は table 名ではなく列名に対して書き（`book_segments_fts.text MATCH ?`）、並び順は `bm25()` ではなく `rank` 列を使う。入れ子の subquery ではすべての table に alias を付ける。
 - 検索: 現在は SQLite の LIKE。FTS5（trigram tokenizer）が使えるので、全文検索を強化する場合も別の検索エンジンは入れず SQLite で行う。
 - Code parsing（repo 接続時）: Tree-sitter
 
@@ -85,6 +88,8 @@ PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wail
 go test ./...
 golangci-lint run ./...
 golangci-lint fmt ./...
+go tool sqlc generate   # queries / migrations を変更したとき
+go tool sqlc diff       # 生成コードが最新か確認
 
 cd frontend
 pnpm test

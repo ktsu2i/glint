@@ -7,8 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/kaito/glint/internal/library/librarydb"
 )
 
 var ErrInvalidBookmark = errors.New("invalid bookmark")
@@ -17,14 +16,6 @@ type BookBookmark struct {
 	PageNumber int
 	CreatedAt  string
 }
-
-type bookBookmarkRecord struct {
-	BookID     string `gorm:"column:book_id;primaryKey"`
-	PageNumber int    `gorm:"column:page_number;primaryKey"`
-	CreatedAt  string `gorm:"column:created_at"`
-}
-
-func (bookBookmarkRecord) TableName() string { return "book_bookmarks" }
 
 func (store *Store) SaveBookmark(
 	ctx context.Context,
@@ -37,31 +28,32 @@ func (store *Store) SaveBookmark(
 		return BookBookmark{}, ErrInvalidBookmark
 	}
 	timestamp := now.UTC().Format(time.RFC3339Nano)
-	record := bookBookmarkRecord{
-		BookID:     bookID,
-		PageNumber: pageNumber,
-		CreatedAt:  timestamp,
-	}
-	err := store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&bookRecord{}).
-			Where("id = ?", bookID).
-			Updates(map[string]any{"page_count": pageCount, "updated_at": timestamp})
-		if err := requireChanged(result, "update book page count"); err != nil {
+	err := store.inTx(ctx, func(queries *librarydb.Queries) error {
+		affected, err := queries.UpdateBookPageCount(ctx, librarydb.UpdateBookPageCountParams{
+			PageCount: int64(pageCount),
+			UpdatedAt: timestamp,
+			ID:        bookID,
+		})
+		if err := requireChanged(affected, err, "update book page count"); err != nil {
 			return err
 		}
-		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&record).Error
+		return queries.InsertBookmark(ctx, librarydb.InsertBookmarkParams{
+			BookID:     bookID,
+			PageNumber: int64(pageNumber),
+			CreatedAt:  timestamp,
+		})
 	})
 	if err != nil {
 		return BookBookmark{}, fmt.Errorf("save bookmark: %w", err)
 	}
-	var saved BookBookmark
-	if err := store.db.WithContext(ctx).Model(&bookBookmarkRecord{}).
-		Select("page_number, created_at").
-		Where("book_id = ? AND page_number = ?", bookID, pageNumber).
-		Take(&saved).Error; err != nil {
+	saved, err := store.queries.GetBookmark(ctx, librarydb.GetBookmarkParams{
+		BookID:     bookID,
+		PageNumber: int64(pageNumber),
+	})
+	if err != nil {
 		return BookBookmark{}, fmt.Errorf("read saved bookmark: %w", err)
 	}
-	return saved, nil
+	return BookBookmark{PageNumber: int(saved.PageNumber), CreatedAt: saved.CreatedAt}, nil
 }
 
 func (store *Store) ListBookmarks(ctx context.Context, bookID string) ([]BookBookmark, error) {
@@ -72,13 +64,13 @@ func (store *Store) ListBookmarks(ctx context.Context, bookID string) ([]BookBoo
 	if _, err := store.Get(ctx, bookID); err != nil {
 		return nil, err
 	}
-	var bookmarks []BookBookmark
-	if err := store.db.WithContext(ctx).Model(&bookBookmarkRecord{}).
-		Select("page_number, created_at").
-		Where("book_id = ?", bookID).
-		Order("page_number ASC").
-		Scan(&bookmarks).Error; err != nil {
+	rows, err := store.queries.ListBookmarks(ctx, bookID)
+	if err != nil {
 		return nil, fmt.Errorf("list bookmarks: %w", err)
+	}
+	bookmarks := make([]BookBookmark, len(rows))
+	for i, row := range rows {
+		bookmarks[i] = BookBookmark{PageNumber: int(row.PageNumber), CreatedAt: row.CreatedAt}
 	}
 	return bookmarks, nil
 }
@@ -91,9 +83,10 @@ func (store *Store) DeleteBookmark(ctx context.Context, bookID string, pageNumbe
 	if _, err := store.Get(ctx, bookID); err != nil {
 		return err
 	}
-	if err := store.db.WithContext(ctx).
-		Where("book_id = ? AND page_number = ?", bookID, pageNumber).
-		Delete(&bookBookmarkRecord{}).Error; err != nil {
+	if err := store.queries.DeleteBookmark(ctx, librarydb.DeleteBookmarkParams{
+		BookID:     bookID,
+		PageNumber: int64(pageNumber),
+	}); err != nil {
 		return fmt.Errorf("delete bookmark: %w", err)
 	}
 	return nil

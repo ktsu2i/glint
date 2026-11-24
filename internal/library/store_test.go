@@ -1,6 +1,7 @@
 package library
 
 import (
+	"database/sql"
 	"io/fs"
 	"path/filepath"
 	"strconv"
@@ -8,10 +9,8 @@ import (
 	"testing"
 	"time"
 
-	gormsqlite "github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/kaito/glint/migrations"
 )
@@ -36,7 +35,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	store, err := Open(path)
 	require.NoError(t, err)
 	var version int
-	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version) FROM schema_migrations").Scan(&version))
 	assert.Equal(t, latestMigrationVersion(t), version)
 
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Go Guide.pdf", "hash-1", "pdf", 120, now)
@@ -84,9 +83,9 @@ func TestStorePersistsNonSecretAppSettings(t *testing.T) {
 
 func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite3")
-	db, err := gorm.Open(gormsqlite.Open(path), &gorm.Config{})
+	db, err := sql.Open("sqlite", path)
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(`CREATE TABLE books (
+	execSQL(t, db, `CREATE TABLE books (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         file_name TEXT NOT NULL,
@@ -99,29 +98,27 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
         imported_at TEXT NOT NULL,
         last_opened_at TEXT NOT NULL DEFAULT '',
         updated_at TEXT NOT NULL
-    )`).Error)
-	require.NoError(t, db.Exec(`CREATE TABLE book_reading_states (
+    )`)
+	execSQL(t, db, `CREATE TABLE book_reading_states (
         book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
         page_number INTEGER NOT NULL DEFAULT 1,
         updated_at TEXT NOT NULL
-    )`).Error)
-	require.NoError(t, db.Exec(`CREATE TABLE schema_migrations (
+    )`)
+	execSQL(t, db, `CREATE TABLE schema_migrations (
         version INTEGER NOT NULL PRIMARY KEY,
         dirty BOOLEAN NOT NULL
-    )`).Error)
-	require.NoError(t, db.Exec("INSERT INTO schema_migrations (version, dirty) VALUES (1, 0)").Error)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	require.NoError(t, sqlDB.Close())
+    )`)
+	execSQL(t, db, "INSERT INTO schema_migrations (version, dirty) VALUES (1, 0)")
+	require.NoError(t, db.Close())
 
 	store, err := Open(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 	var version int
-	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version) FROM schema_migrations").Scan(&version))
 	assert.Equal(t, latestMigrationVersion(t), version)
 	var settingsTable string
-	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Scan(&settingsTable))
 	assert.Equal(t, "app_settings", settingsTable)
 }
 
@@ -161,9 +158,9 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 	assert.ErrorIs(t, store.Remove(t.Context(), book.ID), ErrBookNotFound)
 
 	var remaining int
-	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_reading_states WHERE book_id = ?", book.ID).Row().Scan(&remaining))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM book_reading_states WHERE book_id = ?", book.ID).Scan(&remaining))
 	assert.Equal(t, 0, remaining)
-	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_segments WHERE book_id = ?", book.ID).Row().Scan(&remaining))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM book_segments WHERE book_id = ?", book.ID).Scan(&remaining))
 	assert.Equal(t, 0, remaining)
 }
 
@@ -402,13 +399,13 @@ func TestStoreReopeningAppliesFormatMigrationIdempotently(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	var version int
-	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version) FROM schema_migrations").Scan(&version))
 	assert.Equal(t, latestMigrationVersion(t), version)
 
 	var defaultValue string
-	require.NoError(t, store.db.Raw(
+	require.NoError(t, store.db.QueryRowContext(t.Context(),
 		"SELECT dflt_value FROM pragma_table_info('books') WHERE name = 'format'",
-	).Row().Scan(&defaultValue))
+	).Scan(&defaultValue))
 	assert.Contains(t, defaultValue, "pdf", "format column must default to pdf so legacy rows remain readable")
 }
 
