@@ -22,15 +22,34 @@ type SaveLanguageSettingsRequest struct {
 	Language string `json:"language"`
 }
 
+// Settings changes are pushed to every window, so the main window follows
+// what the settings window saves.
+const (
+	appearanceChangedEvent = "settings:appearance-changed"
+	languageChangedEvent   = "settings:language-changed"
+)
+
+// eventEmitter pushes events to the frontend. Tests replace it with a fake.
+type eventEmitter interface {
+	Emit(name string, data ...any) bool
+}
+
 // SettingsService is bound to the frontend for the appearance and language settings.
 type SettingsService struct {
 	base
 	settings *settings.Manager
 	text     localizer
+	events   eventEmitter
 }
 
-func NewSettingsService(manager *settings.Manager) *SettingsService {
-	return &SettingsService{settings: manager, text: localizer{settings: manager}}
+func NewSettingsService(manager *settings.Manager, events eventEmitter) *SettingsService {
+	return &SettingsService{settings: manager, text: localizer{settings: manager}, events: events}
+}
+
+func (s *SettingsService) emit(name string, data any) {
+	if s.events != nil {
+		s.events.Emit(name, data)
+	}
 }
 
 func (s *SettingsService) GetAppearanceSettings() (AppearanceSettings, error) {
@@ -60,7 +79,9 @@ func (s *SettingsService) SaveAppearanceSettings(request SaveAppearanceSettingsR
 	if err != nil {
 		return AppearanceSettings{}, err
 	}
-	return AppearanceSettings{Theme: string(saved.Theme)}, nil
+	result := AppearanceSettings{Theme: string(saved.Theme)}
+	s.emit(appearanceChangedEvent, result)
+	return result, nil
 }
 
 func (s *SettingsService) GetLanguageSettings() (LanguageSettings, error) {
@@ -90,5 +111,7 @@ func (s *SettingsService) SaveLanguageSettings(request SaveLanguageSettingsReque
 	if err != nil {
 		return LanguageSettings{}, err
 	}
-	return LanguageSettings{Language: string(saved.Language)}, nil
+	result := LanguageSettings{Language: string(saved.Language)}
+	s.emit(languageChangedEvent, result)
+	return result, nil
 }

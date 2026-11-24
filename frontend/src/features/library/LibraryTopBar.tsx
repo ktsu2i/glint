@@ -1,10 +1,5 @@
 import type { ReactElement } from "react";
-import {
-  BookOpenTextIcon,
-  GearSixIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-} from "@phosphor-icons/react";
+import { BookOpenTextIcon, MagnifyingGlassIcon, PlusIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 
 type LibraryTopBarProps = {
@@ -12,11 +7,9 @@ type LibraryTopBarProps = {
   resumeTitle: string | null;
   opening: boolean;
   search: ReactElement | null;
-  settingsActive: boolean;
   onImport: () => void;
   onResume: () => void;
   onSearch: () => void;
-  onSettings: () => void;
 };
 
 // LibraryTopBar is the floating glass bar of the library. While searching,
@@ -26,11 +19,9 @@ export function LibraryTopBar({
   resumeTitle,
   opening,
   search,
-  settingsActive,
   onImport,
   onResume,
   onSearch,
-  onSettings,
 }: LibraryTopBarProps) {
   const { t } = useTranslation();
   return (
@@ -57,15 +48,6 @@ export function LibraryTopBar({
           {search}
         </>
       )}
-      <button
-        type="button"
-        className="glass-button"
-        aria-label={t("app.settings")}
-        aria-pressed={settingsActive}
-        onClick={onSettings}
-      >
-        <GearSixIcon size={17} aria-hidden="true" />
-      </button>
       {resumeTitle !== null && (
         <button
           type="button"

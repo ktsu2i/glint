@@ -10,13 +10,13 @@ import {
 import { createInstance, type i18n } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { getLanguageSettings, saveLanguageSettings, type LanguagePreference } from "../api/backend";
+import { onLanguageChanged } from "../api/events";
 
 export const en = {
   "app.technicalReader": "Technical reader",
   "app.library": "Library",
   "app.read": "Back to reading",
   "app.resumeReading": "Return to {title}",
-  "app.settings": "Settings",
   "app.addPdf": "Add PDF",
   "app.choosingPdf": "Choosing…",
   "app.pageLabel": "Page {page}",
@@ -74,14 +74,8 @@ export const en = {
   "librarySearch.hitCount": "Matches in {count} books",
   "librarySearch.totalMatches": "{count} matches",
   "librarySearch.goTo": "Open {title} at page {page}",
-  "settings.section": "Application settings",
-  "settings.title": "Settings",
-  "settings.description": "Manage the reading interface and display language.",
   "settings.items": "Settings sections",
-  "settings.application": "Application",
-  "settings.readingEnvironment": "Reading environment",
   "settings.appearance": "Appearance",
-  "settings.theme": "Theme",
   "settings.appearanceDescription":
     "Change the brightness of Library and Reader while preserving the PDF page itself.",
   "settings.themeOptions": "Display theme",
@@ -91,7 +85,6 @@ export const en = {
   "settings.themeDarkDescription": "A low-light study",
   "settings.themeSystem": "System",
   "settings.themeSystemDescription": "Follow the OS setting",
-  "settings.languageKicker": "Interface language",
   "settings.language": "Language",
   "settings.languageDescription": "Choose the language used throughout Glint.",
   "settings.languageOptions": "Interface language",
@@ -100,7 +93,6 @@ export const en = {
   "settings.japanese": "Japanese",
   "settings.japaneseDescription": "Use Glint in Japanese",
   "settings.languageSaving": "Saving language…",
-  "settings.back": "Back",
   "reader.emptyKicker": "Reading desk",
   "reader.aria": "PDF reader",
   "reader.epubPlaceholderAria": "EPUB reader placeholder",
@@ -180,7 +172,6 @@ export const ja: Record<keyof typeof en, string> = {
   "app.library": "本棚",
   "app.read": "読書に戻る",
   "app.resumeReading": "{title}の読書に戻る",
-  "app.settings": "設定",
   "app.addPdf": "PDFを追加",
   "app.choosingPdf": "選択しています…",
   "app.pageLabel": "{page}ページ",
@@ -237,14 +228,8 @@ export const ja: Record<keyof typeof en, string> = {
   "librarySearch.hitCount": "{count}冊で見つかりました",
   "librarySearch.totalMatches": "{count}件",
   "librarySearch.goTo": "{title}の{page}ページを開く",
-  "settings.section": "Application settings",
-  "settings.title": "設定",
-  "settings.description": "画面の表示と表示言語を管理します。",
   "settings.items": "設定項目",
-  "settings.application": "Application",
-  "settings.readingEnvironment": "Reading environment",
   "settings.appearance": "表示",
-  "settings.theme": "Theme",
   "settings.appearanceDescription":
     "PDFの紙面は保ったまま、Library・Readerの明るさを切り替えます。",
   "settings.themeOptions": "表示テーマ",
@@ -254,7 +239,6 @@ export const ja: Record<keyof typeof en, string> = {
   "settings.themeDarkDescription": "光を抑えた書斎",
   "settings.themeSystem": "システム",
   "settings.themeSystemDescription": "OSの設定に合わせる",
-  "settings.languageKicker": "Interface language",
   "settings.language": "言語",
   "settings.languageDescription": "Glint全体で使用する言語を選択します。",
   "settings.languageOptions": "表示言語",
@@ -263,7 +247,6 @@ export const ja: Record<keyof typeof en, string> = {
   "settings.japanese": "日本語",
   "settings.japaneseDescription": "Glintを日本語で表示",
   "settings.languageSaving": "言語を保存しています…",
-  "settings.back": "戻る",
   "reader.emptyKicker": "Reading desk",
   "reader.aria": "PDFリーダー",
   "reader.epubPlaceholderAria": "EPUBリーダーのプレースホルダー",
@@ -419,6 +402,16 @@ export function I18nProvider({
     return () => {
       active = false;
     };
+  }, [i18n, initialLanguage]);
+
+  // Follow a language saved in another window, such as the settings window.
+  useEffect(() => {
+    if (initialLanguage !== undefined) return;
+    return onLanguageChanged((next) => {
+      void i18n.changeLanguage(next);
+      setLanguage(next);
+      setError("");
+    });
   }, [i18n, initialLanguage]);
 
   const changeLanguage = useCallback(

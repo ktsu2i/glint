@@ -12,8 +12,8 @@ import {
 } from "./features/library/LibrarySearch";
 import { EpubReaderPlaceholder } from "./features/reader/EpubReaderPlaceholder";
 import { PdfReader } from "./features/reader/PdfReader";
-import { SettingsPage } from "./features/settings/SettingsPage";
 import { syncDocumentTheme } from "./features/settings/theme";
+import { onAppearanceChanged } from "./shared/api/events";
 import { I18nProvider } from "./shared/i18n/i18n";
 import {
   getAppearanceSettings,
@@ -26,7 +26,6 @@ import {
   removeBook,
   renameBook,
   saveBookCover,
-  saveAppearanceSettings,
   saveReadingPosition,
   searchLibrary,
   type BookFile,
@@ -37,10 +36,7 @@ import {
 
 function AppContent() {
   const { t } = useTranslation();
-  const [view, setView] = useState<"library" | "search" | "reader" | "settings">("library");
-  const [settingsReturnView, setSettingsReturnView] = useState<"library" | "search" | "reader">(
-    "library",
-  );
+  const [view, setView] = useState<"library" | "search" | "reader">("library");
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState("");
@@ -49,8 +45,6 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState(0);
   const [opening, setOpening] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>("system");
-  const [themeLoading, setThemeLoading] = useState(true);
-  const [themeError, setThemeError] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LibrarySearchHit[]>([]);
@@ -91,14 +85,9 @@ function AppContent() {
     const load = async () => {
       try {
         const loaded = await getAppearanceSettings();
-        if (!active) return;
-        setTheme(loaded.theme);
-        setThemeError("");
+        if (active) setTheme(loaded.theme);
       } catch (reason) {
-        if (!active) return;
-        setThemeError(reason instanceof Error ? reason.message : t("error.loadAppearance"));
-      } finally {
-        if (active) setThemeLoading(false);
+        console.warn(reason instanceof Error ? reason.message : t("error.loadAppearance"));
       }
     };
     void load();
@@ -107,23 +96,8 @@ function AppContent() {
     };
   }, [t]);
 
-  const handleThemeChange = useCallback(
-    async (next: ThemePreference) => {
-      const previous = theme;
-      setTheme(next);
-      setThemeError("");
-      try {
-        const saved = await saveAppearanceSettings(next);
-        setTheme(saved.theme);
-      } catch (reason) {
-        setTheme(previous);
-        const message = reason instanceof Error ? reason.message : t("error.saveAppearance");
-        setThemeError(message);
-        throw new Error(message, { cause: reason });
-      }
-    },
-    [t, theme],
-  );
+  // The settings window saves the theme; follow it here as well.
+  useEffect(() => onAppearanceChanged(setTheme), []);
 
   const ensureCover = useCallback(
     async (selected: BookFile) => {
@@ -382,27 +356,6 @@ function AppContent() {
     [book, t],
   );
 
-  const openSettings = useCallback(() => {
-    if (view === "settings") {
-      return;
-    }
-    const returnView: "library" | "search" | "reader" =
-      view === "reader" && book ? "reader" : view === "search" ? "search" : "library";
-    if (returnView === "reader" && currentPage > 0) {
-      setBook((current) => (current ? { ...current, initialPage: currentPage } : current));
-    }
-    setSettingsReturnView(returnView);
-    setView("settings");
-  }, [book, currentPage, view]);
-
-  const closeSettings = useCallback(() => {
-    if (settingsReturnView === "reader" && book) {
-      setView("reader");
-    } else {
-      setView(settingsReturnView === "search" ? "search" : "library");
-    }
-  }, [book, settingsReturnView]);
-
   const showLibrary = useCallback(() => {
     setView("library");
     void refreshLibrary();
@@ -477,22 +430,12 @@ function AppContent() {
                   />
                 ) : null
               }
-              settingsActive={view === "settings"}
               onImport={() => void handleImportPDF()}
               onResume={resumeReader}
               onSearch={showSearch}
-              onSettings={view === "settings" ? closeSettings : openSettings}
             />
             <div className="library-content">
-              {view === "settings" ? (
-                <SettingsPage
-                  onBack={closeSettings}
-                  theme={theme}
-                  themeLoading={themeLoading}
-                  themeError={themeError}
-                  onThemeChange={handleThemeChange}
-                />
-              ) : view === "search" ? (
+              {view === "search" ? (
                 <LibrarySearchResults
                   busyBookId={busyBookId}
                   searchQuery={searchQuery}

@@ -54,7 +54,9 @@ func run() error {
 		OnShutdown: func() { _ = store.Close() },
 	})
 	booksSvc := app.NewBooksService(books.New(store, dataDirectory), assetSrv, settingsManager, desktop)
-	settingsSvc := app.NewSettingsService(settingsManager)
+	settingsSvc := app.NewSettingsService(settingsManager, desktop.Event)
+	settingsWindow := app.NewSettingsWindow(desktop)
+	desktop.Menu.SetApplicationMenu(app.ApplicationMenu("Glint", settingsWindow.Show))
 	desktop.RegisterService(application.NewService(booksSvc))
 	desktop.RegisterService(application.NewService(settingsSvc))
 	desktop.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {

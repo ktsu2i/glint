@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { SettingsWindowApp } from "./features/settings/SettingsWindow";
 import "./styles.css";
 
 const rootElement = document.querySelector("#root");
@@ -9,7 +10,5 @@ if (rootElement === null) {
 }
 
 createRoot(rootElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <StrictMode>{window.location.hash === "#settings" ? <SettingsWindowApp /> : <App />}</StrictMode>,
 );
