@@ -4,7 +4,7 @@ import type { TranslationKey } from "./i18n";
 
 export class LocalizedError extends Error {
   readonly translationKey: TranslationKey;
-  readonly values?: Record<string, string | number>;
+  readonly values: Record<string, string | number> | undefined;
 
   constructor(translationKey: TranslationKey, values?: Record<string, string | number>) {
     super(translationKey);
@@ -14,16 +14,18 @@ export class LocalizedError extends Error {
   }
 }
 
-type Translate = (
-  key: TranslationKey,
-  values?: Record<string, string | number>,
-) => string;
+type Translate = (key: TranslationKey, values?: Record<string, string | number>) => string;
 
 // i18next v27 の strictInterpolationChecks は、静的な key に対して interpolation 変数を必須にする。
 // ここで扱う key は実行時に決まるため型で絞れない。型の緩和はこのファイル内に閉じ込める。
 type DynamicTranslate = Translate | TFunction;
 
+function group(match: RegExpMatchArray, index: number): string {
+  return match[index] ?? "";
+}
+
 function asTranslate(translate: DynamicTranslate): Translate {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 上記コメントの通り、動的 key 用に型を意図的に緩める。
   return translate as Translate;
 }
 
@@ -48,52 +50,52 @@ const backendErrorPatterns: ErrorPattern[] = [
   {
     pattern: /^(.+)から不正なstream応答を受信しました。$/,
     key: "chat.invalidStream",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のstream接続が中断されました。$/,
     key: "chat.streamInterrupted",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のstreamが完了通知なしで終了しました。$/,
     key: "chat.streamIncomplete",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+?)(?:の| )API keyを確認してください。$/,
     key: "chat.invalidApiKey",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+?) API keyに必要な権限がありません。(?:.*)?$/,
     key: "chat.apiKeyPermission",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のcredit残高を確認してください。$/,
     key: "chat.insufficientCredit",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のusage limitに達した可能性があります。billingを確認してください。$/,
     key: "chat.usageLimit",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のrate limitに達しました。少し待ってから再試行してください。$/,
     key: "chat.rateLimit",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のmodelを(?:設定|入力)してください。$/,
     key: "chat.modelMissing",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^(.+)のAPI keyを設定してください。$/,
     key: "chat.apiKeyMissing",
-    values: (match) => ({ provider: match[1] }),
+    values: (match) => ({ provider: group(match, 1) }),
   },
   {
     pattern: /^Ollamaがmodelを認識していません。.*$/,
@@ -103,31 +105,28 @@ const backendErrorPatterns: ErrorPattern[] = [
   {
     pattern: /^connect to (.+?): (.+)$/,
     key: "chat.connectionFailed",
-    values: (match) => ({ provider: match[1], detail: match[2] }),
+    values: (match) => ({ provider: group(match, 1), detail: group(match, 2) }),
   },
   {
     pattern: /^(.+) request failed \((\d+)\)(?:: (.+))?$/,
     key: "chat.requestFailed",
     values: (match) => ({
-      provider: match[1],
-      status: match[2],
-      detail: match[3] || "",
+      provider: group(match, 1),
+      status: group(match, 2),
+      detail: group(match, 3),
     }),
   },
   {
     pattern: /^プロンプトが(.+)のsafety filterでブロックされました（(.+)）。$/,
     key: "chat.safetyBlocked",
-    values: (match) => ({ provider: match[1], reason: match[2] }),
+    values: (match) => ({ provider: group(match, 1), reason: group(match, 2) }),
   },
 ];
 
-export function localizeBackendError(
-  message: string,
-  dynamicTranslate: DynamicTranslate,
-) {
+export function localizeBackendError(message: string, dynamicTranslate: DynamicTranslate) {
   const translate = asTranslate(dynamicTranslate);
   const key = backendErrorKeys[message];
-  if (key) return translate(key);
+  if (key !== undefined) return translate(key);
   for (const candidate of backendErrorPatterns) {
     const match = message.match(candidate.pattern);
     if (match) return translate(candidate.key, candidate.values(match));

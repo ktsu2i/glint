@@ -14,16 +14,23 @@ describe("generateCoverThumbnail", () => {
   it("renders the first page at a bounded width and returns PNG data", async () => {
     const renderTask = { promise: Promise.resolve(), cancel: vi.fn() };
     const page = {
-      getViewport: vi.fn(({ scale }: { scale: number }) => ({ width: 640 * scale, height: 900 * scale })),
+      getViewport: vi.fn(({ scale }: { scale: number }) => ({
+        width: 640 * scale,
+        height: 900 * scale,
+      })),
       render: vi.fn(() => renderTask),
     };
-    const destroy = vi.fn(async () => undefined);
+    const destroy = vi.fn(async () => {});
     loader.createPdfLoadingTask.mockResolvedValue({
       promise: Promise.resolve({ getPage: vi.fn(async () => page) }),
       destroy,
     });
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,cover");
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      {} as CanvasRenderingContext2D,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,cover",
+    );
 
     await expect(generateCoverThumbnail("/book/1")).resolves.toBe("data:image/png;base64,cover");
     expect(page.getViewport).toHaveBeenNthCalledWith(1, { scale: 1 });
@@ -34,7 +41,7 @@ describe("generateCoverThumbnail", () => {
   });
 
   it("destroys the loading task when the page cannot be rendered", async () => {
-    const destroy = vi.fn(async () => undefined);
+    const destroy = vi.fn(async () => {});
     loader.createPdfLoadingTask.mockResolvedValue({
       promise: Promise.resolve({
         getPage: vi.fn(async () => ({

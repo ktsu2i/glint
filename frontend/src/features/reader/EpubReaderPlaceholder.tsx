@@ -1,4 +1,4 @@
-import { BookOpenText } from "@phosphor-icons/react";
+import { BookOpenTextIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { BookFile } from "../../shared/api/backend";
 
@@ -17,7 +17,7 @@ export function EpubReaderPlaceholder({ book }: EpubReaderPlaceholderProps) {
     <section className="reader epub-placeholder" aria-label={t("reader.epubPlaceholderAria")}>
       <div className="reader-empty">
         <div className="empty-shelf-mark" aria-hidden="true">
-          <BookOpenText size={37} weight="thin" />
+          <BookOpenTextIcon size={37} weight="thin" />
           <span />
         </div>
         <p className="section-label">{t("reader.epubPlaceholderKicker")}</p>

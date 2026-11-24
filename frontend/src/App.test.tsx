@@ -57,37 +57,55 @@ vi.mock("./features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
 }));
 vi.mock("./features/reader/PdfReader", () => ({
-  PdfReader: ({ book, initialPage, selection, onPageContextChange, onSelectionChange }: {
+  PdfReader: ({
+    book,
+    initialPage,
+    selection,
+    onPageContextChange,
+    onSelectionChange,
+  }: {
     book: { name: string } | null;
     initialPage: number;
     selection: { text: string; pageNumber: number; startOffset: number; endOffset: number } | null;
     onPageContextChange: (page: number, text: string, pageCount: number) => void;
-    onSelectionChange: (selection: {
-      text: string;
-      pageNumber: number;
-      startOffset: number;
-      endOffset: number;
-    } | null) => void;
+    onSelectionChange: (
+      selection: {
+        text: string;
+        pageNumber: number;
+        startOffset: number;
+        endOffset: number;
+      } | null,
+    ) => void;
   }) => (
     <div data-testid="pdf-reader">
       <span>{book?.name ?? "no-book"}</span>
       <span>initial-{initialPage}</span>
       <span data-testid="reader-selection">{JSON.stringify(selection)}</span>
-      <button type="button" onClick={() => onPageContextChange(4, "page text", 12)}>set-page</button>
+      <button type="button" onClick={() => onPageContextChange(4, "page text", 12)}>
+        set-page
+      </button>
       <button
         type="button"
-        onClick={() => onSelectionChange({
-          text: "selected context",
-          pageNumber: 4,
-          startOffset: 8,
-          endOffset: 24,
-        })}
-      >select-context</button>
+        onClick={() =>
+          onSelectionChange({
+            text: "selected context",
+            pageNumber: 4,
+            startOffset: 8,
+            endOffset: 24,
+          })
+        }
+      >
+        select-context
+      </button>
     </div>
   ),
 }));
 vi.mock("./features/chat/ChatSidebar", () => ({
-  ChatSidebar: ({ context, selection, onClearSelection }: {
+  ChatSidebar: ({
+    context,
+    selection,
+    onClearSelection,
+  }: {
     context: { bookName: string; pageNumber: number };
     selection: { text: string } | null;
     onClearSelection: () => void;
@@ -95,7 +113,9 @@ vi.mock("./features/chat/ChatSidebar", () => ({
     <div>
       <div data-testid="chat-context">{JSON.stringify(context)}</div>
       <div data-testid="chat-selection">{JSON.stringify(selection)}</div>
-      <button type="button" onClick={onClearSelection}>remove-context</button>
+      <button type="button" onClick={onClearSelection}>
+        remove-context
+      </button>
     </div>
   ),
 }));
@@ -145,22 +165,26 @@ beforeEach(() => {
   mocks.getLLMConfig.mockResolvedValue({
     activeProviderId: "openrouter",
     activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
-    providers: [{
-      providerId: "openrouter",
-      model: "provider/model",
-      models: [],
-      options: { zdr: true },
-      hasApiKey: true,
-      configured: true,
-      isActive: true,
-    }],
-    catalog: [{
-      id: "openrouter",
-      displayName: "OpenRouter",
-      authKind: "bearer",
-      optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
-      capabilities: { streaming: true, tools: false, images: false },
-    }],
+    providers: [
+      {
+        providerId: "openrouter",
+        model: "provider/model",
+        models: [],
+        options: { zdr: true },
+        hasApiKey: true,
+        configured: true,
+        isActive: true,
+      },
+    ],
+    catalog: [
+      {
+        id: "openrouter",
+        displayName: "OpenRouter",
+        authKind: "bearer",
+        optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
+        capabilities: { streaming: true, tools: false, images: false },
+      },
+    ],
     recentProviderIds: ["openrouter"],
     recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
   });
@@ -172,22 +196,26 @@ beforeEach(() => {
   mocks.upsertProviderSettings.mockImplementation(async () => ({
     activeProviderId: "openrouter",
     activeModelRef: { providerId: "openrouter", modelId: "provider/model" },
-    providers: [{
-      providerId: "openrouter",
-      model: "provider/model",
-      models: [],
-      options: { zdr: true },
-      hasApiKey: true,
-      configured: true,
-      isActive: true,
-    }],
-    catalog: [{
-      id: "openrouter",
-      displayName: "OpenRouter",
-      authKind: "bearer",
-      optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
-      capabilities: { streaming: true, tools: false, images: false },
-    }],
+    providers: [
+      {
+        providerId: "openrouter",
+        model: "provider/model",
+        models: [],
+        options: { zdr: true },
+        hasApiKey: true,
+        configured: true,
+        isActive: true,
+      },
+    ],
+    catalog: [
+      {
+        id: "openrouter",
+        displayName: "OpenRouter",
+        authKind: "bearer",
+        optionSchema: [{ key: "zdr", label: "ZDR", type: "bool", required: false, default: true }],
+        capabilities: { streaming: true, tools: false, images: false },
+      },
+    ],
     recentProviderIds: ["openrouter"],
     recentModels: [{ providerId: "openrouter", modelId: "provider/model" }],
   }));
@@ -224,9 +252,11 @@ describe("App", () => {
 
   it("starts in the library, imports a PDF, saves page context, and returns", async () => {
     let resolveEmpty!: (value: typeof openedBook) => void;
-    mocks.openBookFile.mockReturnValueOnce(new Promise((resolve) => {
-      resolveEmpty = resolve;
-    }));
+    mocks.openBookFile.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveEmpty = resolve;
+      }),
+    );
     const { unmount } = render(<App />);
 
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
@@ -315,13 +345,14 @@ describe("App", () => {
     fireEvent.change(input, { target: { value: "Architecture Guide" } });
     fireEvent.blur(input);
 
-    await waitFor(() => expect(mocks.renameBook).toHaveBeenCalledWith(
-      "book-1",
-      "Architecture Guide",
-    ));
-    expect(await screen.findByRole("button", {
-      name: "Architecture Guideの名前を変更",
-    })).toBeTruthy();
+    await waitFor(() =>
+      expect(mocks.renameBook).toHaveBeenCalledWith("book-1", "Architecture Guide"),
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: "Architecture Guideの名前を変更",
+      }),
+    ).toBeTruthy();
   });
 
   it("opens the settings page from the library and returns", async () => {
@@ -346,7 +377,9 @@ describe("App", () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     fireEvent.click(screen.getByRole("button", { name: "設定" }));
     const light = await screen.findByRole("button", { name: /ライト/ });
-    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
 
     fireEvent.click(light);
     await waitFor(() => expect(mocks.saveAppearanceSettings).toHaveBeenCalledWith("light"));
@@ -365,7 +398,9 @@ describe("App", () => {
 
     expect(await screen.findByText("settings unavailable")).toBeTruthy();
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
   });
 
   it("generates a pending cover without blocking the reader", async () => {
@@ -374,10 +409,9 @@ describe("App", () => {
     await screen.findByText("最初の一冊を、本棚へ。");
 
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
-    await waitFor(() => expect(mocks.saveBookCover).toHaveBeenCalledWith(
-      "book-1",
-      "data:image/png;base64,cover",
-    ));
+    await waitFor(() =>
+      expect(mocks.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover"),
+    );
     expect(screen.getByTestId("pdf-reader")).toBeTruthy();
   });
 
@@ -390,6 +424,9 @@ describe("App", () => {
     await screen.findByText("最初の一冊を、本棚へ。");
 
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
-    expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining(message));
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining(message),
+    );
   });
 });

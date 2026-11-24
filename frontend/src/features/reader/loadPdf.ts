@@ -64,7 +64,7 @@ function hasPdfHeader(data: Uint8Array): boolean {
 }
 
 function resolveAssetUrl(path: string): string {
-  const base = typeof document !== "undefined" ? document.baseURI : "http://localhost/";
+  const base = typeof document === "undefined" ? "http://localhost/" : document.baseURI;
   return new URL(path, base).toString();
 }
 
@@ -126,7 +126,7 @@ async function resolveDestinationPage(
   document: PDFDocumentProxy,
   dest: string | unknown[] | null | undefined,
 ): Promise<number | null> {
-  if (!dest) {
+  if (dest === null || dest === undefined || dest === "") {
     return null;
   }
   try {
@@ -134,6 +134,7 @@ async function resolveDestinationPage(
     if (!Array.isArray(explicit) || explicit.length === 0) {
       return null;
     }
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- PDF.js の explicit destination は先頭要素が page の RefProxy。
     const ref = explicit[0] as { num: number; gen: number };
     const index = await document.getPageIndex(ref);
     return index + 1;

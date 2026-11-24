@@ -1,27 +1,21 @@
 {
   "name": "glint-frontend",
-  "private": true,
   "version": "0.1.4",
+  "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.21.0",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "12.21.0",
-      "onFail": "error"
-    },
-    "runtime": {
-      "name": "node",
-      "version": ">=26.13.1 <27",
-      "onFail": "error"
-    }
-  },
   "scripts": {
     "preinstall": "node scripts/require-pnpm.mjs",
     "predev": "node scripts/require-pnpm.mjs",
     "dev": "vite",
     "prebuild": "node scripts/require-pnpm.mjs",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives",
+    "lint:fix": "oxlint --type-aware --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "knip": "knip",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm knip",
     "fixture:pdf": "node ../scripts/generate-reader-fixture.mjs",
     "pretest": "node scripts/require-pnpm.mjs",
     "test": "vitest run",
@@ -47,8 +41,26 @@
     "@vitejs/plugin-react": "6.3.0",
     "@vitest/coverage-v8": "^5.1.1",
     "jsdom": "^31.0.1",
+    "knip": "6.48.0",
+    "lefthook": "2.2.1",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
+    "oxlint-tsgolint": "7.0.2008",
     "typescript": "7.0.2",
     "vite": "8.3.8",
     "vitest": "5.1.1"
-  }
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.21.0",
+      "onFail": "error"
+    },
+    "runtime": {
+      "name": "node",
+      "version": ">=26.13.1 <27",
+      "onFail": "error"
+    }
+  },
+  "packageManager": "pnpm@12.21.0"
 }

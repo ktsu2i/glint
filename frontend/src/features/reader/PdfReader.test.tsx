@@ -53,7 +53,9 @@ import { PdfReader } from "./PdfReader";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
-  return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
+  return renderBase(ui, {
+    wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider>,
+  });
 }
 import type { BookFile } from "../../shared/api/backend";
 
@@ -118,7 +120,7 @@ function makeBook(url = "/book/1", indexedPageCount = 2): BookFile {
 }
 
 function resolveDocument(document = makeDocument()) {
-  const task = { promise: Promise.resolve(document), destroy: vi.fn(async () => undefined) };
+  const task = { promise: Promise.resolve(document), destroy: vi.fn(async () => {}) };
   loader.createPdfLoadingTask.mockResolvedValue(task);
   return { task, document };
 }
@@ -132,47 +134,46 @@ beforeEach(() => {
   } as unknown as CanvasRenderingContext2D);
   Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 1 });
   loader.createPdfTextLayer.mockImplementation(async () => ({
-    render: vi.fn(async () => undefined),
+    render: vi.fn(async () => {}),
     cancel: vi.fn(),
   }));
-  loader.extractPdfPage.mockImplementation(async (
-    document: ReturnType<typeof makeDocument>,
-    pageNumber: number,
-  ) => {
-    const page = await document.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const viewport = page.getViewport({ scale: 1 });
-    return {
-      pageNumber,
-      text: textContent.items
-        .filter((item: { str?: string }) => "str" in item)
-        .map((item: { str?: string; hasEOL?: boolean }) => `${item.str ?? ""}${item.hasEOL ? "\n" : " "}`)
-        .join("")
-        .trim(),
-      width: viewport.width,
-      height: viewport.height,
-    };
-  });
+  loader.extractPdfPage.mockImplementation(
+    async (document: ReturnType<typeof makeDocument>, pageNumber: number) => {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const viewport = page.getViewport({ scale: 1 });
+      return {
+        pageNumber,
+        text: textContent.items
+          .filter((item: { str?: string }) => "str" in item)
+          .map(
+            (item: { str?: string; hasEOL?: boolean }) =>
+              `${item.str ?? ""}${item.hasEOL === true ? "\n" : " "}`,
+          )
+          .join("")
+          .trim(),
+        width: viewport.width,
+        height: viewport.height,
+      };
+    },
+  );
   loader.loadPdfOutline.mockResolvedValue([]);
-  backend.saveBookPages.mockImplementation(async (
-    _bookId: string,
-    pages: Array<{ pageNumber: number }>,
-  ) => pages.at(-1)?.pageNumber ?? 0);
+  backend.saveBookPages.mockImplementation(
+    async (_bookId: string, pages: Array<{ pageNumber: number }>) => pages.at(-1)?.pageNumber ?? 0,
+  );
   backend.searchBook.mockResolvedValue([]);
   backend.listBookmarks.mockResolvedValue([]);
-  backend.addBookmark.mockImplementation(async (
-    _bookId: string,
-    pageNumber: number,
-  ) => ({ pageNumber, createdAt: "2026-06-23T00:00:00Z" }));
+  backend.addBookmark.mockImplementation(async (_bookId: string, pageNumber: number) => ({
+    pageNumber,
+    createdAt: "2026-06-23T00:00:00Z",
+  }));
   backend.removeBookmark.mockResolvedValue(undefined);
 });
 
 describe("PdfReader", () => {
   it("renders the empty state and resets page context", () => {
     const onPageContextChange = vi.fn();
-    const { unmount } = render(
-      <PdfReader book={null} onPageContextChange={onPageContextChange} />,
-    );
+    const { unmount } = render(<PdfReader book={null} onPageContextChange={onPageContextChange} />);
 
     expect(screen.getByText("本とコードのあいだを読む。")).toBeTruthy();
     expect(onPageContextChange).toHaveBeenCalledWith(0, "", 0);
@@ -185,22 +186,20 @@ describe("PdfReader", () => {
     const { task, document } = resolveDocument(makeDocument(page));
     const onPageContextChange = vi.fn();
     const { unmount } = render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={onPageContextChange}
-      />,
+      <PdfReader book={makeBook()} onPageContextChange={onPageContextChange} />,
     );
 
-    await waitFor(() => expect(loader.createPdfLoadingTask).toHaveBeenCalledWith(
-      "/book/1",
-      expect.any(AbortSignal),
-    ));
+    await waitFor(() =>
+      expect(loader.createPdfLoadingTask).toHaveBeenCalledWith("/book/1", expect.any(AbortSignal)),
+    );
 
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(onPageContextChange).toHaveBeenCalledWith(1, "Alpha\nBeta", 2));
-    expect(page.render).toHaveBeenCalledWith(expect.objectContaining({
-      transform: [2, 0, 0, 2, 0, 0],
-    }));
+    expect(page.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transform: [2, 0, 0, 2, 0, 0],
+      }),
+    );
     expect(screen.getByText("200%")).toBeTruthy();
 
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
@@ -232,35 +231,33 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
     fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
-    let input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    let input = screen.getByLabelText<HTMLInputElement>("ページ番号");
     fireEvent.change(input, { target: { value: "7" } });
     fireEvent.submit(input.closest("form")!);
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(7));
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("7 ");
 
     fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
-    input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    input = screen.getByLabelText<HTMLInputElement>("ページ番号");
     fireEvent.change(input, { target: { value: "999" } });
     fireEvent.blur(input);
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(12));
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
 
     fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
-    input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    input = screen.getByLabelText<HTMLInputElement>("ページ番号");
     fireEvent.change(input, { target: { value: "abc" } });
     fireEvent.blur(input);
     expect(pdfDocument.getPage).toHaveBeenLastCalledWith(12);
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
 
     fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
-    input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    input = screen.getByLabelText<HTMLInputElement>("ページ番号");
     fireEvent.change(input, { target: { value: "3" } });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("12 ");
@@ -270,16 +267,14 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
     const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
     stage.scrollTop = 180;
     stage.scrollLeft = 90;
-    const slider = screen.getByRole("slider", { name: "ページスライダー" }) as HTMLInputElement;
+    const slider = screen.getByRole<HTMLInputElement>("slider", { name: "ページスライダー" });
     expect(slider.min).toBe("1");
     expect(slider.max).toBe("12");
     expect(slider.value).toBe("1");
@@ -302,9 +297,7 @@ describe("PdfReader", () => {
       { pageNumber: 10, createdAt: "2026-06-23T00:01:00Z" },
     ]);
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
     const pageFourMarker = await screen.findByRole("button", { name: "しおり付きの4ページへ移動" });
@@ -324,12 +317,8 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;
     resolveDocument(pdfDocument);
-    loader.loadPdfOutline.mockResolvedValue([
-      { title: "第2章", pageNumber: 9, children: [] },
-    ]);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    loader.loadPdfOutline.mockResolvedValue([{ title: "第2章", pageNumber: 9, children: [] }]);
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -344,7 +333,7 @@ describe("PdfReader", () => {
     stage.scrollTop = 180;
     stage.scrollLeft = 90;
     fireEvent.click(screen.getByRole("button", { name: "ページ番号を指定" }));
-    const input = screen.getByLabelText("ページ番号") as HTMLInputElement;
+    const input = screen.getByLabelText<HTMLInputElement>("ページ番号");
     fireEvent.change(input, { target: { value: "7" } });
     fireEvent.submit(input.closest("form")!);
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(7));
@@ -363,12 +352,7 @@ describe("PdfReader", () => {
   it("turns pages with arrow keys and ignores them inside editable elements", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -385,7 +369,7 @@ describe("PdfReader", () => {
     expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1);
 
     const input = globalThis.document.createElement("input");
-    globalThis.document.body.appendChild(input);
+    globalThis.document.body.append(input);
     input.focus();
     fireEvent.keyDown(input, { key: "ArrowRight" });
     expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1);
@@ -398,18 +382,15 @@ describe("PdfReader", () => {
   it("zooms manually on a ctrl+wheel pinch gesture and ignores plain scrolls", async () => {
     const page = makePage();
     resolveDocument(makeDocument(page));
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await screen.findByText("200%");
 
     const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
     const plainEvent = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
-    act(() => { stage.dispatchEvent(plainEvent); });
+    act(() => {
+      stage.dispatchEvent(plainEvent);
+    });
     expect(plainEvent.defaultPrevented).toBe(false);
     expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
 
@@ -419,7 +400,9 @@ describe("PdfReader", () => {
       bubbles: true,
       cancelable: true,
     });
-    act(() => { stage.dispatchEvent(pinchEvent); });
+    act(() => {
+      stage.dispatchEvent(pinchEvent);
+    });
     expect(pinchEvent.defaultPrevented).toBe(true);
     await screen.findByText("244%");
     expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("");
@@ -430,7 +413,9 @@ describe("PdfReader", () => {
       bubbles: true,
       cancelable: true,
     });
-    act(() => { stage.dispatchEvent(zoomOutEvent); });
+    act(() => {
+      stage.dispatchEvent(zoomOutEvent);
+    });
     await screen.findByText("40%");
   });
 
@@ -442,12 +427,7 @@ describe("PdfReader", () => {
       })),
     });
     resolveDocument(makeDocument(page));
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
 
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
@@ -462,13 +442,7 @@ describe("PdfReader", () => {
   it("restores and clamps the saved reading position", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader
-        book={makeBook()}
-        initialPage={9}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} initialPage={9} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
@@ -480,27 +454,17 @@ describe("PdfReader", () => {
     ["unknown", "PDFを開けませんでした。"],
   ])("reports document loading failures", async (reason, message) => {
     loader.createPdfLoadingTask.mockRejectedValue(reason);
-    render(
-      <PdfReader
-        book={makeBook("/book/broken")}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook("/book/broken")} onPageContextChange={vi.fn()} />);
 
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", message);
   });
 
   it("reports a load timeout and destroys an initialized loading task", async () => {
     vi.useFakeTimers();
-    const task = { promise: new Promise(() => {}), destroy: vi.fn(async () => undefined) };
+    const task = { promise: new Promise(() => {}), destroy: vi.fn(async () => {}) };
     loader.createPdfLoadingTask.mockResolvedValue(task);
-    render(
-      <PdfReader
-        book={makeBook("/book/slow")}
-        onPageContextChange={vi.fn()}
-      />,
-    );
-    await act(async () => Promise.resolve());
+    render(<PdfReader book={makeBook("/book/slow")} onPageContextChange={vi.fn()} />);
+    await act(async () => {});
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
@@ -510,86 +474,80 @@ describe("PdfReader", () => {
     vi.useRealTimers();
   });
 
+  // oxlint-disable-next-line vitest/expect-expect -- unmount 後の resolve で例外や state 更新が起きないことを確認する。
   it("does not update state after an unfinished load is unmounted", async () => {
     let resolveTask!: (task: unknown) => void;
-    loader.createPdfLoadingTask.mockReturnValue(new Promise((resolve) => {
-      resolveTask = resolve;
-    }));
+    loader.createPdfLoadingTask.mockReturnValue(
+      new Promise((resolve) => {
+        resolveTask = resolve;
+      }),
+    );
     const { unmount } = render(
-      <PdfReader
-        book={makeBook("/book/pending")}
-        onPageContextChange={vi.fn()}
-      />,
+      <PdfReader book={makeBook("/book/pending")} onPageContextChange={vi.fn()} />,
     );
     unmount();
 
     resolveTask({ promise: Promise.resolve(makeDocument()), destroy: vi.fn() });
-    await act(async () => Promise.resolve());
+    await act(async () => {});
   });
 
+  // oxlint-disable-next-line vitest/expect-expect -- unmount 後の reject で例外や state 更新が起きないことを確認する。
   it("ignores a loading failure after unmount", async () => {
     let rejectTask!: (reason: unknown) => void;
-    loader.createPdfLoadingTask.mockReturnValue(new Promise((_, reject) => {
-      rejectTask = reject;
-    }));
+    loader.createPdfLoadingTask.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectTask = reject;
+      }),
+    );
     const { unmount } = render(
-      <PdfReader
-        book={makeBook("/book/pending")}
-        onPageContextChange={vi.fn()}
-      />,
+      <PdfReader book={makeBook("/book/pending")} onPageContextChange={vi.fn()} />,
     );
     unmount();
 
     rejectTask(new Error("late failure"));
-    await act(async () => Promise.resolve());
+    await act(async () => {});
   });
 
   it("renders at unit device scale", async () => {
     Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 0 });
     const page = makePage();
     resolveDocument(makeDocument(page));
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 200, height: 100 } }]));
 
-    await waitFor(() => expect(page.render).toHaveBeenCalledWith(expect.objectContaining({
-      transform: undefined,
-    })));
+    await waitFor(() =>
+      expect(page.render).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transform: undefined,
+        }),
+      ),
+    );
   });
 
   it("falls back to unit scale when the viewport ratio is zero", async () => {
     const page = makePage({
-      getViewport: vi.fn()
+      getViewport: vi
+        .fn()
         .mockReturnValueOnce({ width: Number.POSITIVE_INFINITY, height: 100 })
         .mockReturnValueOnce({ width: 200, height: 100 }),
     });
     resolveDocument(makeDocument(page));
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 200, height: 100 } }]));
 
-    await waitFor(() => expect(page.render).toHaveBeenCalledWith(expect.objectContaining({
-      viewport: { width: 200, height: 100 },
-    })));
+    await waitFor(() =>
+      expect(page.render).toHaveBeenCalledWith(
+        expect.objectContaining({
+          viewport: { width: 200, height: 100 },
+        }),
+      ),
+    );
   });
 
   it("reports canvas and non-Error rendering failures", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     resolveDocument();
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
@@ -598,13 +556,14 @@ describe("PdfReader", () => {
   });
 
   it("uses the generic rendering error for non-Error rejections", async () => {
-    resolveDocument({ numPages: 2, getPage: vi.fn(async () => Promise.reject("bad render")) });
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    resolveDocument({
+      numPages: 2,
+      getPage: vi.fn(async () => {
+        // oxlint-disable-next-line eslint/no-throw-literal, typescript/only-throw-error -- Error 以外の reject 値の扱いを検証する。
+        throw "bad render";
+      }),
+    });
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
     expect(await screen.findByRole("alert")).toHaveProperty(
@@ -616,15 +575,15 @@ describe("PdfReader", () => {
   it("ignores PDF.js render cancellation errors", async () => {
     const cancellation = new Error("cancelled");
     cancellation.name = "RenderingCancelledException";
-    resolveDocument({ numPages: 1, getPage: vi.fn(async () => Promise.reject(cancellation)) });
-    render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    resolveDocument({
+      numPages: 1,
+      getPage: vi.fn(async () => {
+        throw cancellation;
+      }),
+    });
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
-    await act(async () => Promise.resolve());
+    await act(async () => {});
 
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -633,22 +592,20 @@ describe("PdfReader", () => {
     let resolvePage!: (page: ReturnType<typeof makePage>) => void;
     const document = {
       numPages: 1,
-      getPage: vi.fn(() => new Promise<ReturnType<typeof makePage>>((resolve) => {
-        resolvePage = resolve;
-      })),
+      getPage: vi.fn(
+        () =>
+          new Promise<ReturnType<typeof makePage>>((resolve) => {
+            resolvePage = resolve;
+          }),
+      ),
     };
     resolveDocument(document);
-    const { unmount } = render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={vi.fn()}
-      />,
-    );
+    const { unmount } = render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(document.getPage).toHaveBeenCalled());
     unmount();
     resolvePage(makePage());
-    await act(async () => Promise.resolve());
+    await act(async () => {});
   });
 
   it("renders two pages side by side in spread mode", async () => {
@@ -668,9 +625,7 @@ describe("PdfReader", () => {
     };
     resolveDocument(pdfDocument);
     const onPageContextChange = vi.fn();
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={onPageContextChange} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={onPageContextChange} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -679,8 +634,8 @@ describe("PdfReader", () => {
 
     const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
     expect(canvases.length).toBe(2);
-    expect(canvases[0].getAttribute("aria-label")).toBe("1ページ");
-    expect(canvases[1].getAttribute("aria-label")).toBe("2ページ");
+    expect(canvases[0]!.getAttribute("aria-label")).toBe("1ページ");
+    expect(canvases[1]!.getAttribute("aria-label")).toBe("2ページ");
     expect(globalThis.document.querySelector(".page-count")?.textContent).toContain("1–2");
     await waitFor(() => expect(onPageContextChange).toHaveBeenCalledWith(1, "First\n\nSecond", 4));
   });
@@ -719,31 +674,29 @@ describe("PdfReader", () => {
     const [leftCanvas, rightCanvas] = Array.from(
       globalThis.document.querySelectorAll<HTMLCanvasElement>(".pdf-canvas"),
     );
-    expect(leftCanvas.style.width).toBe("400px");
-    expect(rightCanvas.style.width).toBe("400px");
+    expect(leftCanvas!.style.width).toBe("400px");
+    expect(rightCanvas!.style.width).toBe("400px");
 
     fireEvent.click(screen.getByRole("button", { name: "拡大" }));
     await waitFor(() => expect(pageOne.render).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(pageTwo.render).toHaveBeenCalledTimes(2));
-    expect(leftCanvas.style.width).toBe("400px");
-    expect(rightCanvas.style.width).toBe("400px");
+    expect(leftCanvas!.style.width).toBe("400px");
+    expect(rightCanvas!.style.width).toBe("400px");
 
     await act(async () => resolveLeft());
-    expect(leftCanvas.style.width).toBe("400px");
-    expect(rightCanvas.style.width).toBe("400px");
+    expect(leftCanvas!.style.width).toBe("400px");
+    expect(rightCanvas!.style.width).toBe("400px");
 
     await act(async () => resolveRight());
-    await waitFor(() => expect(leftCanvas.style.width).toBe("420px"));
-    expect(rightCanvas.style.width).toBe("420px");
+    await waitFor(() => expect(leftCanvas!.style.width).toBe("420px"));
+    expect(rightCanvas!.style.width).toBe("420px");
   });
 
   it("advances by two pages with the next button and arrow keys in spread mode", async () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 6;
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -768,9 +721,7 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 1;
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -785,21 +736,15 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 4;
     resolveDocument(pdfDocument);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
     fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
-    await waitFor(
-      () => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(2),
-    );
+    await waitFor(() => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(2));
 
     fireEvent.click(screen.getByRole("button", { name: "1ページ表示に切り替え" }));
-    await waitFor(
-      () => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(1),
-    );
+    await waitFor(() => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(1));
   });
 
   it("renders the text layer over each rendered page and cancels on unmount", async () => {
@@ -818,23 +763,23 @@ describe("PdfReader", () => {
       getPage: vi.fn(async (...args: unknown[]) => (args[0] === 1 ? pageOne : pageTwo)),
     };
     resolveDocument(pdfDocument);
-    const textLayerOne = { render: vi.fn(async () => undefined), cancel: vi.fn() };
-    const textLayerTwo = { render: vi.fn(async () => undefined), cancel: vi.fn() };
+    const textLayerOne = { render: vi.fn(async () => {}), cancel: vi.fn() };
+    const textLayerTwo = { render: vi.fn(async () => {}), cancel: vi.fn() };
     loader.createPdfTextLayer
       .mockResolvedValueOnce(textLayerOne)
       .mockResolvedValueOnce(textLayerTwo);
-    const { unmount } = render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    const { unmount } = render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
 
     await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalledTimes(2));
-    const containers = globalThis.document.querySelectorAll(".text-layer[data-page]");
+    const containers = globalThis.document.querySelectorAll<HTMLElement>(".text-layer[data-page]");
     expect(containers.length).toBe(2);
-    expect(containers[0].getAttribute("data-page")).toBe("1");
-    expect(containers[1].getAttribute("data-page")).toBe("2");
-    expect((containers[0] as HTMLElement).style.getPropertyValue("--total-scale-factor")).not.toBe("");
+    expect(containers[0]!.dataset.page).toBe("1");
+    expect(containers[1]!.dataset.page).toBe("2");
+    expect((containers[0] as HTMLElement).style.getPropertyValue("--total-scale-factor")).not.toBe(
+      "",
+    );
     expect(textLayerOne.render).toHaveBeenCalled();
     expect(textLayerTwo.render).toHaveBeenCalled();
 
@@ -861,7 +806,7 @@ describe("PdfReader", () => {
     const layer = globalThis.document.querySelector(".text-layer[data-page]") as HTMLElement;
     const span = globalThis.document.createElement("span");
     span.textContent = "  selected text  ";
-    layer.appendChild(span);
+    layer.append(span);
     const textNode = span.firstChild as Text;
     const range = globalThis.document.createRange();
     range.setStart(textNode, 0);
@@ -908,7 +853,7 @@ describe("PdfReader", () => {
       />,
     );
     const highlight = await waitFor(() => {
-      const segment = globalThis.document.querySelector(".context-highlight-segment") as HTMLElement | null;
+      const segment = globalThis.document.querySelector<HTMLElement>(".context-highlight-segment");
       expect(segment).toBeTruthy();
       return segment!;
     });
@@ -930,7 +875,7 @@ describe("PdfReader", () => {
 
     const chat = globalThis.document.createElement("aside");
     chat.className = "chat-sidebar";
-    globalThis.document.body.appendChild(chat);
+    globalThis.document.body.append(chat);
     fireEvent.pointerDown(chat);
     fireEvent.click(chat);
     expect(onSelectionChange).not.toHaveBeenCalled();
@@ -949,7 +894,9 @@ describe("PdfReader", () => {
         onSelectionChange={onSelectionChange}
       />,
     );
-    await waitFor(() => expect(globalThis.document.querySelector(".context-highlight-segment")).toBeNull());
+    await waitFor(() =>
+      expect(globalThis.document.querySelector(".context-highlight-segment")).toBeNull(),
+    );
   });
 
   it("clears the selection when the page changes", async () => {
@@ -987,7 +934,7 @@ describe("PdfReader", () => {
 
     const outside = globalThis.document.createElement("p");
     outside.textContent = "elsewhere";
-    globalThis.document.body.appendChild(outside);
+    globalThis.document.body.append(outside);
     const outsideText = outside.firstChild as Text;
 
     vi.spyOn(window, "getSelection").mockReturnValue({
@@ -1007,9 +954,7 @@ describe("PdfReader", () => {
   it("opens an empty TOC panel when the PDF has no outline", async () => {
     resolveDocument();
     loader.loadPdfOutline.mockResolvedValue([]);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(loader.loadPdfOutline).toHaveBeenCalled());
 
@@ -1022,13 +967,13 @@ describe("PdfReader", () => {
   it("persists page bookmarks, navigates from the bookmark panel, and removes them", async () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
-    backend.listBookmarks.mockResolvedValue([{
-      pageNumber: 2,
-      createdAt: "2026-06-23T00:00:00Z",
-    }]);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    backend.listBookmarks.mockResolvedValue([
+      {
+        pageNumber: 2,
+        createdAt: "2026-06-23T00:00:00Z",
+      },
+    ]);
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
     await waitFor(() => expect(backend.listBookmarks).toHaveBeenCalledWith("book-1"));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
@@ -1038,7 +983,7 @@ describe("PdfReader", () => {
     fireEvent.click(screen.getByRole("button", { name: "しおりの2ページへ移動" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "2ページのしおりを削除" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "2ページのしおりを削除" })[0]!);
     await waitFor(() => expect(backend.removeBookmark).toHaveBeenCalledWith("book-1", 2));
     expect(screen.queryByText("2ページ")).toBeNull();
 
@@ -1065,9 +1010,7 @@ describe("PdfReader", () => {
       { title: "第2章 設計", pageNumber: 12, children: [] },
       { title: "巻末資料", pageNumber: null, children: [] },
     ]);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(loader.loadPdfOutline).toHaveBeenCalled());
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
@@ -1097,9 +1040,7 @@ describe("PdfReader", () => {
     loader.loadPdfOutline.mockResolvedValue([
       { title: "巨大なセクション", pageNumber: 999, children: [] },
     ]);
-    render(
-      <PdfReader book={makeBook()} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook()} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(loader.loadPdfOutline).toHaveBeenCalled());
 
@@ -1124,9 +1065,7 @@ describe("PdfReader", () => {
         matchCount: 1,
       },
     ]);
-    render(
-      <PdfReader book={makeBook("/book/1", 6)} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook("/book/1", 6)} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -1143,7 +1082,9 @@ describe("PdfReader", () => {
     fireEvent.change(input, { target: { value: "context builder" } });
     fireEvent.submit(input.closest("form")!);
 
-    await waitFor(() => expect(backend.searchBook).toHaveBeenCalledWith("book-1", "context builder"));
+    await waitFor(() =>
+      expect(backend.searchBook).toHaveBeenCalledWith("book-1", "context builder"),
+    );
     expect(await screen.findByText("2ページで見つかりました")).toBeTruthy();
     expect(globalThis.document.querySelectorAll(".reader-search-excerpt mark")).toHaveLength(4);
     expect(screen.getByText("一致 2")).toBeTruthy();
@@ -1157,9 +1098,7 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     resolveDocument(pdfDocument);
     backend.searchBook.mockRejectedValue(new Error("search unavailable"));
-    render(
-      <PdfReader book={makeBook("/book/1", 0)} onPageContextChange={vi.fn()} />,
-    );
+    render(<PdfReader book={makeBook("/book/1", 0)} onPageContextChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
@@ -1187,17 +1126,14 @@ describe("PdfReader", () => {
     resolveDocument(document);
     const onPageContextChange = vi.fn();
     const { unmount } = render(
-      <PdfReader
-        book={makeBook()}
-        onPageContextChange={onPageContextChange}
-      />,
+      <PdfReader book={makeBook()} onPageContextChange={onPageContextChange} />,
     );
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 200, height: 100 } }]));
     await waitFor(() => expect(page.render).toHaveBeenCalled());
     onPageContextChange.mockClear();
     unmount();
     resolveRender();
-    await act(async () => Promise.resolve());
+    await act(async () => {});
 
     expect(onPageContextChange).not.toHaveBeenCalled();
   });

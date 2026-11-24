@@ -154,6 +154,15 @@ pnpm test
 pnpm run build
 ```
 
+Run all frontend static checks (type check, oxlint, oxfmt, knip) at once. `pnpm install` also installs a lefthook pre-commit hook that lints and formats staged files.
+
+```bash
+cd frontend
+pnpm check      # typecheck + lint + format:check + knip
+pnpm lint:fix   # apply autofixable lint fixes
+pnpm format     # format with oxfmt
+```
+
 ### Releasing
 
 Releases are managed by [tagpr](https://github.com/Songmu/tagpr). After each merge to `main`, tagpr opens or updates a release PR. The PR bumps the version in `wails.json` and `frontend/package.json` and adds the merged pull requests to `CHANGELOG.md`. Merging the release PR tags the release, builds the universal macOS app, attaches it to the GitHub release, and publishes the release. The workflow then triggers the update workflow in [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap), which bumps the cask, checks that it installs, and merges the change, so `brew upgrade --cask glint` sees the new version within a few minutes. This needs the `HOMEBREW_TAP_TOKEN` secret, a fine-grained PAT with Actions: write on `ktsu2i/homebrew-tap`. Without it, the tap still picks up the release on its scheduled run twice a day.

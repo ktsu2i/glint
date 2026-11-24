@@ -54,12 +54,14 @@ export async function indexBookPages(
       if (signal.aborted) {
         throw new AbortError();
       }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- page 順に逐次抽出し、batch 単位で保存する。
       const page = await extractPdfPage(document, number);
       batch.push(page);
       if (batch.length === pageIndexBatchSize || number === pageCount) {
         if (signal.aborted) {
           throw new AbortError();
         }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- batch は順番に保存する必要がある。
         persistedCount = await saveBookPages(book.id, batch, pageCount);
         onProgress?.(persistedCount, pageCount);
         batch = [];
@@ -67,13 +69,10 @@ export async function indexBookPages(
     }
     return { pageCount, persistedCount };
   } finally {
-    if (document) {
-      const destroyable = document as unknown as { destroy?: () => Promise<void> | void };
-      try {
-        await destroyable.destroy?.();
-      } catch {
-        // PDF.js can throw when the worker is already torn down; ignore.
-      }
+    try {
+      await loadingTask.destroy();
+    } catch {
+      // PDF.js can throw when the worker is already torn down; ignore.
     }
   }
 }
@@ -86,6 +85,5 @@ export class AbortError extends Error {
 }
 
 export function isAbortError(reason: unknown): boolean {
-  return reason instanceof AbortError
-    || (reason instanceof Error && reason.name === "AbortError");
+  return reason instanceof AbortError || (reason instanceof Error && reason.name === "AbortError");
 }

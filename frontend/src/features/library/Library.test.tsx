@@ -6,7 +6,9 @@ import { Library } from "./Library";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
-  return renderBase(ui, { wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider> });
+  return renderBase(ui, {
+    wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider>,
+  });
 }
 
 const availableBook: BookSummary = {
@@ -51,7 +53,10 @@ describe("Library", () => {
     render(<Library {...defaultProps} books={[availableBook]} onOpen={onOpen} />);
 
     expect(screen.getByText("50 / 200ページ")).toBeTruthy();
-    expect(screen.getByRole("presentation")).toHaveProperty("src", expect.stringContaining("/cover/1"));
+    expect(screen.getByRole("presentation")).toHaveProperty(
+      "src",
+      expect.stringContaining("/cover/1"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideを開く" }));
     expect(onOpen).toHaveBeenCalledWith(availableBook);
   });
@@ -68,7 +73,10 @@ describe("Library", () => {
     render(<Library {...defaultProps} books={[missing]} onRelink={onRelink} />);
 
     expect(screen.getByText("ファイルが見つかりません")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Systems Guideを開く" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Systems Guideを開く" })).toHaveProperty(
+      "disabled",
+      true,
+    );
     fireEvent.click(screen.getByRole("button", { name: "再選択" }));
     expect(onRelink).toHaveBeenCalledWith(missing);
   });
@@ -88,7 +96,7 @@ describe("Library", () => {
     const titleButton = screen.getByRole("button", { name: "Systems Guideの名前を変更" });
     expect(titleButton).toHaveProperty("textContent", "Systems Guide");
     fireEvent.click(titleButton);
-    const input = screen.getByLabelText("Systems Guideの表示名") as HTMLInputElement;
+    const input = screen.getByLabelText<HTMLInputElement>("Systems Guideの表示名");
     expect(input.value).toBe("Systems Guide");
     fireEvent.change(input, { target: { value: "  Real Title  " } });
     fireEvent.submit(input.closest("form")!);
@@ -106,7 +114,7 @@ describe("Library", () => {
     expect(screen.queryByLabelText("Systems Guideの表示名")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideの名前を変更" }));
-    const input = screen.getByLabelText("Systems Guideの表示名") as HTMLInputElement;
+    const input = screen.getByLabelText<HTMLInputElement>("Systems Guideの表示名");
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.blur(input);
     expect(onRename).not.toHaveBeenCalled();
@@ -118,6 +126,9 @@ describe("Library", () => {
     expect(screen.getByRole("status")).toHaveProperty("textContent", "本棚を読み込んでいます…");
 
     rerender(<Library {...defaultProps} error="database error" />);
-    expect(screen.getByRole("alert")).toHaveProperty("textContent", expect.stringContaining("database error"));
+    expect(screen.getByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("database error"),
+    );
   });
 });

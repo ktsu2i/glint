@@ -61,7 +61,7 @@ describe("LibrarySearch", () => {
       />,
     );
 
-    const searchBox = screen.getByRole("searchbox") as HTMLInputElement;
+    const searchBox = screen.getByRole<HTMLInputElement>("searchbox");
     fireEvent.change(searchBox, { target: { value: "context builder" } });
     expect(onSearchInputChange).toHaveBeenCalledWith("context builder");
 
@@ -131,7 +131,9 @@ describe("LibrarySearch", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Systems Guideの7ページを開く" }) as HTMLButtonElement;
+    const button = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Systems Guideの7ページを開く",
+    });
     expect(button.disabled).toBe(true);
     expect(screen.getByText("ファイルが見つかりません")).toBeTruthy();
   });

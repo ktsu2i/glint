@@ -19,11 +19,7 @@ describe("normalizePageText", () => {
 
   it("normalizes missing strings, repeated spaces, and blank lines", () => {
     expect(
-      normalizePageText([
-        {},
-        { str: "  alpha   beta  ", hasEOL: true },
-        { str: "\n\n\n gamma" },
-      ]),
+      normalizePageText([{}, { str: "  alpha   beta  ", hasEOL: true }, { str: "\n\n\n gamma" }]),
     ).toBe("alpha beta\n\n gamma");
   });
 });

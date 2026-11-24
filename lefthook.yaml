@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://json.schemastore.org/lefthook.json
+# frontend/ の `pnpm install` 時に lefthook の postinstall で git hooks が install される。
+pre-commit:
+  parallel: true
+  jobs:
+    - name: forbid-yml
+      glob: "*.yml"
+      exclude:
+        # GitHub の自動 release note 設定はこの名前で置く必要がある。
+        - ".github/release.yml"
+      run: |
+        echo "Use the .yaml extension instead of .yml:"
+        printf '  %s\n' {staged_files}
+        exit 1
+
+    - name: oxlint
+      root: "frontend/"
+      glob: "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"
+      exclude:
+        - "frontend/wailsjs/**"
+      run: pnpm exec oxlint --type-aware --deny-warnings --report-unused-disable-directives --no-error-on-unmatched-pattern {staged_files}
+
+    - name: oxfmt
+      root: "frontend/"
+      exclude:
+        - "frontend/wailsjs/**"
+        - "frontend/pnpm-lock.yaml"
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      root: "frontend/"
+      glob: "*.{ts,tsx,mts,cts,mjs}"
+      run: pnpm typecheck

@@ -35,7 +35,7 @@ describe("syncDocumentTheme", () => {
     const cleanup = syncDocumentTheme("system", root, query);
 
     expect(root.dataset.theme).toBe("dark");
-    const listener = vi.mocked(query.addEventListener).mock.calls[0][1] as EventListener;
+    const listener = vi.mocked(query.addEventListener).mock.calls[0]![1] as EventListener;
     Object.defineProperty(query, "matches", { value: false });
     listener(new Event("change"));
     expect(root.dataset.theme).toBe("light");

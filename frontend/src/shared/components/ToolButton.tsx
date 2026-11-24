@@ -21,14 +21,7 @@ export function ToolButton({
       <Tooltip.Trigger
         className={`tool-button ${className}`.trim()}
         disabled={disabled}
-        render={(
-          <button
-            type="button"
-            aria-label={label}
-            disabled={disabled}
-            onClick={onClick}
-          />
-        )}
+        render={<button type="button" aria-label={label} disabled={disabled} onClick={onClick} />}
       >
         {children}
       </Tooltip.Trigger>

@@ -82,10 +82,7 @@ installUpsertMethods(WeakMap.prototype);
 // pdfjs iterates streams via `for await (const value of stream)`, which
 // requires `Symbol.asyncIterator` on ReadableStream — also missing in
 // Wails' WebKit.
-if (
-  typeof ReadableStream !== "undefined" &&
-  !(Symbol.asyncIterator in ReadableStream.prototype)
-) {
+if (typeof ReadableStream !== "undefined" && !(Symbol.asyncIterator in ReadableStream.prototype)) {
   Object.defineProperty(ReadableStream.prototype, Symbol.asyncIterator, {
     value: function asyncIterator<R>(
       this: ReadableStream<R>,
@@ -106,12 +103,12 @@ if (
           }
         },
         async return(value?: R) {
-          if (!preventCancel) {
+          if (preventCancel) {
+            reader.releaseLock();
+          } else {
             const cancelPromise = reader.cancel(value);
             reader.releaseLock();
             await cancelPromise;
-          } else {
-            reader.releaseLock();
           }
           return { value, done: true } as IteratorResult<R>;
         },

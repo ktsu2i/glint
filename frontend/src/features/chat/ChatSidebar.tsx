@@ -1,10 +1,11 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import type { SubmitEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowUp,
-  ChatCircleDots,
-  Stop,
-  TextAa,
-  X,
+  ArrowUpIcon,
+  ChatCircleDotsIcon,
+  StopIcon,
+  TextAaIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import Markdown from "react-markdown";
@@ -28,9 +29,12 @@ const OPENAI_COMPATIBLE_PREFIX = "openai_compatible:";
 function envVarNameForChat(providerId: string): string {
   const trimmed = providerId.trim();
   if (!trimmed) return "";
-  if (trimmed.startsWith(OPENAI_COMPATIBLE_PREFIX) && trimmed.length > OPENAI_COMPATIBLE_PREFIX.length) {
+  if (
+    trimmed.startsWith(OPENAI_COMPATIBLE_PREFIX) &&
+    trimmed.length > OPENAI_COMPATIBLE_PREFIX.length
+  ) {
     const slug = trimmed.slice(OPENAI_COMPATIBLE_PREFIX.length);
-    return `GLINT_OPENAI_COMPATIBLE_${slug.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+    return `GLINT_OPENAI_COMPATIBLE_${slug.toUpperCase().replaceAll("-", "_")}_API_KEY`;
   }
   return `GLINT_${trimmed.toUpperCase()}_API_KEY`;
 }
@@ -59,7 +63,12 @@ type ChatSidebarProps = {
   onOpenSettings?: () => void;
 };
 
-export function ChatSidebar({ context, selection = null, onClearSelection, onOpenSettings }: ChatSidebarProps) {
+export function ChatSidebar({
+  context,
+  selection = null,
+  onClearSelection,
+  onOpenSettings,
+}: ChatSidebarProps) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -79,7 +88,8 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
 
   const hasSelection = !!selection && selection.text.length > 0;
   const activeProvider: ProviderSettings | null =
-    llmConfig?.providers.find((provider) => provider.providerId === llmConfig.activeProviderId) ?? null;
+    llmConfig?.providers.find((provider) => provider.providerId === llmConfig.activeProviderId) ??
+    null;
   const providerConfigured = activeProvider?.configured ?? false;
 
   const refreshSettings = useCallback(async () => {
@@ -94,22 +104,26 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
     }
   }, [t]);
 
-  const handleSelectModel = useCallback(async (providerId: string, modelId: string) => {
-    if (switchingModel) return;
-    setSwitchingModel(true);
-    setSettingsError("");
-    try {
-      const next = await setActiveModel(providerId, modelId);
-      setLLMConfig(next);
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : t("chat.loadSettingsError");
-      setSettingsError(localizeBackendError(message, t));
-    } finally {
-      setSwitchingModel(false);
-    }
-  }, [switchingModel, t]);
+  const handleSelectModel = useCallback(
+    async (providerId: string, modelId: string) => {
+      if (switchingModel) return;
+      setSwitchingModel(true);
+      setSettingsError("");
+      try {
+        const next = await setActiveModel(providerId, modelId);
+        setLLMConfig(next);
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : t("chat.loadSettingsError");
+        setSettingsError(localizeBackendError(message, t));
+      } finally {
+        setSwitchingModel(false);
+      }
+    },
+    [switchingModel, t],
+  );
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- setState は await 後に行われる。
     void refreshSettings();
   }, [refreshSettings]);
 
@@ -162,7 +176,9 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
     try {
       await cancelChat(requestId);
     } catch (reason) {
-      setError(reason instanceof Error ? localizeBackendError(reason.message, t) : t("chat.cancelError"));
+      setError(
+        reason instanceof Error ? localizeBackendError(reason.message, t) : t("chat.cancelError"),
+      );
     }
   }, [t]);
 
@@ -181,9 +197,10 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- messages の更新を trigger に末尾へ scroll する。
   }, [messages]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedQuestion = question.trim();
     if (!normalizedQuestion || sending) {
@@ -210,8 +227,8 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
       },
     ]);
 
-    const contextPageNumber = hasSelection ? selection!.pageNumber : context.pageNumber;
-    const contextText = hasSelection ? trimChatContext(selection!.text) : "";
+    const contextPageNumber = hasSelection ? selection.pageNumber : context.pageNumber;
+    const contextText = hasSelection ? trimChatContext(selection.text) : "";
 
     if (hasSelection) {
       onClearSelection?.();
@@ -228,12 +245,14 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
     } catch (reason) {
       activeRequest.current = "";
       setSending(false);
-      setError(reason instanceof Error ? localizeBackendError(reason.message, t) : t("chat.sendError"));
+      setError(
+        reason instanceof Error ? localizeBackendError(reason.message, t) : t("chat.sendError"),
+      );
     }
   }
 
   const composerLabel = hasSelection
-    ? t("chat.attachSelection", { page: selection!.pageNumber })
+    ? t("chat.attachSelection", { page: selection.pageNumber })
     : t("chat.noContext");
 
   return (
@@ -241,7 +260,7 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
       <header className="chat-header">
         <div className="assistant-heading">
           <span className="assistant-icon" aria-hidden="true">
-            <ChatCircleDots size={17} weight="regular" />
+            <ChatCircleDotsIcon size={17} weight="regular" />
           </span>
           <div>
             <h2>{t("chat.assistant")}</h2>
@@ -251,33 +270,46 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
       </header>
 
       <div className="chat-settings-feedback" aria-live="polite">
-        {settingsError && <p className="chat-settings-error" role="alert">{settingsError}</p>}
+        {settingsError && (
+          <p className="chat-settings-error" role="alert">
+            {settingsError}
+          </p>
+        )}
       </div>
 
       <div className="message-list" aria-live="polite">
         {messages.map((message) => (
           <article key={message.id} className={`message message-${message.role}`}>
             <div className="message-meta">
-              <span className="message-author">{message.role === "assistant" ? "Glint" : t("chat.you")}</span>
+              <span className="message-author">
+                {message.role === "assistant" ? "Glint" : t("chat.you")}
+              </span>
               {message.role === "assistant" && <span className="message-rule" />}
             </div>
             {message.id === "welcome" ? (
               <p className="message-body">{t("chat.welcome")}</p>
             ) : (
               <>
-                {message.content && (message.role === "assistant" ? (
-                  <div className="message-body message-markdown">
-                    <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
-                  </div>
-                ) : (
-                  <p className="message-body">{message.content}</p>
-                ))}
+                {message.content &&
+                  (message.role === "assistant" ? (
+                    <div className="message-body message-markdown">
+                      <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+                    </div>
+                  ) : (
+                    <p className="message-body">{message.content}</p>
+                  ))}
                 {!message.content && message.responseState === "streaming" && (
-                  <p className="message-body"><span className="typing-indicator"><i /><i /><i /></span></p>
+                  <p className="message-body">
+                    <span className="typing-indicator">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </p>
                 )}
                 {message.responseState === "cancelled" && (
                   <div className="message-cancelled" role="status">
-                    <Stop size={11} weight="fill" aria-hidden="true" />
+                    <StopIcon size={11} weight="fill" aria-hidden="true" />
                     <span>{t("chat.responseCancelled")}</span>
                   </div>
                 )}
@@ -288,12 +320,15 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
         <div ref={messageEndRef} />
       </div>
 
-      <form className="chat-composer" onSubmit={handleSubmit}>
+      <form className="chat-composer" onSubmit={(event) => void handleSubmit(event)}>
         {hasSelection && (
-          <div className="context-chip" aria-label={t("chat.contextChipAria", { page: selection!.pageNumber })}>
+          <div
+            className="context-chip"
+            aria-label={t("chat.contextChipAria", { page: selection.pageNumber })}
+          >
             <div className="context-chip-meta">
-              <TextAa size={11} weight="regular" />
-              <span>{t("chat.selectionHeadline", { page: selection!.pageNumber })}</span>
+              <TextAaIcon size={11} weight="regular" />
+              <span>{t("chat.selectionHeadline", { page: selection.pageNumber })}</span>
             </div>
             {onClearSelection && (
               <button
@@ -303,13 +338,17 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
                 onClick={onClearSelection}
                 disabled={sending}
               >
-                <X size={10} weight="bold" />
+                <XIcon size={10} weight="bold" />
               </button>
             )}
-            <p className="context-chip-preview">{contextPreview(selection!.text, 160)}</p>
+            <p className="context-chip-preview">{contextPreview(selection.text, 160)}</p>
           </div>
         )}
-        {error && <p className="chat-error" role="alert">{error}</p>}
+        {error && (
+          <p className="chat-error" role="alert">
+            {error}
+          </p>
+        )}
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
@@ -317,11 +356,7 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
           rows={3}
           disabled={sending}
           onKeyDown={(event) => {
-            if (
-              event.key === "Enter"
-              && event.metaKey
-              && !event.nativeEvent.isComposing
-            ) {
+            if (event.key === "Enter" && event.metaKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }
@@ -340,22 +375,26 @@ export function ChatSidebar({ context, selection = null, onClearSelection, onOpe
               <span
                 className="composer-env-badge"
                 role="status"
-                title={t("chat.credentialFromEnv", { env: envVarNameForChat(activeProvider.providerId) })}
+                title={t("chat.credentialFromEnv", {
+                  env: envVarNameForChat(activeProvider.providerId),
+                })}
               >
                 env
               </span>
             )}
-            <span className="composer-context-label">{providerConfigured ? composerLabel : ""}</span>
+            <span className="composer-context-label">
+              {providerConfigured ? composerLabel : ""}
+            </span>
           </div>
           {sending ? (
             <button type="button" className="chat-cancel" onClick={() => void handleCancel()}>
               <span>{t("chat.cancel")}</span>
-              <Stop size={12} weight="fill" />
+              <StopIcon size={12} weight="fill" />
             </button>
           ) : (
             <button type="submit" disabled={!question.trim() || !providerConfigured}>
               <span>{t("chat.send")}</span>
-              <ArrowUp size={14} weight="bold" />
+              <ArrowUpIcon size={14} weight="bold" />
             </button>
           )}
         </div>
