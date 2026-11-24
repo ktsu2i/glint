@@ -9,7 +9,7 @@ import (
 )
 
 func TestAppearanceDefaultsToSystem(t *testing.T) {
-	manager, _, _ := newTestManager()
+	manager, _ := newTestManager()
 
 	settings, err := manager.GetAppearance(context.Background())
 
@@ -18,7 +18,7 @@ func TestAppearanceDefaultsToSystem(t *testing.T) {
 }
 
 func TestAppearancePersistsSupportedTheme(t *testing.T) {
-	manager, store, _ := newTestManager()
+	manager, store := newTestManager()
 
 	saved, err := manager.SaveAppearance(context.Background(), SaveAppearanceSettingsRequest{Theme: ThemeDark})
 
@@ -32,7 +32,7 @@ func TestAppearancePersistsSupportedTheme(t *testing.T) {
 }
 
 func TestAppearanceRejectsUnsupportedTheme(t *testing.T) {
-	manager, store, _ := newTestManager()
+	manager, store := newTestManager()
 
 	_, err := manager.SaveAppearance(context.Background(), SaveAppearanceSettingsRequest{Theme: "sepia"})
 
@@ -41,7 +41,7 @@ func TestAppearanceRejectsUnsupportedTheme(t *testing.T) {
 }
 
 func TestAppearanceRejectsInvalidPersistedTheme(t *testing.T) {
-	manager, store, _ := newTestManager()
+	manager, store := newTestManager()
 	store.values[appearanceThemeSettingKey] = "sepia"
 
 	_, err := manager.GetAppearance(context.Background())

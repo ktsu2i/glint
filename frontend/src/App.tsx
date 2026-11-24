@@ -1,28 +1,19 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import {
   BookOpenTextIcon,
   BooksIcon,
   GearSixIcon,
   MagnifyingGlassIcon,
-  SidebarSimpleIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
-import { ChatSidebar } from "./features/chat/ChatSidebar";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
 import { Library } from "./features/library/Library";
 import { LibrarySearch, type LibrarySearchStatus } from "./features/library/LibrarySearch";
 import { EpubReaderPlaceholder } from "./features/reader/EpubReaderPlaceholder";
-import { PdfReader, type ReaderSelection } from "./features/reader/PdfReader";
-import { LLMSettingsPage } from "./features/settings/LLMSettingsPage";
+import { PdfReader } from "./features/reader/PdfReader";
+import { SettingsPage } from "./features/settings/SettingsPage";
 import { syncDocumentTheme } from "./features/settings/theme";
 import { I18nProvider } from "./shared/i18n/i18n";
 import {
@@ -44,11 +35,6 @@ import {
   type ThemePreference,
 } from "./shared/api/backend";
 
-type PageContext = {
-  pageNumber: number;
-  text: string;
-};
-
 function AppContent() {
   const { t } = useTranslation();
   const [view, setView] = useState<"library" | "search" | "reader" | "settings">("library");
@@ -60,14 +46,11 @@ function AppContent() {
   const [libraryError, setLibraryError] = useState("");
   const [busyBookId, setBusyBookId] = useState("");
   const [book, setBook] = useState<BookFile | null>(null);
-  const [pageContext, setPageContext] = useState<PageContext>({ pageNumber: 0, text: "" });
-  const [selection, setSelection] = useState<ReaderSelection | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
   const [opening, setOpening] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>("system");
   const [themeLoading, setThemeLoading] = useState(true);
   const [themeError, setThemeError] = useState("");
-  const [assistantWidth, setAssistantWidth] = useState(390);
-  const [assistantVisible, setAssistantVisible] = useState(true);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LibrarySearchHit[]>([]);
@@ -75,7 +58,6 @@ function AppContent() {
   const [searchError, setSearchError] = useState("");
   const indexAbortersRef = useRef<Map<string, AbortController>>(new Map());
   const searchRequestRef = useRef(0);
-  const resizeState = useRef<{ startX: number; startWidth: number } | null>(null);
   const generatingCovers = useRef(new Set<string>());
   const lastSavedPosition = useRef("");
 
@@ -213,8 +195,7 @@ function AppContent() {
   const showReader = useCallback(
     (selected: BookFile) => {
       lastSavedPosition.current = "";
-      setPageContext({ pageNumber: 0, text: "" });
-      setSelection(null);
+      setCurrentPage(0);
       setBook(selected);
       setView("reader");
       if (selected.format !== "epub") {
@@ -224,10 +205,6 @@ function AppContent() {
     },
     [ensureCover, ensureBookIndexed],
   );
-
-  const handleSelectionChange = useCallback((next: ReaderSelection | null) => {
-    setSelection(next);
-  }, []);
 
   async function handleImportPDF() {
     setOpening(true);
@@ -364,8 +341,8 @@ function AppContent() {
   }
 
   const handlePageContextChange = useCallback(
-    (pageNumber: number, text: string, pageCount: number) => {
-      setPageContext({ pageNumber, text });
+    (pageNumber: number, _text: string, pageCount: number) => {
+      setCurrentPage(pageNumber);
       if (!book || pageNumber < 1 || pageCount < 1) {
         return;
       }
@@ -381,49 +358,18 @@ function AppContent() {
     [book, t],
   );
 
-  useEffect(() => {
-    function handlePointerMove(event: PointerEvent) {
-      if (!resizeState.current) {
-        return;
-      }
-      const nextWidth = resizeState.current.startWidth + resizeState.current.startX - event.clientX;
-      setAssistantWidth(Math.min(520, Math.max(328, nextWidth)));
-    }
-    function handlePointerUp() {
-      if (!resizeState.current) {
-        return;
-      }
-      resizeState.current = null;
-      document.body.classList.remove("is-resizing");
-    }
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, []);
-
-  const workspaceStyle: CSSProperties = { "--assistant-width": `${assistantWidth}px` };
-
-  const toggleAssistant = useCallback(() => {
-    setAssistantVisible((visible) => !visible);
-  }, []);
-
   const openSettings = useCallback(() => {
     if (view === "settings") {
       return;
     }
     const returnView: "library" | "search" | "reader" =
       view === "reader" && book ? "reader" : view === "search" ? "search" : "library";
-    if (returnView === "reader" && pageContext.pageNumber > 0) {
-      setBook((current) =>
-        current ? { ...current, initialPage: pageContext.pageNumber } : current,
-      );
+    if (returnView === "reader" && currentPage > 0) {
+      setBook((current) => (current ? { ...current, initialPage: currentPage } : current));
     }
     setSettingsReturnView(returnView);
     setView("settings");
-  }, [book, pageContext.pageNumber, view]);
+  }, [book, currentPage, view]);
 
   const closeSettings = useCallback(() => {
     if (settingsReturnView === "reader" && book) {
@@ -446,13 +392,11 @@ function AppContent() {
     if (!book) {
       return;
     }
-    if (pageContext.pageNumber > 0) {
-      setBook((current) =>
-        current ? { ...current, initialPage: pageContext.pageNumber } : current,
-      );
+    if (currentPage > 0) {
+      setBook((current) => (current ? { ...current, initialPage: currentPage } : current));
     }
     setView("reader");
-  }, [book, pageContext.pageNumber]);
+  }, [book, currentPage]);
 
   const contextLabel =
     view === "reader" && book
@@ -483,20 +427,6 @@ function AppContent() {
               <span>{contextLabel}</span>
             </span>
           </div>
-          {view === "reader" && book && (
-            <div className="app-toolbar-trailing">
-              <button
-                type="button"
-                className={assistantVisible ? "app-toolbar-toggle is-active" : "app-toolbar-toggle"}
-                aria-pressed={assistantVisible}
-                aria-label={assistantVisible ? t("app.hideAssistant") : t("app.showAssistant")}
-                title={assistantVisible ? t("app.hideAssistant") : t("app.showAssistant")}
-                onClick={toggleAssistant}
-              >
-                <SidebarSimpleIcon size={16} weight={assistantVisible ? "fill" : "regular"} />
-              </button>
-            </div>
-          )}
         </header>
 
         <div className="app-body">
@@ -533,14 +463,14 @@ function AppContent() {
             </nav>
 
             <div className="app-navigation-secondary">
-              {book && pageContext.pageNumber > 0 && (
+              {book && currentPage > 0 && (
                 <div
                   className="nav-reading-position"
-                  aria-label={t("app.pageLabel", { page: pageContext.pageNumber })}
+                  aria-label={t("app.pageLabel", { page: currentPage })}
                 >
                   <span>{t("app.page").toUpperCase()}</span>
                   <i aria-hidden="true" />
-                  <strong>{String(pageContext.pageNumber).padStart(3, "0")}</strong>
+                  <strong>{String(currentPage).padStart(3, "0")}</strong>
                 </div>
               )}
               <button
@@ -557,7 +487,7 @@ function AppContent() {
 
           <div className="app-content">
             {view === "settings" ? (
-              <LLMSettingsPage
+              <SettingsPage
                 onBack={closeSettings}
                 theme={theme}
                 themeLoading={themeLoading}
@@ -591,57 +521,15 @@ function AppContent() {
                 onOpenAtPage={handleOpenBookAtPage}
               />
             ) : (
-              <div
-                className={assistantVisible ? "workspace" : "workspace is-assistant-hidden"}
-                style={workspaceStyle}
-              >
+              <div className="workspace">
                 {book?.format === "epub" ? (
                   <EpubReaderPlaceholder book={book} />
                 ) : (
                   <PdfReader
                     book={book}
                     initialPage={book?.initialPage ?? 1}
-                    selection={selection}
                     onPageContextChange={handlePageContextChange}
-                    onSelectionChange={handleSelectionChange}
                   />
-                )}
-
-                {assistantVisible && (
-                  <>
-                    <div
-                      className="panel-resizer"
-                      role="separator"
-                      aria-label={t("app.resizeAssistant")}
-                      aria-orientation="vertical"
-                      aria-valuemin={328}
-                      aria-valuemax={520}
-                      aria-valuenow={Math.round(assistantWidth)}
-                      tabIndex={0}
-                      onPointerDown={(event) => {
-                        resizeState.current = { startX: event.clientX, startWidth: assistantWidth };
-                        document.body.classList.add("is-resizing");
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "ArrowLeft")
-                          setAssistantWidth((width) => Math.min(520, width + 12));
-                        if (event.key === "ArrowRight")
-                          setAssistantWidth((width) => Math.max(328, width - 12));
-                      }}
-                    >
-                      <span />
-                    </div>
-
-                    <ChatSidebar
-                      context={{
-                        bookName: book?.title ?? "",
-                        pageNumber: pageContext.pageNumber,
-                      }}
-                      selection={selection}
-                      onClearSelection={() => setSelection(null)}
-                      onOpenSettings={openSettings}
-                    />
-                  </>
                 )}
               </div>
             )}

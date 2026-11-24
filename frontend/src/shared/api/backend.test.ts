@@ -19,15 +19,7 @@ const bindings = vi.hoisted(() => ({
   searchBook: vi.fn(),
   searchLibrary: vi.fn(),
   getAppearanceSettings: vi.fn(),
-  getLLMConfig: vi.fn(),
   saveAppearanceSettings: vi.fn(),
-  upsertProviderSettings: vi.fn(),
-  deleteProviderSettings: vi.fn(),
-  setActiveProvider: vi.fn(),
-  testProviderConnection: vi.fn(),
-  startChat: vi.fn(),
-  eventsOn: vi.fn(),
-  eventsOff: vi.fn(),
 }));
 
 vi.mock("../../../wailsjs/go/books/Service", () => ({
@@ -50,34 +42,17 @@ vi.mock("../../../wailsjs/go/books/Service", () => ({
   SearchLibrary: bindings.searchLibrary,
 }));
 
-vi.mock("../../../wailsjs/go/chat/Service", () => ({
-  StartChat: bindings.startChat,
-}));
-
 vi.mock("../../../wailsjs/go/settings/Service", () => ({
   GetAppearanceSettings: bindings.getAppearanceSettings,
-  GetLLMConfig: bindings.getLLMConfig,
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
-  UpsertProviderSettings: bindings.upsertProviderSettings,
-  DeleteProviderSettings: bindings.deleteProviderSettings,
-  SetActiveProvider: bindings.setActiveProvider,
-  TestProviderConnection: bindings.testProviderConnection,
-}));
-
-vi.mock("../../../wailsjs/runtime/runtime", () => ({
-  EventsOn: bindings.eventsOn,
-  EventsOff: bindings.eventsOff,
 }));
 
 import {
   addBookmark,
-  deleteProviderSettings,
   getAppearanceSettings,
-  getLLMConfig,
   listBooks,
   listBookmarks,
   markBookCoverFailed,
-  onAnswerDelta,
   openBook,
   openPDF,
   relinkPDF,
@@ -90,10 +65,6 @@ import {
   saveReadingPosition,
   searchBook,
   searchLibrary,
-  setActiveProvider,
-  startChat,
-  testProviderConnection,
-  upsertProviderSettings,
 } from "./backend";
 
 beforeEach(() => {
@@ -101,7 +72,7 @@ beforeEach(() => {
 });
 
 describe("backend facade", () => {
-  it("delegates PDF selection and chat requests to Wails bindings", async () => {
+  it("delegates PDF selection to Wails bindings", async () => {
     const book = {
       id: "book-1",
       title: "Book",
@@ -111,69 +82,9 @@ describe("backend facade", () => {
       initialPage: 1,
       coverStatus: "ready",
     };
-    const request = {
-      requestId: "request-1",
-      question: "why?",
-      contextText: "context",
-      bookName: book.name,
-      pageNumber: 2,
-    };
     bindings.openPDF.mockResolvedValue(book);
-    bindings.startChat.mockResolvedValue(undefined);
 
     await expect(openPDF()).resolves.toEqual(book);
-    await expect(startChat(request)).resolves.toBeUndefined();
-    expect(bindings.startChat).toHaveBeenCalledWith(request);
-  });
-
-  it("delegates LLM config without exposing credential implementation", async () => {
-    const config = {
-      activeProviderId: "openrouter",
-      providers: [
-        {
-          providerId: "openrouter",
-          model: "provider/model",
-          options: { zdr: true },
-          hasApiKey: true,
-          configured: true,
-          isActive: true,
-        },
-      ],
-      catalog: [
-        {
-          id: "openrouter",
-          displayName: "OpenRouter",
-          authKind: "bearer",
-          optionSchema: [],
-          capabilities: { streaming: true, tools: false, images: false },
-        },
-      ],
-    };
-    const upsertRequest = {
-      providerId: "openrouter",
-      model: "provider/model",
-      options: { zdr: true },
-      apiKey: "new-key",
-      activate: true,
-    };
-    bindings.getLLMConfig.mockResolvedValue(config);
-    bindings.upsertProviderSettings.mockResolvedValue(config);
-    bindings.deleteProviderSettings.mockResolvedValue(config);
-    bindings.setActiveProvider.mockResolvedValue(config);
-    bindings.testProviderConnection.mockResolvedValue({ providerId: "openrouter", ok: true });
-
-    await expect(getLLMConfig()).resolves.toEqual(config);
-    await expect(upsertProviderSettings(upsertRequest)).resolves.toEqual(config);
-    expect(bindings.upsertProviderSettings).toHaveBeenCalledWith(upsertRequest);
-    await expect(deleteProviderSettings("openrouter")).resolves.toEqual(config);
-    expect(bindings.deleteProviderSettings).toHaveBeenCalledWith("openrouter");
-    await expect(setActiveProvider("openrouter")).resolves.toEqual(config);
-    expect(bindings.setActiveProvider).toHaveBeenCalledWith("openrouter");
-    await expect(testProviderConnection("openrouter")).resolves.toEqual({
-      providerId: "openrouter",
-      ok: true,
-    });
-    expect(bindings.testProviderConnection).toHaveBeenCalledWith("openrouter");
   });
 
   it("delegates appearance settings through a typed theme contract", async () => {
@@ -259,14 +170,5 @@ describe("backend facade", () => {
     expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
     expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
     expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");
-  });
-
-  it("registers and unregisters answer delta listeners", () => {
-    const callback = vi.fn();
-    const unsubscribe = onAnswerDelta(callback);
-
-    expect(bindings.eventsOn).toHaveBeenCalledWith("chat:delta", callback);
-    unsubscribe();
-    expect(bindings.eventsOff).toHaveBeenCalledWith("chat:delta");
   });
 });

@@ -10,7 +10,6 @@ import (
 
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/books"
-	"github.com/kaito/glint/internal/chat"
 	"github.com/kaito/glint/internal/library"
 	"github.com/kaito/glint/internal/settings"
 	"github.com/kaito/glint/internal/update"
@@ -36,10 +35,9 @@ func main() {
 	defer func() { _ = store.Close() }()
 
 	assetSrv := assetserver.New()
-	settingsManager := settings.NewManager(store, settings.KeyringStore{})
+	settingsManager := settings.NewManager(store)
 	booksSvc := books.New(store, assetSrv, dataDirectory, settingsManager)
 	settingsSvc := settings.NewService(settingsManager)
-	chatSvc := chat.NewConfigured(settingsManager)
 
 	err = wails.Run(&options.App{
 		Title:     "Glint",
@@ -59,13 +57,11 @@ func main() {
 		},
 		OnStartup: func(ctx context.Context) {
 			books.Startup(booksSvc, ctx)
-			chat.Startup(chatSvc, ctx)
 			settings.Startup(settingsSvc, ctx)
 			update.Start()
 		},
 		Bind: []any{
 			booksSvc,
-			chatSvc,
 			settingsSvc,
 		},
 	})

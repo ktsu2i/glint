@@ -18,69 +18,6 @@ func Startup(service *Service, ctx context.Context) {
 	service.ctx = ctx
 }
 
-func (service *Service) GetLLMConfig() (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.GetLLMConfig(service.ctx)
-}
-
-func (service *Service) UpsertProviderSettings(request UpsertProviderRequest) (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.UpsertProviderSettings(service.ctx, request)
-}
-
-func (service *Service) DeleteProviderSettings(providerID string) (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.DeleteProviderSettings(service.ctx, providerID)
-}
-
-func (service *Service) SetActiveProvider(providerID string) (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.SetActiveProvider(service.ctx, providerID)
-}
-
-func (service *Service) SetActiveModel(providerID, modelID string) (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.SetActiveModel(service.ctx, providerID, modelID)
-}
-
-func (service *Service) ListProviderModels(providerID string, force bool) (ModelListingResult, error) {
-	if service.ctx == nil {
-		return ModelListingResult{}, errors.New("application is not ready")
-	}
-	return service.manager.ListProviderModels(service.ctx, providerID, force)
-}
-
-func (service *Service) AddCustomModel(providerID, modelID string) (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.AddCustomModel(service.ctx, providerID, modelID)
-}
-
-func (service *Service) RemoveCustomModel(providerID, modelID string) (LLMConfig, error) {
-	if service.ctx == nil {
-		return LLMConfig{}, errors.New("application is not ready")
-	}
-	return service.manager.RemoveCustomModel(service.ctx, providerID, modelID)
-}
-
-func (service *Service) TestProviderConnection(providerID string) (TestProviderConnectionResult, error) {
-	if service.ctx == nil {
-		return TestProviderConnectionResult{}, errors.New("application is not ready")
-	}
-	return service.manager.TestProviderConnection(service.ctx, providerID)
-}
-
 func (service *Service) GetAppearanceSettings() (AppearanceSettings, error) {
 	if service.ctx == nil {
 		return AppearanceSettings{}, errors.New("application is not ready")

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -82,49 +82,21 @@ function persistBindingDirection(bookId: string | undefined, direction: BindingD
   window.localStorage.setItem(`${bindingDirectionStorageKey}.${bookId}`, direction);
 }
 
-export type ReaderSelection = {
-  text: string;
-  pageNumber: number;
-  startOffset: number;
-  endOffset: number;
-};
-
-type HighlightRect = {
-  pageNumber: number;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
-
 type PdfReaderProps = {
   book: BookFile | null;
   initialPage?: number;
-  selection?: ReaderSelection | null;
   onPageContextChange: (pageNumber: number, text: string, pageCount: number) => void;
-  onSelectionChange?: (selection: ReaderSelection | null) => void;
 };
 
-export function PdfReader({
-  book,
-  initialPage = 1,
-  selection = null,
-  onPageContextChange,
-  onSelectionChange,
-}: PdfReaderProps) {
+export function PdfReader({ book, initialPage = 1, onPageContextChange }: PdfReaderProps) {
   const { t, i18n } = useTranslation();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
   const textLayerLeftRef = useRef<HTMLDivElement>(null);
   const textLayerRightRef = useRef<HTMLDivElement>(null);
   const stageObserverRef = useRef<ResizeObserver | null>(null);
-  const selectionCallbackRef = useRef(onSelectionChange);
   const pageContextCallbackRef = useRef(onPageContextChange);
-  const selectionChangedSincePointerDownRef = useRef(false);
 
-  useEffect(() => {
-    selectionCallbackRef.current = onSelectionChange;
-  }, [onSelectionChange]);
   useEffect(() => {
     pageContextCallbackRef.current = onPageContextChange;
   }, [onPageContextChange]);
@@ -153,8 +125,6 @@ export function PdfReader({
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
   const [bookmarkBusyPage, setBookmarkBusyPage] = useState<number | null>(null);
   const [bookmarkError, setBookmarkError] = useState("");
-  const [textLayerRevision, setTextLayerRevision] = useState(0);
-  const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   const [isReadingAloud, setIsReadingAloud] = useState(false);
   const [readableText, setReadableText] = useState<{
     pageNumber: number;
@@ -590,7 +560,6 @@ export function PdfReader({
           return;
         }
       }
-      setTextLayerRevision((revision) => revision + 1);
     }
 
     renderPages().catch((reason: unknown) => {
@@ -605,100 +574,6 @@ export function PdfReader({
       textLayers.forEach((layer) => layer.cancel());
     };
   }, [document, pageNumber, stageSize, t, viewMode, zoomMode]);
-
-  useEffect(() => {
-    function handleSelectionChange() {
-      const emit = selectionCallbackRef.current;
-      if (!emit) {
-        return;
-      }
-      const domSelection = window.getSelection();
-      if (!domSelection || domSelection.isCollapsed) {
-        return;
-      }
-      const anchorParent =
-        domSelection.anchorNode instanceof Element
-          ? domSelection.anchorNode
-          : (domSelection.anchorNode?.parentElement ?? null);
-      const focusParent =
-        domSelection.focusNode instanceof Element
-          ? domSelection.focusNode
-          : (domSelection.focusNode?.parentElement ?? null);
-      const anchorLayer = anchorParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
-      const focusLayer = focusParent?.closest<HTMLElement>(".text-layer[data-page]") ?? null;
-      if (!anchorLayer || anchorLayer !== focusLayer) {
-        return;
-      }
-      const sourcePage = Number(anchorLayer.dataset.page);
-      const range = domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null;
-      if (
-        !range ||
-        !anchorLayer.contains(range.startContainer) ||
-        !anchorLayer.contains(range.endContainer)
-      ) {
-        return;
-      }
-      const rawText = range.toString();
-      const text = rawText.trim();
-      if (!text || !Number.isFinite(sourcePage) || sourcePage < 1) {
-        return;
-      }
-      const rawStartOffset = getTextOffset(anchorLayer, range.startContainer, range.startOffset);
-      const rawEndOffset = getTextOffset(anchorLayer, range.endContainer, range.endOffset);
-      const leadingWhitespace = rawText.length - rawText.trimStart().length;
-      const trailingWhitespace = rawText.length - rawText.trimEnd().length;
-      emit({
-        text,
-        pageNumber: sourcePage,
-        startOffset: rawStartOffset + leadingWhitespace,
-        endOffset: rawEndOffset - trailingWhitespace,
-      });
-      selectionChangedSincePointerDownRef.current = true;
-    }
-
-    function handlePointerDown() {
-      selectionChangedSincePointerDownRef.current = false;
-    }
-
-    function handleDocumentClick(event: MouseEvent) {
-      const target = event.target;
-      if (!(target instanceof Element) || target.closest(".chat-sidebar")) {
-        return;
-      }
-      if (selectionChangedSincePointerDownRef.current) {
-        selectionChangedSincePointerDownRef.current = false;
-        return;
-      }
-      selectionCallbackRef.current?.(null);
-    }
-
-    window.document.addEventListener("selectionchange", handleSelectionChange);
-    window.document.addEventListener("pointerdown", handlePointerDown);
-    window.document.addEventListener("click", handleDocumentClick);
-    return () => {
-      window.document.removeEventListener("selectionchange", handleSelectionChange);
-      window.document.removeEventListener("pointerdown", handlePointerDown);
-      window.document.removeEventListener("click", handleDocumentClick);
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!selection) {
-      setHighlightRects([]);
-      return;
-    }
-
-    const layers = [textLayerLeftRef.current, textLayerRightRef.current].filter(
-      (layer): layer is HTMLDivElement =>
-        !!layer && Number(layer.dataset.page) === selection.pageNumber,
-    );
-    const rects = layers.flatMap((layer) => getSelectionHighlightRects(layer, selection));
-    setHighlightRects(rects);
-  }, [selection, textLayerRevision]);
-
-  useEffect(() => {
-    selectionCallbackRef.current?.(null);
-  }, [pageNumber]);
 
   useEffect(() => {
     isReadingAloudRef.current = isReadingAloud;
@@ -1311,7 +1186,6 @@ export function PdfReader({
                 className="pdf-canvas"
                 aria-label={t("app.pageLabel", { page: pageNumber })}
               />
-              <SelectionHighlight pageNumber={pageNumber} rects={highlightRects} />
               <div
                 ref={textLayerLeftRef}
                 className="text-layer"
@@ -1326,7 +1200,6 @@ export function PdfReader({
                   className="pdf-canvas"
                   aria-label={t("app.pageLabel", { page: rightPageNumber })}
                 />
-                <SelectionHighlight pageNumber={rightPageNumber} rects={highlightRects} />
                 <div
                   ref={textLayerRightRef}
                   className="text-layer"
@@ -1411,109 +1284,6 @@ function pickVoiceForLang(
   }
   const sameLanguage = voices.find((voice) => voice.lang.toLowerCase().startsWith(prefix));
   return sameLanguage ?? null;
-}
-
-function getTextOffset(root: HTMLElement, node: Node, offset: number): number {
-  const range = root.ownerDocument.createRange();
-  range.selectNodeContents(root);
-  range.setEnd(node, offset);
-  return range.toString().length;
-}
-
-function getTextBoundary(
-  root: HTMLElement,
-  targetOffset: number,
-): { node: Text; offset: number } | null {
-  const showText = root.ownerDocument.defaultView?.NodeFilter.SHOW_TEXT ?? 4;
-  const walker = root.ownerDocument.createTreeWalker(root, showText);
-  let consumed = 0;
-  let lastTextNode: Text | null = null;
-
-  while (walker.nextNode()) {
-    const textNode = walker.currentNode;
-    if (!(textNode instanceof Text)) {
-      continue;
-    }
-    const nextOffset = consumed + textNode.data.length;
-    if (targetOffset <= nextOffset) {
-      return { node: textNode, offset: Math.max(0, targetOffset - consumed) };
-    }
-    consumed = nextOffset;
-    lastTextNode = textNode;
-  }
-
-  return targetOffset === consumed && lastTextNode
-    ? { node: lastTextNode, offset: lastTextNode.data.length }
-    : null;
-}
-
-function getSelectionHighlightRects(
-  layer: HTMLElement,
-  selection: ReaderSelection,
-): HighlightRect[] {
-  const start = getTextBoundary(layer, selection.startOffset);
-  const end = getTextBoundary(layer, selection.endOffset);
-  if (!start || !end) {
-    return [];
-  }
-
-  const range = layer.ownerDocument.createRange();
-  range.setStart(start.node, start.offset);
-  range.setEnd(end.node, end.offset);
-  if (range.toString().trim() !== selection.text) {
-    return [];
-  }
-
-  const layerRect = layer.getBoundingClientRect();
-  const rawRects = Array.from(range.getClientRects())
-    .filter((rect) => rect.width > 0 && rect.height > 0)
-    .map((rect) => ({
-      pageNumber: selection.pageNumber,
-      left: rect.left - layerRect.left,
-      top: rect.top - layerRect.top,
-      width: rect.width,
-      height: rect.height,
-    }))
-    .toSorted((a, b) => a.top - b.top || a.left - b.left);
-
-  return rawRects.reduce<HighlightRect[]>((merged, rect) => {
-    const previous = merged.at(-1);
-    const sameLine =
-      previous !== undefined &&
-      Math.abs(previous.top - rect.top) <= 2 &&
-      Math.abs(previous.height - rect.height) <= 3;
-    const touchesPrevious =
-      previous !== undefined && rect.left <= previous.left + previous.width + 3;
-    if (previous && sameLine && touchesPrevious) {
-      previous.width =
-        Math.max(previous.left + previous.width, rect.left + rect.width) - previous.left;
-      previous.height = Math.max(previous.height, rect.height);
-      return merged;
-    }
-    merged.push(rect);
-    return merged;
-  }, []);
-}
-
-function SelectionHighlight({ pageNumber, rects }: { pageNumber: number; rects: HighlightRect[] }) {
-  const pageRects = rects.filter((rect) => rect.pageNumber === pageNumber);
-  return (
-    <div className="context-highlight-layer" aria-hidden="true">
-      {pageRects.map((rect, index) => (
-        <span
-          // oxlint-disable-next-line react/no-array-index-key -- 同一座標の rect が重なり得るため index を併用する。
-          key={`${rect.left}-${rect.top}-${index}`}
-          className="context-highlight-segment"
-          style={{
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height,
-          }}
-        />
-      ))}
-    </div>
-  );
 }
 
 type OutlineListProps = {
