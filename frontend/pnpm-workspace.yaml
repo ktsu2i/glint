@@ -1,9 +1,7 @@
 strictDepBuilds: true
 
 # 依存 package の lifecycle script は、必要性を確認してから個別に許可する。
-allowBuilds:
-  # postinstall で git hooks (lefthook.yaml) を install する。
-  lefthook: true
+allowBuilds: {}
 
 trustPolicy: no-downgrade
 blockExoticSubdeps: true

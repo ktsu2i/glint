@@ -154,7 +154,7 @@ pnpm test
 pnpm run build
 ```
 
-Run all frontend static checks (type check, oxlint, oxfmt, knip) at once. `pnpm install` also installs a lefthook pre-commit hook that lints and formats staged files.
+Run all frontend static checks (type check, oxlint, oxfmt, knip) at once.
 
 ```bash
 cd frontend

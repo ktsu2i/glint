@@ -154,7 +154,7 @@ pnpm test
 pnpm run build
 ```
 
-frontend の静的チェック (型検査、oxlint、oxfmt、knip) はまとめて実行できます。`pnpm install` 時に lefthook の pre-commit hook も入り、commit 前に lint と format が走ります。
+frontend の静的チェック (型検査、oxlint、oxfmt、knip) はまとめて実行できます。
 
 ```bash
 cd frontend
