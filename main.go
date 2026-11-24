@@ -14,6 +14,7 @@ import (
 	wailsassetserver "github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 
+	"github.com/kaito/glint/internal/app"
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/books"
 	"github.com/kaito/glint/internal/library"
@@ -40,8 +41,8 @@ func run() error {
 
 	assetSrv := assetserver.New()
 	settingsManager := settings.NewManager(store)
-	booksSvc := books.New(store, assetSrv, dataDirectory, settingsManager)
-	settingsSvc := settings.NewService(settingsManager)
+	booksSvc := app.NewBooksService(books.New(store, dataDirectory), assetSrv, settingsManager)
+	settingsSvc := app.NewSettingsService(settingsManager)
 
 	return wails.Run(&options.App{
 		Title:     "Glint",
@@ -63,8 +64,7 @@ func run() error {
 			if err := store.Connect(); err != nil {
 				log.Fatal(err)
 			}
-			books.Startup(booksSvc, ctx)
-			settings.Startup(settingsSvc, ctx)
+			app.Startup(ctx, booksSvc, settingsSvc)
 			update.Start()
 		},
 		Bind: []any{

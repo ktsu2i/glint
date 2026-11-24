@@ -15,13 +15,13 @@ import {
   SaveReadingPosition,
   SearchBook,
   SearchLibrary,
-} from "../../../wailsjs/go/books/Service";
+} from "../../../wailsjs/go/app/BooksService";
 import {
   GetAppearanceSettings,
   GetLanguageSettings,
   SaveAppearanceSettings,
   SaveLanguageSettings,
-} from "../../../wailsjs/go/settings/Service";
+} from "../../../wailsjs/go/app/SettingsService";
 
 export type BookFormat = "pdf" | "epub";
 

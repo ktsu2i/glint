@@ -2,7 +2,7 @@ package books
 
 import (
 	"archive/zip"
-	"encoding/base64"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -15,23 +15,21 @@ import (
 
 const maxCoverBytes = 4 << 20
 
-func (s *Service) SaveBookCover(bookID, dataURL string) error {
-	const prefix = "data:image/png;base64,"
-	if len(dataURL) < len(prefix) || dataURL[:len(prefix)] != prefix {
-		return errors.New("cover must be a PNG data URL")
+// MaxCoverBytes caps the size of a cover image rendered by the frontend.
+const MaxCoverBytes = maxCoverBytes
+
+// ErrInvalidCover reports cover image data that is not an acceptable PNG.
+var ErrInvalidCover = errors.New("cover image must be a PNG")
+
+// SaveCover stores a PNG cover rendered by the frontend.
+func (s *Service) SaveCover(ctx context.Context, bookID string, png []byte) error {
+	if len(png) > maxCoverBytes {
+		return fmt.Errorf("%w: image is too large", ErrInvalidCover)
 	}
-	encoded := dataURL[len(prefix):]
-	if base64.StdEncoding.DecodedLen(len(encoded)) > maxCoverBytes {
-		return errors.New("cover image is too large")
+	if len(png) < 8 || string(png[:8]) != "\x89PNG\r\n\x1a\n" {
+		return ErrInvalidCover
 	}
-	content, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return fmt.Errorf("decode cover image: %w", err)
-	}
-	if len(content) < 8 || string(content[:8]) != "\x89PNG\r\n\x1a\n" {
-		return errors.New("cover image is not a PNG")
-	}
-	book, err := s.library.Get(s.appContext(), bookID)
+	book, err := s.library.Get(ctx, bookID)
 	if err != nil {
 		return err
 	}
@@ -45,21 +43,21 @@ func (s *Service) SaveBookCover(bookID, dataURL string) error {
 	}
 	path := filepath.Join(coverDirectory, book.ID+"-"+hashPart+".png")
 	temporaryPath := path + ".tmp"
-	if err := os.WriteFile(temporaryPath, content, 0o600); err != nil {
+	if err := os.WriteFile(temporaryPath, png, 0o600); err != nil {
 		return fmt.Errorf("write cover image: %w", err)
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
 		_ = os.Remove(temporaryPath)
 		return fmt.Errorf("store cover image: %w", err)
 	}
-	return s.library.SaveCover(s.appContext(), bookID, path, time.Now())
+	return s.library.SaveCover(ctx, bookID, path, time.Now())
 }
 
-func (s *Service) MarkBookCoverFailed(bookID string) error {
-	return s.library.MarkCoverFailed(s.appContext(), bookID, time.Now())
+func (s *Service) MarkCoverFailed(ctx context.Context, bookID string) error {
+	return s.library.MarkCoverFailed(ctx, bookID, time.Now())
 }
 
-func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
+func (s *Service) extractEPUBCover(ctx context.Context, book library.Book, pkg *epubPackage) error {
 	if pkg == nil || pkg.CoverItemHref == "" {
 		return errors.New("EPUB has no cover image")
 	}
@@ -96,7 +94,7 @@ func (s *Service) extractEPUBCover(book library.Book, pkg *epubPackage) error {
 		_ = os.Remove(temporary)
 		return fmt.Errorf("store EPUB cover: %w", err)
 	}
-	return s.library.SaveCover(s.appContext(), book.ID, target, time.Now())
+	return s.library.SaveCover(ctx, book.ID, target, time.Now())
 }
 
 func coverExtension(mediaType, href string) string {

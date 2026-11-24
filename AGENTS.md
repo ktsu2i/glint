@@ -37,8 +37,9 @@ Glint は技術書を読むための macOS desktop app です。最終的には�
 ## リポジトリ構成
 
 ```text
-main.go                    Wails app の起動、service の bind
-internal/books             Wails に bind する books.Service（import、open、relink、検索、表紙、しおり）
+main.go                    Wails app の起動、依存の組み立て、service の bind
+internal/app               Wails に bind する service（BooksService、SettingsService）、DTO、native dialog、エラーの i18n
+internal/books             本の usecase（import、open、relink、検索、表紙、しおり）と PDF / EPUB の解析
 internal/library           SQLite store（books、読書位置、page index、しおり、app settings）
 internal/library/queries   sqlc の query（`*.sql`）
 internal/library/librarydb sqlc が生成する Go コード（手で編集しない）
@@ -51,6 +52,18 @@ frontend/src/features      library / reader / settings の UI
 frontend/src/shared        Wails binding のラッパー、i18n、共通 component
 frontend/wailsjs           Wails が生成する binding（手で編集しない）
 ```
+
+### 責務の分け方
+
+package は機能単位で分け、Wails との境界だけを `internal/app` に置きます。
+
+- `internal/app`（handler 相当）: frontend に公開する API。dialog を開き、エラーを利用者の言語に訳し、DTO（json tag 付き）に変換し、asset server に URL を登録する。処理そのものは機能 package に任せる。Wails の `runtime` を import してよいのはこの package だけです。
+- 機能 package（`internal/books`、`internal/settings`、将来の repo index / mapping）: usecase と domain。Wails を知らず、`context.Context` と path などの値を引数で受け取り、domain の型と sentinel error を返す。UI の文言は持たない。
+- `internal/library`（repo 相当）: SQLite の store。
+- `internal/assetserver`、`internal/update`: platform adapter。
+- interface は使う側に、test の fake などで必要になったときだけ定義する。
+- bind した struct の exported method はすべて frontend に公開されるため、公開しない処理は unexported にする（起動時の context は `app.Startup` で渡す）。
+- 時間のかかる処理は `context` で cancel できるようにし、進捗は Wails の events で frontend に push する。
 
 PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。
 

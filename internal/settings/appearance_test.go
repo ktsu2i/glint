@@ -35,7 +35,7 @@ func TestAppearanceRejectsUnsupportedTheme(t *testing.T) {
 
 	_, err := manager.SaveAppearance(t.Context(), SaveAppearanceSettingsRequest{Theme: "sepia"})
 
-	assert.ErrorContains(t, err, "light、dark、system")
+	assert.ErrorIs(t, err, ErrInvalidTheme)
 	assert.NotContains(t, store.values, appearanceThemeSettingKey)
 }
 

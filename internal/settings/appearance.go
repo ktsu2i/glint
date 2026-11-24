@@ -9,6 +9,9 @@ import (
 
 const appearanceThemeSettingKey = "appearance.theme"
 
+// ErrInvalidTheme reports a theme other than light, dark or system.
+var ErrInvalidTheme = errors.New("theme must be light, dark or system")
+
 type Theme string
 
 const (
@@ -42,7 +45,7 @@ func (manager *Manager) GetAppearance(ctx context.Context) (AppearanceSettings, 
 
 func (manager *Manager) SaveAppearance(ctx context.Context, request SaveAppearanceSettingsRequest) (AppearanceSettings, error) {
 	if !request.Theme.Valid() {
-		return AppearanceSettings{}, errors.New("themeは light、dark、system のいずれかを指定してください。")
+		return AppearanceSettings{}, ErrInvalidTheme
 	}
 	if err := manager.store.SaveSetting(ctx, appearanceThemeSettingKey, string(request.Theme)); err != nil {
 		return AppearanceSettings{}, err
