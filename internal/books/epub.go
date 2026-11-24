@@ -123,6 +123,7 @@ func inspectEPUB(filePath string) (Inspection, *epubPackage, error) {
 				Format:    BookFormatEPUB,
 				FileHash:  hash,
 				SizeBytes: info.Size(),
+				ModTime:   info.ModTime(),
 				Metadata:  &EPUBMetadata{HasEncryption: true},
 			}, nil, nil
 		}
@@ -136,8 +137,26 @@ func inspectEPUB(filePath string) (Inspection, *epubPackage, error) {
 		Format:    BookFormatEPUB,
 		FileHash:  hash,
 		SizeBytes: info.Size(),
+		ModTime:   info.ModTime(),
 		Metadata:  &metadata,
 	}, pkg, nil
+}
+
+func loadEPUBPackage(filePath string) (*epubPackage, error) {
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("open EPUB archive: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+	if zipFileExists(&reader.Reader, "META-INF/encryption.xml") {
+		return nil, ErrEPUBDRMProtected
+	}
+	pkg, err := parseEPUBPackage(&reader.Reader)
+	if err != nil {
+		return nil, err
+	}
+	pkg.Metadata.CoverItemHref = pkg.CoverItemHref
+	return pkg, nil
 }
 
 func parseEPUBPackage(reader *zip.Reader) (*epubPackage, error) {

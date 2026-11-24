@@ -19,7 +19,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 7, version)
+	assert.Equal(t, 8, version)
 
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Go Guide.pdf", "hash-1", "pdf", 120, now)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 7, version)
+	assert.Equal(t, 8, version)
 	var settingsTable string
 	require.NoError(t, store.db.Raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Row().Scan(&settingsTable))
 	assert.Equal(t, "app_settings", settingsTable)
@@ -387,7 +387,7 @@ func TestStoreReopeningAppliesFormatMigrationIdempotently(t *testing.T) {
 
 	var version int
 	require.NoError(t, store.db.Raw("SELECT MAX(version) FROM schema_migrations").Row().Scan(&version))
-	assert.Equal(t, 7, version)
+	assert.Equal(t, 8, version)
 
 	var defaultValue string
 	require.NoError(t, store.db.Raw(

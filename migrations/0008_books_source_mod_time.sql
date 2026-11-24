@@ -1,0 +1,1 @@
+ALTER TABLE books ADD COLUMN source_mod_time TEXT NOT NULL DEFAULT '';

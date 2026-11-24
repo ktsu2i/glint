@@ -34,6 +34,7 @@ type Book struct {
 	DisplayName          string
 	FileName             string
 	SourcePath           string
+	SourceModTime        string
 	FileHash             string
 	Format               string
 	SizeBytes            int64
@@ -58,6 +59,7 @@ type bookRecord struct {
 	DisplayName          string `gorm:"column:display_name"`
 	FileName             string `gorm:"column:file_name"`
 	SourcePath           string `gorm:"column:source_path"`
+	SourceModTime        string `gorm:"column:source_mod_time"`
 	FileHash             string `gorm:"column:file_hash"`
 	Format               string `gorm:"column:format"`
 	SizeBytes            int64  `gorm:"column:size_bytes"`
@@ -206,7 +208,7 @@ func (store *Store) Import(ctx context.Context, id, sourcePath, fileHash, format
 	return store.ByHash(ctx, fileHash)
 }
 
-const selectBookColumns = `b.id, b.title, b.display_name, b.file_name, b.source_path, b.file_hash,
+const selectBookColumns = `b.id, b.title, b.display_name, b.file_name, b.source_path, b.source_mod_time, b.file_hash,
        b.format, b.size_bytes, b.page_count, b.cover_thumbnail_path,
        b.cover_thumbnail_status, b.imported_at, b.last_opened_at,
        COALESCE(r.page_number, 1) AS last_page`
@@ -377,9 +379,6 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 			if err := tx.Where("book_id = ?", id).Delete(&bookPageRecord{}).Error; err != nil {
 				return fmt.Errorf("clear stale book pages: %w", err)
 			}
-			if err := tx.Where("book_id = ?", id).Delete(&bookBookmarkRecord{}).Error; err != nil {
-				return fmt.Errorf("clear stale book bookmarks: %w", err)
-			}
 		}
 		return tx.Model(&bookRecord{}).
 			Where("id = ?", id).
@@ -387,6 +386,7 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 				"title":                  title,
 				"file_name":              fileName,
 				"source_path":            sourcePath,
+				"source_mod_time":        "",
 				"file_hash":              fileHash,
 				"size_bytes":             size,
 				"page_count":             pageCount,
@@ -399,6 +399,21 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 		return Book{}, fmt.Errorf("relink book: %w", err)
 	}
 	return store.Get(ctx, id)
+}
+
+func (store *Store) RecordSourceStat(ctx context.Context, id string, size int64, modTime, now time.Time) error {
+	result := store.db.WithContext(ctx).Model(&bookRecord{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"size_bytes":      size,
+			"source_mod_time": FormatSourceModTime(modTime),
+			"updated_at":      now.UTC().Format(time.RFC3339Nano),
+		})
+	return requireChanged(result, "record book source stat")
+}
+
+func FormatSourceModTime(modTime time.Time) string {
+	return modTime.UTC().Format(time.RFC3339Nano)
 }
 
 func (store *Store) Setting(ctx context.Context, key string) (string, error) {

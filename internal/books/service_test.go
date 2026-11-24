@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -358,4 +359,75 @@ func TestServicePersistsPageBookmarks(t *testing.T) {
 	bookmarks, err = h.service.ListBookmarks(book.ID)
 	require.NoError(t, err)
 	assert.Empty(t, bookmarks)
+}
+
+func TestOpenBookSkipsHashingWhenSizeAndModTimeAreUnchanged(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Stable.pdf", "%PDF-1.7\nfirst")
+	book, err := h.service.selectBookFile(path)
+	require.NoError(t, err)
+	_, err = h.service.SaveBookPages(book.ID, []BookPageInput{{PageNumber: 1, Text: "indexed"}}, 1)
+	require.NoError(t, err)
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(path, []byte("%PDF-1.7\nfirsT"), 0o600))
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, opened.IndexedPageCount, "same size and mtime must be trusted without rehashing")
+
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime().Add(time.Second)))
+	opened, err = h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Zero(t, opened.IndexedPageCount, "a newer mtime triggers a rehash that detects the new content")
+}
+
+func TestOpenBookRecordsModTimeWhenOnlyModTimeChanges(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Touched.pdf", "%PDF-1.7\nfixture")
+	book, err := h.service.selectBookFile(path)
+	require.NoError(t, err)
+	_, err = h.service.SaveBookPages(book.ID, []BookPageInput{{PageNumber: 1, Text: "indexed"}}, 1)
+	require.NoError(t, err)
+
+	touched := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(path, touched, touched))
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, opened.IndexedPageCount, "same content keeps the index")
+
+	stored, err := h.store.Get(t.Context(), book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, library.FormatSourceModTime(touched), stored.SourceModTime)
+}
+
+func TestOpenBookKeepsBookmarksWhenContentChanges(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Revised.pdf", "%PDF-1.7\nfirst edition")
+	book, err := h.service.selectBookFile(path)
+	require.NoError(t, err)
+	_, err = h.service.AddBookmark(book.ID, 3, 10)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(path, []byte("%PDF-1.7\nsecond edition, revised"), 0o600))
+	_, err = h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+
+	bookmarks, err := h.service.ListBookmarks(book.ID)
+	require.NoError(t, err)
+	require.Len(t, bookmarks, 1)
+	assert.Equal(t, 3, bookmarks[0].PageNumber)
+}
+
+func TestOpenBookLoadsEPUBSpineWithoutRehashing(t *testing.T) {
+	h := newHarness(t)
+	path := newSampleEPUB(t)
+	book, err := h.service.selectBookFile(path)
+	require.NoError(t, err)
+
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Len(t, opened.SpineItems, 3)
+	assert.Equal(t, 3, opened.IndexedPageCount)
 }
