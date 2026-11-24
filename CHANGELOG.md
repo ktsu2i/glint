@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.1](https://github.com/ktsu2i/glint/compare/v0.2.0...v0.2.1) - 2026-11-24
+
+### Other Changes
+- docs: refresh AGENTS.md for the current reader-first state by @ktsu2i in https://github.com/ktsu2i/glint/pull/27
+- chore: remove leftover APIs and unused plumbing by @ktsu2i in https://github.com/ktsu2i/glint/pull/29
+- fix: skip rehashing unchanged books and keep bookmarks on content change by @ktsu2i in https://github.com/ktsu2i/glint/pull/30
+- feat: back book search with an FTS5 trigram index by @ktsu2i in https://github.com/ktsu2i/glint/pull/31
+- feat: generalize the page index into book segments by @ktsu2i in https://github.com/ktsu2i/glint/pull/32
+- feat: unify segment indexing and resume unfinished books by @ktsu2i in https://github.com/ktsu2i/glint/pull/33
+
 ## [v0.2.0](https://github.com/ktsu2i/glint/compare/v0.1.5...v0.2.0) - 2026-11-24
 
 ### New Features
