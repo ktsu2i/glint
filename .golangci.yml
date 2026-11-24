@@ -10,6 +10,7 @@ linters:
     - copyloopvar
     - errname
     - errorlint
+    - forbidigo
     - gocritic
     - intrange
     - misspell
@@ -23,8 +24,14 @@ linters:
     - unconvert
     - unparam
     - usestdlibvars
+    - usetesting
     - wastedassign
   settings:
+    forbidigo:
+      forbid:
+        # テストの assertion は testify (assert / require) で書く。
+        - pattern: ^(t|b|tb)\.(Error|Errorf|Fatal|Fatalf|Fail|FailNow)$
+          msg: use testify assert / require instead
     nolintlint:
       require-explanation: true
       require-specific: true
@@ -42,6 +49,10 @@ linters:
       disable:
         # 失敗後も残りの assert を見たい場面があるので require を強制しない。
         - require-error
+    usetesting:
+      # テストでは context.Background() / context.TODO() ではなく t.Context() を使う。
+      context-background: true
+      context-todo: true
 
 issues:
   # 同種の指摘を省略せず全件表示する。

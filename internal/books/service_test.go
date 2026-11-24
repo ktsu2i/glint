@@ -1,7 +1,6 @@
 package books
 
 import (
-	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -69,7 +68,7 @@ func TestServiceLocalizesNativeCopyFromSavedLanguage(t *testing.T) {
 	service := New(h.store, h.assets, h.dataDir, manager)
 
 	assert.Equal(t, "Remove", service.localized("Remove", "削除"))
-	_, err := manager.SaveLanguage(context.Background(), settings.SaveLanguageSettingsRequest{
+	_, err := manager.SaveLanguage(t.Context(), settings.SaveLanguageSettingsRequest{
 		Language: settings.LanguageJapanese,
 	})
 	require.NoError(t, err)

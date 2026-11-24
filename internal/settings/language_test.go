@@ -1,41 +1,32 @@
 package settings
 
 import (
-	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLanguageDefaultsToEnglish(t *testing.T) {
 	manager, _ := newTestManager()
 
-	settings, err := manager.GetLanguage(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if settings.Language != LanguageEnglish {
-		t.Fatalf("expected english default, got %q", settings.Language)
-	}
+	settings, err := manager.GetLanguage(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, LanguageEnglish, settings.Language)
 }
 
 func TestLanguagePersistsSupportedPreference(t *testing.T) {
 	manager, store := newTestManager()
 
-	saved, err := manager.SaveLanguage(context.Background(), SaveLanguageSettingsRequest{Language: LanguageJapanese})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if saved.Language != LanguageJapanese || store.values[languageSettingKey] != "ja" {
-		t.Fatalf("language was not persisted: %#v", saved)
-	}
-	loaded, err := manager.GetLanguage(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.Language != LanguageJapanese {
-		t.Fatalf("expected persisted language, got %q", loaded.Language)
-	}
+	saved, err := manager.SaveLanguage(t.Context(), SaveLanguageSettingsRequest{Language: LanguageJapanese})
+	require.NoError(t, err)
+	assert.Equal(t, LanguageJapanese, saved.Language)
+	assert.Equal(t, "ja", store.values[languageSettingKey])
 
-	if _, err = manager.SaveLanguage(context.Background(), SaveLanguageSettingsRequest{Language: "fr"}); err == nil {
-		t.Fatal("expected unsupported language to fail")
-	}
+	loaded, err := manager.GetLanguage(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, LanguageJapanese, loaded.Language)
+
+	_, err = manager.SaveLanguage(t.Context(), SaveLanguageSettingsRequest{Language: "fr"})
+	assert.Error(t, err, "unsupported language must fail")
 }
