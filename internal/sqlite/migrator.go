@@ -29,20 +29,8 @@ func (m *Migrator) Up(ctx context.Context) error {
 		return err
 	}
 
-	applied := map[int]struct{}{}
-	rows, err := m.DB.QueryContext(ctx, "SELECT version FROM schema_migrations")
+	applied, err := m.appliedVersions(ctx)
 	if err != nil {
-		return fmt.Errorf("read schema_migrations: %w", err)
-	}
-	for rows.Next() {
-		var version int
-		if err := rows.Scan(&version); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("scan schema_migrations: %w", err)
-		}
-		applied[version] = struct{}{}
-	}
-	if err := rows.Close(); err != nil {
 		return err
 	}
 
@@ -76,26 +64,8 @@ func (m *Migrator) Up(ctx context.Context) error {
 }
 
 func (m *Migrator) upgradeLegacyMigrationTable(ctx context.Context) error {
-	rows, err := m.DB.QueryContext(ctx, "PRAGMA table_info(schema_migrations)")
+	columns, err := m.migrationTableColumns(ctx)
 	if err != nil {
-		return fmt.Errorf("inspect schema_migrations: %w", err)
-	}
-	columns := map[string]bool{}
-	for rows.Next() {
-		var cid, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("inspect schema_migrations column: %w", err)
-		}
-		columns[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return fmt.Errorf("inspect schema_migrations: %w", err)
-	}
-	if err := rows.Close(); err != nil {
 		return err
 	}
 	if columns["name"] && columns["applied_at"] {
@@ -162,4 +132,48 @@ func parseVersion(name string) (int, error) {
 		return 0, fmt.Errorf("expected NNNN_name.sql, got %q", name)
 	}
 	return strconv.Atoi(name[:idx])
+}
+
+func (m *Migrator) appliedVersions(ctx context.Context) (map[int]struct{}, error) {
+	rows, err := m.DB.QueryContext(ctx, "SELECT version FROM schema_migrations")
+	if err != nil {
+		return nil, fmt.Errorf("read schema_migrations: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	applied := map[int]struct{}{}
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			return nil, fmt.Errorf("scan schema_migrations: %w", err)
+		}
+		applied[version] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read schema_migrations: %w", err)
+	}
+	return applied, nil
+}
+
+func (m *Migrator) migrationTableColumns(ctx context.Context) (map[string]bool, error) {
+	rows, err := m.DB.QueryContext(ctx, "PRAGMA table_info(schema_migrations)")
+	if err != nil {
+		return nil, fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return nil, fmt.Errorf("inspect schema_migrations column: %w", err)
+		}
+		columns[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("inspect schema_migrations: %w", err)
+	}
+	return columns, nil
 }

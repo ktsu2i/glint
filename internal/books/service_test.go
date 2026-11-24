@@ -10,11 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/library"
 	"github.com/kaito/glint/internal/settings"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type harness struct {
@@ -55,7 +56,7 @@ func TestSelectPDFRegistersAssetAndReturnsBookFile(t *testing.T) {
 	assert.Equal(t, "sample.pdf", book.Name)
 	assert.True(t, strings.HasPrefix(book.URL, assetserver.BookRoutePrefix))
 
-	request := httptest.NewRequest(http.MethodGet, book.URL, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, book.URL, nil)
 	response := httptest.NewRecorder()
 	h.assets.ServeHTTP(response, request)
 	assert.Equal(t, http.StatusOK, response.Code)
@@ -123,7 +124,7 @@ func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, opened.InitialPage)
 
-	request := httptest.NewRequest(http.MethodGet, summary.CoverURL, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, summary.CoverURL, nil)
 	response := httptest.NewRecorder()
 	assets.ServeHTTP(response, request)
 	assert.Equal(t, http.StatusOK, response.Code)
@@ -141,7 +142,7 @@ func TestLibraryReportsMissingSourceWithoutExposingPath(t *testing.T) {
 	require.Len(t, books, 1)
 	assert.False(t, books[0].Available)
 	_, err = h.service.OpenBook(book.ID)
-	require.Error(t, err)
+	assert.Error(t, err)
 	assert.NotContains(t, err.Error(), path)
 }
 
@@ -333,7 +334,7 @@ func TestServiceRejectsDRMProtectedEPUB(t *testing.T) {
 	})
 
 	_, err := h.service.selectBookFile(path)
-	require.Error(t, err)
+	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "DRM")
 }
 

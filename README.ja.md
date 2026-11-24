@@ -96,6 +96,13 @@ ghalint run
 zizmor .
 ```
 
+Go のコードを変更した場合は、CI と同じく golangci-lint を実行してください。版は同じく `aqua.yaml` で固定し、設定は `.golangci.yml` にあります。
+
+```bash
+golangci-lint run ./...
+golangci-lint fmt ./...
+```
+
 ## 手元から出ていくもの
 
 - **本は出ていきません。** PDF、EPUB、表紙、読書位置、しおり、設定はすべて Mac のローカルに保存されます。

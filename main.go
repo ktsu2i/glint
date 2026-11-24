@@ -8,25 +8,32 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kaito/glint/internal/assetserver"
-	"github.com/kaito/glint/internal/books"
-	"github.com/kaito/glint/internal/library"
-	"github.com/kaito/glint/internal/settings"
-	"github.com/kaito/glint/internal/update"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	wailsassetserver "github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+
+	"github.com/kaito/glint/internal/assetserver"
+	"github.com/kaito/glint/internal/books"
+	"github.com/kaito/glint/internal/library"
+	"github.com/kaito/glint/internal/settings"
+	"github.com/kaito/glint/internal/update"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	dataDirectory, err := resolveDataDirectory()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	store := library.New(filepath.Join(dataDirectory, "library.sqlite3"))
 	defer func() { _ = store.Close() }()
@@ -36,7 +43,7 @@ func main() {
 	booksSvc := books.New(store, assetSrv, dataDirectory, settingsManager)
 	settingsSvc := settings.NewService(settingsManager)
 
-	err = wails.Run(&options.App{
+	return wails.Run(&options.App{
 		Title:     "Glint",
 		Width:     1440,
 		Height:    900,
@@ -65,9 +72,6 @@ func main() {
 			settingsSvc,
 		},
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func resolveDataDirectory() (string, error) {

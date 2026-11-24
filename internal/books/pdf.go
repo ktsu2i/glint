@@ -19,7 +19,7 @@ func inspectPDF(path string) (string, int64, error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("open selected PDF: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	header := make([]byte, 5)
 	if _, err := io.ReadFull(file, header); err != nil {
 		return "", 0, fmt.Errorf("read selected PDF: %w", err)

@@ -113,7 +113,7 @@ func inspectEPUB(filePath string) (Inspection, *epubPackage, error) {
 	if err != nil {
 		return Inspection{}, nil, fmt.Errorf("open EPUB archive: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	hasEncryption := zipFileExists(&reader.Reader, "META-INF/encryption.xml")
 	pkg, err := parseEPUBPackage(&reader.Reader)
@@ -298,7 +298,7 @@ func xhtmlToPlainText(raw []byte) (string, error) {
 		tokenType := tokenizer.Next()
 		switch tokenType {
 		case html.ErrorToken:
-			if err := tokenizer.Err(); err != nil && err != io.EOF {
+			if err := tokenizer.Err(); err != nil && !errors.Is(err, io.EOF) {
 				return "", err
 			}
 			return normalizeWhitespace(builder.String()), nil
@@ -418,7 +418,7 @@ func readZipFile(reader *zip.Reader, name string, limit int64) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer opened.Close()
+		defer func() { _ = opened.Close() }()
 		return io.ReadAll(io.LimitReader(opened, limit+1))
 	}
 	return nil, fmt.Errorf("entry %q not found in EPUB archive", name)
@@ -429,7 +429,7 @@ func hashFile(filePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open file for hash: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
 		return "", fmt.Errorf("hash file: %w", err)

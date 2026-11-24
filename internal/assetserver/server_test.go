@@ -22,7 +22,7 @@ func TestRegisterAndServePDF(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(url, BookRoutePrefix))
 
-	request := httptest.NewRequest(http.MethodGet, url, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -30,7 +30,7 @@ func TestRegisterAndServePDF(t *testing.T) {
 	assert.Equal(t, "application/pdf", response.Header().Get("Content-Type"))
 	assert.Equal(t, string(content), response.Body.String())
 
-	rangeRequest := httptest.NewRequest(http.MethodGet, url, nil)
+	rangeRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	rangeRequest.Header.Set("Range", "bytes=0-4")
 	rangeResponse := httptest.NewRecorder()
 	server.ServeHTTP(rangeResponse, rangeRequest)
@@ -39,7 +39,7 @@ func TestRegisterAndServePDF(t *testing.T) {
 }
 
 func TestServeHTTPRejectsUnknownToken(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/book/unknown", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/book/unknown", nil)
 	response := httptest.NewRecorder()
 	New().ServeHTTP(response, request)
 	assert.Equal(t, http.StatusNotFound, response.Code)
@@ -60,7 +60,7 @@ func TestMiddlewareServesRegisteredFileBeforeFallback(t *testing.T) {
 	})
 	handler := server.Middleware(frontend)
 
-	request := httptest.NewRequest(http.MethodGet, url, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
@@ -75,7 +75,7 @@ func TestMiddlewareDelegatesNonAssetRequests(t *testing.T) {
 	})
 	handler := New().Middleware(frontend)
 
-	request := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/assets/app.js", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 

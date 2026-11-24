@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/kaito/glint/internal/assetserver"
 	"github.com/kaito/glint/internal/library"
 	"github.com/kaito/glint/internal/settings"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type BookFile struct {

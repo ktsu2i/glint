@@ -243,12 +243,10 @@ func (store *Store) SearchLibraryPages(
 			pages[i] = ranked[i].BookPageSearchResult
 		}
 		hits = append(hits, rankedHit{
-			BookLibrarySearchHit: BookLibrarySearchHit{
-				BookID:       bookID,
-				TotalMatches: totalMatches,
-				Pages:        pages,
-			},
-			score: bookScore,
+			BookID:       bookID,
+			TotalMatches: totalMatches,
+			Pages:        pages,
+			score:        bookScore,
 		})
 	}
 	sort.SliceStable(hits, func(i, j int) bool {
@@ -303,12 +301,10 @@ func rankPageMatches(records []bookPageRecord, phrase string, terms []string) []
 			firstMatch = strings.Index(folded, phrase)
 		}
 		ranked = append(ranked, rankedPageResult{
-			BookPageSearchResult: BookPageSearchResult{
-				PageNumber: record.PageNumber,
-				Excerpt:    searchExcerpt(compact, firstMatch),
-				MatchCount: matchCount,
-			},
-			score: score,
+			PageNumber: record.PageNumber,
+			Excerpt:    searchExcerpt(compact, firstMatch),
+			MatchCount: matchCount,
+			score:      score,
 		})
 	}
 	return ranked

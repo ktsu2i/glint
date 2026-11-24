@@ -96,6 +96,13 @@ ghalint run
 zizmor .
 ```
 
+If you change Go code, run golangci-lint as CI does. It is pinned in `aqua.yaml` too, and the settings live in `.golangci.yml`:
+
+```bash
+golangci-lint run ./...
+golangci-lint fmt ./...
+```
+
 ## What leaves your machine
 
 - **Your books never leave.** PDFs, EPUBs, covers, reading positions, bookmarks, and settings are stored locally on your Mac.

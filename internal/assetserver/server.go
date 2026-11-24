@@ -96,7 +96,7 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		http.Error(response, "local file is no longer available", http.StatusGone)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		http.Error(response, "unable to inspect local file", http.StatusInternalServerError)
