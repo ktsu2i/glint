@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.1.5](https://github.com/ktsu2i/glint/compare/v0.1.4...v0.1.5) - 2026-11-24
+
+### Other Changes
+- ci: lint GitHub Actions workflows with actionlint, jactionlint, ghalint and zizmor by @ktsu2i in https://github.com/ktsu2i/glint/pull/17
+- chore(frontend): add strict lint, format, and dead-code checks by @ktsu2i in https://github.com/ktsu2i/glint/pull/19
+- chore: remove CLAUDE.md symlink by @ktsu2i in https://github.com/ktsu2i/glint/pull/20
+- chore: replace mise with aqua and a Go tool directive by @ktsu2i in https://github.com/ktsu2i/glint/pull/21
+- chore: remove code comments by @ktsu2i in https://github.com/ktsu2i/glint/pull/22
+
 ## [v0.1.4](https://github.com/ktsu2i/glint/compare/v0.1.3...v0.1.4) - 2026-11-23
 
 ### Other Changes
