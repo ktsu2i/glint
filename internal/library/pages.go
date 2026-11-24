@@ -50,7 +50,8 @@ type BookLibrarySearchHit struct {
 }
 
 type bookPageRecord struct {
-	ID         string  `gorm:"column:id;primaryKey"`
+	Seq        int64   `gorm:"column:seq;primaryKey;autoIncrement"`
+	ID         string  `gorm:"column:id;uniqueIndex"`
 	BookID     string  `gorm:"column:book_id;uniqueIndex:idx_book_page"`
 	PageNumber int     `gorm:"column:page_number;uniqueIndex:idx_book_page"`
 	Text       string  `gorm:"column:text"`
@@ -146,12 +147,8 @@ func (store *Store) SearchBookPages(
 		limit = 100
 	}
 
-	db := store.db.WithContext(ctx).Where("book_id = ?", bookID)
-	for _, term := range terms {
-		db = db.Where(`text LIKE ? ESCAPE '\' COLLATE NOCASE`, "%"+escapeLikeTerm(term)+"%")
-	}
-	var records []bookPageRecord
-	if err := db.Order("page_number ASC").Find(&records).Error; err != nil {
+	records, err := store.matchingPages(ctx, bookID, terms, 0)
+	if err != nil {
 		return nil, fmt.Errorf("search book pages: %w", err)
 	}
 
@@ -194,13 +191,8 @@ func (store *Store) SearchLibraryPages(
 		bookLimit = 200
 	}
 
-	db := store.db.WithContext(ctx).Model(&bookPageRecord{})
-	for _, term := range terms {
-		db = db.Where(`text LIKE ? ESCAPE '\' COLLATE NOCASE`, "%"+escapeLikeTerm(term)+"%")
-	}
-	var records []bookPageRecord
-	if err := db.Order("book_id ASC, page_number ASC").
-		Limit(libraryMatchRowCeiling).Find(&records).Error; err != nil {
+	records, err := store.matchingPages(ctx, "", terms, libraryMatchRowCeiling)
+	if err != nil {
 		return nil, fmt.Errorf("search library pages: %w", err)
 	}
 
@@ -266,6 +258,61 @@ func (store *Store) SearchLibraryPages(
 		results[i] = hits[i].BookLibrarySearchHit
 	}
 	return results, nil
+}
+
+func (store *Store) matchingPages(ctx context.Context, bookID string, terms []string, limit int) ([]bookPageRecord, error) {
+	var query strings.Builder
+	var args []any
+	match := ftsMatchExpression(terms)
+	if match != "" {
+		query.WriteString(`SELECT p.book_id, p.page_number, p.text
+          FROM book_pages_fts
+          JOIN book_pages p ON p.seq = book_pages_fts.rowid
+         WHERE book_pages_fts MATCH ?`)
+		args = append(args, match)
+	} else {
+		query.WriteString(`SELECT p.book_id, p.page_number, p.text
+          FROM book_pages p
+         WHERE 1 = 1`)
+	}
+	if bookID != "" {
+		query.WriteString(" AND p.book_id = ?")
+		args = append(args, bookID)
+	}
+	for _, term := range terms {
+		if utf8.RuneCountInString(term) >= trigramLength {
+			continue
+		}
+		query.WriteString(` AND p.text LIKE ? ESCAPE '\' COLLATE NOCASE`)
+		args = append(args, "%"+escapeLikeTerm(term)+"%")
+	}
+	if match != "" {
+		query.WriteString(" ORDER BY bm25(book_pages_fts), p.book_id, p.page_number")
+	} else {
+		query.WriteString(" ORDER BY p.book_id, p.page_number")
+	}
+	if limit > 0 {
+		query.WriteString(" LIMIT ?")
+		args = append(args, limit)
+	}
+	var records []bookPageRecord
+	if err := store.db.WithContext(ctx).Raw(query.String(), args...).Scan(&records).Error; err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+const trigramLength = 3
+
+func ftsMatchExpression(terms []string) string {
+	quoted := make([]string, 0, len(terms))
+	for _, term := range terms {
+		if utf8.RuneCountInString(term) < trigramLength {
+			continue
+		}
+		quoted = append(quoted, `"`+strings.ReplaceAll(term, `"`, `""`)+`"`)
+	}
+	return strings.Join(quoted, " AND ")
 }
 
 type rankedPageResult struct {
