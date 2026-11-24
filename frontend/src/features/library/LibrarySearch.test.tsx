@@ -47,8 +47,20 @@ describe("LibrarySearch", () => {
       book: availableBook,
       totalMatches: 4,
       pages: [
-        { pageNumber: 12, excerpt: "context builder filters", matchCount: 3 },
-        { pageNumber: 50, excerpt: "context builder cited", matchCount: 1 },
+        {
+          pageNumber: 12,
+          location: "page:12",
+          headingPath: "",
+          excerpt: "context builder filters",
+          matchCount: 3,
+        },
+        {
+          pageNumber: 50,
+          location: "page:50",
+          headingPath: "",
+          excerpt: "context builder cited",
+          matchCount: 1,
+        },
       ],
     };
 
@@ -118,7 +130,15 @@ describe("LibrarySearch", () => {
     const hit: LibrarySearchHit = {
       book: missingBook,
       totalMatches: 1,
-      pages: [{ pageNumber: 7, excerpt: "missing match", matchCount: 1 }],
+      pages: [
+        {
+          pageNumber: 7,
+          location: "page:7",
+          headingPath: "",
+          excerpt: "missing match",
+          matchCount: 1,
+        },
+      ],
     };
 
     render(

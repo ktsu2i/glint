@@ -248,6 +248,7 @@ func TestServiceIndexesAndSearchesBookPages(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, 2, results[0].PageNumber)
+	assert.Equal(t, "page:2", results[0].Location)
 
 	opened, err := h.service.OpenBook(book.ID)
 	require.NoError(t, err)
@@ -314,6 +315,7 @@ func TestServiceImportsEPUBAndIndexesSpine(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, 2, results[0].PageNumber)
+	assert.Equal(t, "spine:1", results[0].Location)
 
 	summaries, err := h.service.ListBooks()
 	require.NoError(t, err)

@@ -38,9 +38,11 @@ type BookPageInput struct {
 }
 
 type BookSearchResult struct {
-	PageNumber int    `json:"pageNumber"`
-	Excerpt    string `json:"excerpt"`
-	MatchCount int    `json:"matchCount"`
+	PageNumber  int    `json:"pageNumber"`
+	Location    string `json:"location"`
+	HeadingPath string `json:"headingPath"`
+	Excerpt     string `json:"excerpt"`
+	MatchCount  int    `json:"matchCount"`
 }
 
 type BookBookmark struct {
@@ -376,26 +378,26 @@ func (s *Service) RemoveBookmark(bookID string, pageNumber int) error {
 }
 
 func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount int) (int, error) {
-	inputs := make([]library.BookPage, len(pages))
+	inputs := make([]library.BookSegment, len(pages))
 	for i, page := range pages {
-		inputs[i] = library.BookPage{
-			PageNumber: page.PageNumber,
-			Text:       page.Text,
-			Width:      page.Width,
-			Height:     page.Height,
+		inputs[i] = library.BookSegment{
+			Ordinal:  page.PageNumber,
+			Kind:     library.SegmentKindPage,
+			Location: library.PageLocation(page.PageNumber),
+			Text:     page.Text,
 		}
 	}
-	count, err := s.library.SaveBookPages(
+	count, err := s.library.SaveBookSegments(
 		s.appContext(), bookID, inputs, pageCount, time.Now(),
 	)
-	if errors.Is(err, library.ErrInvalidBookPageBatch) {
+	if errors.Is(err, library.ErrInvalidSegmentBatch) {
 		return 0, errors.New(s.localized("The PDF page index is invalid.", "PDF page indexの内容が不正です。"))
 	}
 	return count, err
 }
 
 func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
-	results, err := s.library.SearchBookPages(s.appContext(), bookID, query, 50)
+	results, err := s.library.SearchBookSegments(s.appContext(), bookID, query, 50)
 	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
 		return nil, errors.New(s.localized(
 			"Search terms must be between 1 and 200 characters.",
@@ -407,17 +409,13 @@ func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
 	}
 	output := make([]BookSearchResult, len(results))
 	for i, result := range results {
-		output[i] = BookSearchResult{
-			PageNumber: result.PageNumber,
-			Excerpt:    result.Excerpt,
-			MatchCount: result.MatchCount,
-		}
+		output[i] = bookSearchResult(result)
 	}
 	return output, nil
 }
 
 func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
-	hits, err := s.library.SearchLibraryPages(s.appContext(), query, 0, 0)
+	hits, err := s.library.SearchLibrarySegments(s.appContext(), query, 0, 0)
 	if errors.Is(err, library.ErrInvalidBookSearchQuery) {
 		return nil, errors.New(s.localized(
 			"Search terms must be between 1 and 200 characters.",
@@ -443,13 +441,9 @@ func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
 		if err != nil {
 			return nil, err
 		}
-		pages := make([]BookSearchResult, len(hit.Pages))
-		for i, page := range hit.Pages {
-			pages[i] = BookSearchResult{
-				PageNumber: page.PageNumber,
-				Excerpt:    page.Excerpt,
-				MatchCount: page.MatchCount,
-			}
+		pages := make([]BookSearchResult, len(hit.Segments))
+		for i, segment := range hit.Segments {
+			pages[i] = bookSearchResult(segment)
 		}
 		output = append(output, LibrarySearchHit{
 			Book:         summary,
@@ -458,6 +452,16 @@ func (s *Service) SearchLibrary(query string) ([]LibrarySearchHit, error) {
 		})
 	}
 	return output, nil
+}
+
+func bookSearchResult(result library.SegmentSearchResult) BookSearchResult {
+	return BookSearchResult{
+		PageNumber:  result.Ordinal,
+		Location:    result.Location,
+		HeadingPath: result.HeadingPath,
+		Excerpt:     result.Excerpt,
+		MatchCount:  result.MatchCount,
+	}
 }
 
 func (s *Service) localized(english, japanese string) string {
@@ -518,7 +522,7 @@ func (s *Service) bookFile(book library.Book, pkg *epubPackage) (BookFile, error
 	if err != nil {
 		return BookFile{}, err
 	}
-	indexedPageCount, err := s.library.BookPageCount(s.appContext(), book.ID)
+	indexedPageCount, err := s.library.BookSegmentCount(s.appContext(), book.ID)
 	if err != nil {
 		return BookFile{}, err
 	}

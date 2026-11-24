@@ -152,9 +152,7 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 	require.NoError(t, store.SaveReadingPosition(t.Context(), book.ID, 4, 10, now))
-	_, err = store.SaveBookPages(t.Context(), book.ID, []BookPage{{
-		PageNumber: 1, Text: "persisted text", Width: 612, Height: 792,
-	}}, 10, now)
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{pageSegment(1, "persisted text")}, 10, now)
 	require.NoError(t, err)
 
 	require.NoError(t, store.Remove(t.Context(), book.ID))
@@ -165,7 +163,7 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 	var remaining int
 	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_reading_states WHERE book_id = ?", book.ID).Row().Scan(&remaining))
 	assert.Equal(t, 0, remaining)
-	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_pages WHERE book_id = ?", book.ID).Row().Scan(&remaining))
+	require.NoError(t, store.db.Raw("SELECT COUNT(*) FROM book_segments WHERE book_id = ?", book.ID).Row().Scan(&remaining))
 	assert.Equal(t, 0, remaining)
 }
 
@@ -177,40 +175,40 @@ func TestStoreSavesAndSearchesBookPages(t *testing.T) {
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Search.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
 
-	count, err := store.SaveBookPages(t.Context(), book.ID, []BookPage{
-		{PageNumber: 1, Text: "A context builder keeps requests focused.", Width: 612, Height: 792},
-		{PageNumber: 2, Text: "Context builder. Context builder. Evidence remains visible.", Width: 612, Height: 792},
-		{PageNumber: 3, Text: "日本語の全文検索でも文中の検索語を見つける。", Width: 612, Height: 792},
-		{PageNumber: 4, Text: "A literal %_ token must not become a wildcard.", Width: 612, Height: 792},
+	count, err := store.SaveBookSegments(t.Context(), book.ID, []BookSegment{
+		pageSegment(1, "A context builder keeps requests focused."),
+		pageSegment(2, "Context builder. Context builder. Evidence remains visible."),
+		pageSegment(3, "日本語の全文検索でも文中の検索語を見つける。"),
+		pageSegment(4, "A literal %_ token must not become a wildcard."),
 	}, 4, now)
 	require.NoError(t, err)
 	assert.Equal(t, 4, count)
 
-	results, err := store.SearchBookPages(t.Context(), book.ID, "CONTEXT builder", 20)
+	results, err := store.SearchBookSegments(t.Context(), book.ID, "CONTEXT builder", 20)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	assert.Equal(t, 2, results[0].PageNumber, "more phrase occurrences should rank first")
+	assert.Equal(t, 2, results[0].Ordinal, "more phrase occurrences should rank first")
 	assert.Contains(t, results[0].Excerpt, "Evidence remains visible")
 	assert.GreaterOrEqual(t, results[0].MatchCount, 4)
 
-	results, err = store.SearchBookPages(t.Context(), book.ID, "検索語", 20)
+	results, err = store.SearchBookSegments(t.Context(), book.ID, "検索語", 20)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, 3, results[0].PageNumber)
-	results, err = store.SearchBookPages(t.Context(), book.ID, "%_", 20)
+	assert.Equal(t, 3, results[0].Ordinal)
+	results, err = store.SearchBookSegments(t.Context(), book.ID, "%_", 20)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, 4, results[0].PageNumber)
+	assert.Equal(t, 4, results[0].Ordinal)
 
-	count, err = store.SaveBookPages(t.Context(), book.ID, []BookPage{
-		{PageNumber: 2, Text: "This page was replaced.", Width: 600, Height: 800},
+	count, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{
+		pageSegment(2, "This page was replaced."),
 	}, 4, now.Add(time.Minute))
 	require.NoError(t, err)
 	assert.Equal(t, 4, count)
-	results, err = store.SearchBookPages(t.Context(), book.ID, "context builder", 20)
+	results, err = store.SearchBookSegments(t.Context(), book.ID, "context builder", 20)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, 1, results[0].PageNumber)
+	assert.Equal(t, 1, results[0].Ordinal)
 }
 
 func TestStorePersistsBookPagesAcrossRestart(t *testing.T) {
@@ -220,8 +218,8 @@ func TestStorePersistsBookPagesAcrossRestart(t *testing.T) {
 	require.NoError(t, err)
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Persistent Search.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
-	_, err = store.SaveBookPages(t.Context(), book.ID, []BookPage{
-		{PageNumber: 1, Text: "Persistent lexical evidence.", Width: 612, Height: 792},
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{
+		pageSegment(1, "Persistent lexical evidence."),
 	}, 1, now)
 	require.NoError(t, err)
 	require.NoError(t, store.Close())
@@ -229,13 +227,13 @@ func TestStorePersistsBookPagesAcrossRestart(t *testing.T) {
 	store, err = Open(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
-	count, err := store.BookPageCount(t.Context(), book.ID)
+	count, err := store.BookSegmentCount(t.Context(), book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
-	results, err := store.SearchBookPages(t.Context(), book.ID, "lexical evidence", 20)
+	results, err := store.SearchBookSegments(t.Context(), book.ID, "lexical evidence", 20)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, 1, results[0].PageNumber)
+	assert.Equal(t, 1, results[0].Ordinal)
 }
 
 func TestStoreClearsIndexedPagesWhenPDFContentChanges(t *testing.T) {
@@ -245,15 +243,15 @@ func TestStoreClearsIndexedPagesWhenPDFContentChanges(t *testing.T) {
 	now := time.Now()
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
-	_, err = store.SaveBookPages(t.Context(), book.ID, []BookPage{
-		{PageNumber: 1, Text: "stale index", Width: 612, Height: 792},
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{
+		pageSegment(1, "stale index"),
 	}, 1, now)
 	require.NoError(t, err)
 
 	relinked, err := store.Relink(t.Context(), book.ID, "/tmp/Guide.pdf", "hash-2", 11, now.Add(time.Minute))
 	require.NoError(t, err)
 	assert.Equal(t, 0, relinked.PageCount)
-	count, err := store.BookPageCount(t.Context(), book.ID)
+	count, err := store.BookSegmentCount(t.Context(), book.ID)
 	require.NoError(t, err)
 	assert.Zero(t, count)
 }
@@ -271,42 +269,42 @@ func TestStoreSearchesLibraryAcrossBooks(t *testing.T) {
 	notes, err := store.Import(t.Context(), "book-3", "/tmp/Notes.pdf", "hash-3", "pdf", 10, now)
 	require.NoError(t, err)
 
-	_, err = store.SaveBookPages(t.Context(), guide.ID, []BookPage{
-		{PageNumber: 1, Text: "Context builder filters what gets sent.", Width: 612, Height: 792},
-		{PageNumber: 2, Text: "Mention of context builder once more.", Width: 612, Height: 792},
+	_, err = store.SaveBookSegments(t.Context(), guide.ID, []BookSegment{
+		pageSegment(1, "Context builder filters what gets sent."),
+		pageSegment(2, "Mention of context builder once more."),
 	}, 2, now)
 	require.NoError(t, err)
-	_, err = store.SaveBookPages(t.Context(), cookbook.ID, []BookPage{
-		{PageNumber: 1, Text: "Context builder. Context builder. Context builder.", Width: 612, Height: 792},
+	_, err = store.SaveBookSegments(t.Context(), cookbook.ID, []BookSegment{
+		pageSegment(1, "Context builder. Context builder. Context builder."),
 	}, 1, now)
 	require.NoError(t, err)
-	_, err = store.SaveBookPages(t.Context(), notes.ID, []BookPage{
-		{PageNumber: 1, Text: "Unrelated lexical evidence about retrieval.", Width: 612, Height: 792},
+	_, err = store.SaveBookSegments(t.Context(), notes.ID, []BookSegment{
+		pageSegment(1, "Unrelated lexical evidence about retrieval."),
 	}, 1, now)
 	require.NoError(t, err)
 
-	hits, err := store.SearchLibraryPages(t.Context(), "context builder", 3, 10)
+	hits, err := store.SearchLibrarySegments(t.Context(), "context builder", 3, 10)
 	require.NoError(t, err)
 	require.Len(t, hits, 2, "only matching books should be returned")
 	assert.Equal(t, cookbook.ID, hits[0].BookID, "book with denser phrase matches ranks first")
 	assert.GreaterOrEqual(t, hits[0].TotalMatches, 3)
-	assert.NotEmpty(t, hits[0].Pages)
+	assert.NotEmpty(t, hits[0].Segments)
 	assert.Equal(t, guide.ID, hits[1].BookID)
-	assert.Len(t, hits[1].Pages, 2, "both matching pages from a book are kept under the per-book cap")
+	assert.Len(t, hits[1].Segments, 2, "both matching pages from a book are kept under the per-book cap")
 
-	limited, err := store.SearchLibraryPages(t.Context(), "context builder", 1, 10)
+	limited, err := store.SearchLibrarySegments(t.Context(), "context builder", 1, 10)
 	require.NoError(t, err)
 	require.Len(t, limited, 2)
-	assert.Len(t, limited[1].Pages, 1, "pagesPerBook caps the number of pages returned")
+	assert.Len(t, limited[1].Segments, 1, "pagesPerBook caps the number of pages returned")
 
-	capped, err := store.SearchLibraryPages(t.Context(), "context builder", 3, 1)
+	capped, err := store.SearchLibrarySegments(t.Context(), "context builder", 3, 1)
 	require.NoError(t, err)
 	require.Len(t, capped, 1, "bookLimit caps the number of books returned")
 	assert.Equal(t, cookbook.ID, capped[0].BookID)
 
-	_, err = store.SearchLibraryPages(t.Context(), "   ", 3, 10)
+	_, err = store.SearchLibrarySegments(t.Context(), "   ", 3, 10)
 	assert.ErrorIs(t, err, ErrInvalidBookSearchQuery)
-	empty, err := store.SearchLibraryPages(t.Context(), "nonexistent_term", 3, 10)
+	empty, err := store.SearchLibrarySegments(t.Context(), "nonexistent_term", 3, 10)
 	require.NoError(t, err)
 	assert.Empty(t, empty)
 }
@@ -318,13 +316,13 @@ func TestStoreValidatesBookPageAndSearchInputs(t *testing.T) {
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, time.Now())
 	require.NoError(t, err)
 
-	_, err = store.SaveBookPages(t.Context(), book.ID, nil, 1, time.Now())
-	assert.ErrorIs(t, err, ErrInvalidBookPageBatch)
-	_, err = store.SaveBookPages(t.Context(), book.ID, []BookPage{{PageNumber: 2}}, 1, time.Now())
-	assert.ErrorIs(t, err, ErrInvalidBookPageBatch)
-	_, err = store.SearchBookPages(t.Context(), book.ID, "   ", 20)
+	_, err = store.SaveBookSegments(t.Context(), book.ID, nil, 1, time.Now())
+	assert.ErrorIs(t, err, ErrInvalidSegmentBatch)
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{pageSegment(2, "")}, 1, time.Now())
+	assert.ErrorIs(t, err, ErrInvalidSegmentBatch)
+	_, err = store.SearchBookSegments(t.Context(), book.ID, "   ", 20)
 	assert.ErrorIs(t, err, ErrInvalidBookSearchQuery)
-	_, err = store.SearchBookPages(t.Context(), "missing", "query", 20)
+	_, err = store.SearchBookSegments(t.Context(), "missing", "query", 20)
 	assert.ErrorIs(t, err, ErrBookNotFound)
 }
 

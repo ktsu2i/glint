@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	maxBookPageBatchSize      = 50
-	maxBookPageTextBytes      = 4 * 1024 * 1024
+	maxSegmentBatchSize       = 50
+	maxSegmentTextBytes       = 4 * 1024 * 1024
+	maxSegmentLocationBytes   = 1024
+	maxSegmentHeadingBytes    = 4 * 1024
 	maxBookSearchRunes        = 200
 	maxBookSearchTerms        = 12
 	searchExcerptRunes        = 180
@@ -25,114 +27,143 @@ const (
 	libraryMatchRowCeiling    = 5_000
 )
 
+const (
+	SegmentKindPage    = "page"
+	SegmentKindSection = "section"
+)
+
 var (
-	ErrInvalidBookPageBatch   = errors.New("invalid book page batch")
+	ErrInvalidSegmentBatch    = errors.New("invalid book segment batch")
 	ErrInvalidBookSearchQuery = errors.New("invalid book search query")
 )
 
-type BookPage struct {
-	PageNumber int
-	Text       string
-	Width      float64
-	Height     float64
+type BookSegment struct {
+	Ordinal     int
+	Kind        string
+	Location    string
+	HeadingPath string
+	Text        string
 }
 
-type BookPageSearchResult struct {
-	PageNumber int
-	Excerpt    string
-	MatchCount int
+func PageLocation(pageNumber int) string {
+	return "page:" + strconv.Itoa(pageNumber)
 }
 
-type BookLibrarySearchHit struct {
+func SpineLocation(index int) string {
+	return "spine:" + strconv.Itoa(index)
+}
+
+type SegmentSearchResult struct {
+	Ordinal     int
+	Location    string
+	HeadingPath string
+	Excerpt     string
+	MatchCount  int
+}
+
+type LibrarySearchHit struct {
 	BookID       string
 	TotalMatches int
-	Pages        []BookPageSearchResult
+	Segments     []SegmentSearchResult
 }
 
-type bookPageRecord struct {
-	Seq        int64   `gorm:"column:seq;primaryKey;autoIncrement"`
-	ID         string  `gorm:"column:id;uniqueIndex"`
-	BookID     string  `gorm:"column:book_id;uniqueIndex:idx_book_page"`
-	PageNumber int     `gorm:"column:page_number;uniqueIndex:idx_book_page"`
-	Text       string  `gorm:"column:text"`
-	Width      float64 `gorm:"column:width"`
-	Height     float64 `gorm:"column:height"`
-	UpdatedAt  string  `gorm:"column:updated_at"`
+type bookSegmentRecord struct {
+	ID          int64  `gorm:"column:id;primaryKey;autoIncrement"`
+	BookID      string `gorm:"column:book_id"`
+	Ordinal     int    `gorm:"column:ordinal"`
+	Kind        string `gorm:"column:kind"`
+	Location    string `gorm:"column:location"`
+	HeadingPath string `gorm:"column:heading_path"`
+	Text        string `gorm:"column:text"`
+	UpdatedAt   string `gorm:"column:updated_at"`
 }
 
-func (bookPageRecord) TableName() string { return "book_pages" }
+func (bookSegmentRecord) TableName() string { return "book_segments" }
 
-func (store *Store) SaveBookPages(
+func (store *Store) SaveBookSegments(
 	ctx context.Context,
 	bookID string,
-	pages []BookPage,
-	pageCount int,
+	segments []BookSegment,
+	total int,
 	now time.Time,
 ) (int, error) {
 	bookID = strings.TrimSpace(bookID)
-	if bookID == "" || pageCount < 1 || len(pages) == 0 || len(pages) > maxBookPageBatchSize {
-		return 0, ErrInvalidBookPageBatch
+	if bookID == "" || total < 1 || len(segments) == 0 || len(segments) > maxSegmentBatchSize {
+		return 0, ErrInvalidSegmentBatch
 	}
-	seen := make(map[int]struct{}, len(pages))
+	seen := make(map[int]struct{}, len(segments))
 	timestamp := now.UTC().Format(time.RFC3339Nano)
-	records := make([]bookPageRecord, 0, len(pages))
-	for _, page := range pages {
-		if page.PageNumber < 1 || page.PageNumber > pageCount || page.Width < 0 || page.Height < 0 || len(page.Text) > maxBookPageTextBytes {
-			return 0, ErrInvalidBookPageBatch
+	records := make([]bookSegmentRecord, 0, len(segments))
+	for _, segment := range segments {
+		if !validSegment(segment, total) {
+			return 0, ErrInvalidSegmentBatch
 		}
-		if _, duplicate := seen[page.PageNumber]; duplicate {
-			return 0, ErrInvalidBookPageBatch
+		if _, duplicate := seen[segment.Ordinal]; duplicate {
+			return 0, ErrInvalidSegmentBatch
 		}
-		seen[page.PageNumber] = struct{}{}
-		records = append(records, bookPageRecord{
-			ID:         bookID + ":" + strconv.Itoa(page.PageNumber),
-			BookID:     bookID,
-			PageNumber: page.PageNumber,
-			Text:       strings.TrimSpace(page.Text),
-			Width:      page.Width,
-			Height:     page.Height,
-			UpdatedAt:  timestamp,
+		seen[segment.Ordinal] = struct{}{}
+		records = append(records, bookSegmentRecord{
+			BookID:      bookID,
+			Ordinal:     segment.Ordinal,
+			Kind:        segment.Kind,
+			Location:    segment.Location,
+			HeadingPath: strings.TrimSpace(segment.HeadingPath),
+			Text:        strings.TrimSpace(segment.Text),
+			UpdatedAt:   timestamp,
 		})
 	}
 
 	err := store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&bookRecord{}).Where("id = ?", bookID).Updates(map[string]any{
-			"page_count": pageCount,
+			"page_count": total,
 			"updated_at": timestamp,
 		})
-		if err := requireChanged(result, "update indexed book page count"); err != nil {
+		if err := requireChanged(result, "update indexed book segment count"); err != nil {
 			return err
 		}
 		if err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "book_id"}, {Name: "page_number"}},
+			Columns: []clause.Column{{Name: "book_id"}, {Name: "ordinal"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"text", "width", "height", "updated_at",
+				"kind", "location", "heading_path", "text", "updated_at",
 			}),
 		}).Create(&records).Error; err != nil {
-			return fmt.Errorf("save book pages: %w", err)
+			return fmt.Errorf("save book segments: %w", err)
 		}
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	return store.BookPageCount(ctx, bookID)
+	return store.BookSegmentCount(ctx, bookID)
 }
 
-func (store *Store) BookPageCount(ctx context.Context, bookID string) (int, error) {
+func validSegment(segment BookSegment, total int) bool {
+	if segment.Ordinal < 1 || segment.Ordinal > total {
+		return false
+	}
+	if segment.Kind != SegmentKindPage && segment.Kind != SegmentKindSection {
+		return false
+	}
+	if segment.Location == "" || len(segment.Location) > maxSegmentLocationBytes {
+		return false
+	}
+	return len(segment.HeadingPath) <= maxSegmentHeadingBytes && len(segment.Text) <= maxSegmentTextBytes
+}
+
+func (store *Store) BookSegmentCount(ctx context.Context, bookID string) (int, error) {
 	var count int64
-	if err := store.db.WithContext(ctx).Model(&bookPageRecord{}).
+	if err := store.db.WithContext(ctx).Model(&bookSegmentRecord{}).
 		Where("book_id = ?", bookID).Count(&count).Error; err != nil {
-		return 0, fmt.Errorf("count book pages: %w", err)
+		return 0, fmt.Errorf("count book segments: %w", err)
 	}
 	return int(count), nil
 }
 
-func (store *Store) SearchBookPages(
+func (store *Store) SearchBookSegments(
 	ctx context.Context,
 	bookID, query string,
 	limit int,
-) ([]BookPageSearchResult, error) {
+) ([]SegmentSearchResult, error) {
 	if _, err := store.Get(ctx, bookID); err != nil {
 		return nil, err
 	}
@@ -147,42 +178,42 @@ func (store *Store) SearchBookPages(
 		limit = 100
 	}
 
-	records, err := store.matchingPages(ctx, bookID, terms, 0)
+	records, err := store.matchingSegments(ctx, bookID, terms, 0)
 	if err != nil {
-		return nil, fmt.Errorf("search book pages: %w", err)
+		return nil, fmt.Errorf("search book segments: %w", err)
 	}
 
-	ranked := rankPageMatches(records, phrase, terms)
+	ranked := rankSegmentMatches(records, phrase, terms)
 	sort.SliceStable(ranked, func(i, j int) bool {
 		if ranked[i].score != ranked[j].score {
 			return ranked[i].score > ranked[j].score
 		}
-		return ranked[i].PageNumber < ranked[j].PageNumber
+		return ranked[i].Ordinal < ranked[j].Ordinal
 	})
 	if len(ranked) > limit {
 		ranked = ranked[:limit]
 	}
-	results := make([]BookPageSearchResult, len(ranked))
+	results := make([]SegmentSearchResult, len(ranked))
 	for i := range ranked {
-		results[i] = ranked[i].BookPageSearchResult
+		results[i] = ranked[i].SegmentSearchResult
 	}
 	return results, nil
 }
 
-func (store *Store) SearchLibraryPages(
+func (store *Store) SearchLibrarySegments(
 	ctx context.Context,
 	query string,
-	pagesPerBook, bookLimit int,
-) ([]BookLibrarySearchHit, error) {
+	segmentsPerBook, bookLimit int,
+) ([]LibrarySearchHit, error) {
 	phrase, terms, err := normalizeBookSearchQuery(query)
 	if err != nil {
 		return nil, err
 	}
-	if pagesPerBook < 1 {
-		pagesPerBook = defaultLibrarySearchPages
+	if segmentsPerBook < 1 {
+		segmentsPerBook = defaultLibrarySearchPages
 	}
-	if pagesPerBook > 20 {
-		pagesPerBook = 20
+	if segmentsPerBook > 20 {
+		segmentsPerBook = 20
 	}
 	if bookLimit < 1 {
 		bookLimit = defaultLibrarySearchBooks
@@ -191,12 +222,12 @@ func (store *Store) SearchLibraryPages(
 		bookLimit = 200
 	}
 
-	records, err := store.matchingPages(ctx, "", terms, libraryMatchRowCeiling)
+	records, err := store.matchingSegments(ctx, "", terms, libraryMatchRowCeiling)
 	if err != nil {
-		return nil, fmt.Errorf("search library pages: %w", err)
+		return nil, fmt.Errorf("search library segments: %w", err)
 	}
 
-	grouped := make(map[string][]bookPageRecord)
+	grouped := make(map[string][]bookSegmentRecord)
 	bookOrder := make([]string, 0)
 	for _, record := range records {
 		if _, seen := grouped[record.BookID]; !seen {
@@ -206,12 +237,12 @@ func (store *Store) SearchLibraryPages(
 	}
 
 	type rankedHit struct {
-		BookLibrarySearchHit
+		LibrarySearchHit
 		score int
 	}
 	hits := make([]rankedHit, 0, len(bookOrder))
 	for _, bookID := range bookOrder {
-		ranked := rankPageMatches(grouped[bookID], phrase, terms)
+		ranked := rankSegmentMatches(grouped[bookID], phrase, terms)
 		if len(ranked) == 0 {
 			continue
 		}
@@ -219,25 +250,25 @@ func (store *Store) SearchLibraryPages(
 			if ranked[i].score != ranked[j].score {
 				return ranked[i].score > ranked[j].score
 			}
-			return ranked[i].PageNumber < ranked[j].PageNumber
+			return ranked[i].Ordinal < ranked[j].Ordinal
 		})
 		bookScore := 0
 		totalMatches := 0
-		for _, page := range ranked {
-			bookScore += page.score
-			totalMatches += page.MatchCount
+		for _, segment := range ranked {
+			bookScore += segment.score
+			totalMatches += segment.MatchCount
 		}
-		if len(ranked) > pagesPerBook {
-			ranked = ranked[:pagesPerBook]
+		if len(ranked) > segmentsPerBook {
+			ranked = ranked[:segmentsPerBook]
 		}
-		pages := make([]BookPageSearchResult, len(ranked))
+		segments := make([]SegmentSearchResult, len(ranked))
 		for i := range ranked {
-			pages[i] = ranked[i].BookPageSearchResult
+			segments[i] = ranked[i].SegmentSearchResult
 		}
 		hits = append(hits, rankedHit{
 			BookID:       bookID,
 			TotalMatches: totalMatches,
-			Pages:        pages,
+			Segments:     segments,
 			score:        bookScore,
 		})
 	}
@@ -253,49 +284,49 @@ func (store *Store) SearchLibraryPages(
 	if len(hits) > bookLimit {
 		hits = hits[:bookLimit]
 	}
-	results := make([]BookLibrarySearchHit, len(hits))
+	results := make([]LibrarySearchHit, len(hits))
 	for i := range hits {
-		results[i] = hits[i].BookLibrarySearchHit
+		results[i] = hits[i].LibrarySearchHit
 	}
 	return results, nil
 }
 
-func (store *Store) matchingPages(ctx context.Context, bookID string, terms []string, limit int) ([]bookPageRecord, error) {
+func (store *Store) matchingSegments(ctx context.Context, bookID string, terms []string, limit int) ([]bookSegmentRecord, error) {
 	var query strings.Builder
 	var args []any
 	match := ftsMatchExpression(terms)
 	if match != "" {
-		query.WriteString(`SELECT p.book_id, p.page_number, p.text
-          FROM book_pages_fts
-          JOIN book_pages p ON p.seq = book_pages_fts.rowid
-         WHERE book_pages_fts MATCH ?`)
+		query.WriteString(`SELECT ` + segmentSearchColumns + `
+          FROM book_segments_fts
+          JOIN book_segments s ON s.id = book_segments_fts.rowid
+         WHERE book_segments_fts MATCH ?`)
 		args = append(args, match)
 	} else {
-		query.WriteString(`SELECT p.book_id, p.page_number, p.text
-          FROM book_pages p
+		query.WriteString(`SELECT ` + segmentSearchColumns + `
+          FROM book_segments s
          WHERE 1 = 1`)
 	}
 	if bookID != "" {
-		query.WriteString(" AND p.book_id = ?")
+		query.WriteString(" AND s.book_id = ?")
 		args = append(args, bookID)
 	}
 	for _, term := range terms {
 		if utf8.RuneCountInString(term) >= trigramLength {
 			continue
 		}
-		query.WriteString(` AND p.text LIKE ? ESCAPE '\' COLLATE NOCASE`)
+		query.WriteString(` AND s.text LIKE ? ESCAPE '\' COLLATE NOCASE`)
 		args = append(args, "%"+escapeLikeTerm(term)+"%")
 	}
 	if match != "" {
-		query.WriteString(" ORDER BY bm25(book_pages_fts), p.book_id, p.page_number")
+		query.WriteString(" ORDER BY bm25(book_segments_fts), s.book_id, s.ordinal")
 	} else {
-		query.WriteString(" ORDER BY p.book_id, p.page_number")
+		query.WriteString(" ORDER BY s.book_id, s.ordinal")
 	}
 	if limit > 0 {
 		query.WriteString(" LIMIT ?")
 		args = append(args, limit)
 	}
-	var records []bookPageRecord
+	var records []bookSegmentRecord
 	if err := store.db.WithContext(ctx).Raw(query.String(), args...).Scan(&records).Error; err != nil {
 		return nil, err
 	}
@@ -303,6 +334,8 @@ func (store *Store) matchingPages(ctx context.Context, bookID string, terms []st
 }
 
 const trigramLength = 3
+
+const segmentSearchColumns = "s.book_id, s.ordinal, s.location, s.heading_path, s.text"
 
 func ftsMatchExpression(terms []string) string {
 	quoted := make([]string, 0, len(terms))
@@ -315,13 +348,13 @@ func ftsMatchExpression(terms []string) string {
 	return strings.Join(quoted, " AND ")
 }
 
-type rankedPageResult struct {
-	BookPageSearchResult
+type rankedSegmentResult struct {
+	SegmentSearchResult
 	score int
 }
 
-func rankPageMatches(records []bookPageRecord, phrase string, terms []string) []rankedPageResult {
-	ranked := make([]rankedPageResult, 0, len(records))
+func rankSegmentMatches(records []bookSegmentRecord, phrase string, terms []string) []rankedSegmentResult {
+	ranked := make([]rankedSegmentResult, 0, len(records))
 	for _, record := range records {
 		compact := strings.Join(strings.Fields(record.Text), " ")
 		folded := strings.ToLower(compact)
@@ -347,11 +380,13 @@ func rankPageMatches(records []bookPageRecord, phrase string, terms []string) []
 		if phraseMatches > 0 {
 			firstMatch = strings.Index(folded, phrase)
 		}
-		ranked = append(ranked, rankedPageResult{
-			PageNumber: record.PageNumber,
-			Excerpt:    searchExcerpt(compact, firstMatch),
-			MatchCount: matchCount,
-			score:      score,
+		ranked = append(ranked, rankedSegmentResult{
+			Ordinal:     record.Ordinal,
+			Location:    record.Location,
+			HeadingPath: record.HeadingPath,
+			Excerpt:     searchExcerpt(compact, firstMatch),
+			MatchCount:  matchCount,
+			score:       score,
 		})
 	}
 	return ranked

@@ -54,6 +54,8 @@ export type BookPageInput = {
 
 export type BookSearchResult = {
   pageNumber: number;
+  location: string;
+  headingPath: string;
   excerpt: string;
   matchCount: number;
 };

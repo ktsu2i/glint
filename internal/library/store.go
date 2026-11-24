@@ -376,8 +376,8 @@ func (store *Store) Relink(ctx context.Context, id, sourcePath, fileHash string,
 	}
 	err = store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if fileHash != book.FileHash {
-			if err := tx.Where("book_id = ?", id).Delete(&bookPageRecord{}).Error; err != nil {
-				return fmt.Errorf("clear stale book pages: %w", err)
+			if err := tx.Where("book_id = ?", id).Delete(&bookSegmentRecord{}).Error; err != nil {
+				return fmt.Errorf("clear stale book segments: %w", err)
 			}
 		}
 		return tx.Model(&bookRecord{}).
