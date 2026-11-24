@@ -122,28 +122,9 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 			"本のファイルが見つかりません。本棚からファイルを再選択してください。",
 		))
 	}
-	inspection, pkg, err := inspectBook(book.SourcePath)
+	book, pkg, err := s.refreshSource(book)
 	if err != nil {
-		return BookFile{}, s.translateInspectionError(err)
-	}
-	if inspection.Format != book.Format {
-		return BookFile{}, errors.New(s.localized(
-			"The selected file format no longer matches this library entry.",
-			"選択されたファイルの形式が本棚の記録と一致しません。",
-		))
-	}
-	if inspection.FileHash != book.FileHash {
-		oldCoverPath := book.CoverThumbnailPath
-		book, err = s.library.Relink(s.appContext(), id, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
-		if err != nil {
-			return BookFile{}, err
-		}
-		if oldCoverPath != "" {
-			_ = os.Remove(oldCoverPath)
-		}
-		if err := s.afterImport(book, pkg); err != nil {
-			return BookFile{}, err
-		}
+		return BookFile{}, err
 	}
 	if book.CoverThumbnailStatus == "ready" && !fileExists(book.CoverThumbnailPath) {
 		if err := s.library.ResetCover(s.appContext(), id, time.Now()); err != nil {
@@ -156,6 +137,65 @@ func (s *Service) OpenBook(id string) (BookFile, error) {
 		return BookFile{}, err
 	}
 	return s.bookFile(book, pkg)
+}
+
+func (s *Service) refreshSource(book library.Book) (library.Book, *epubPackage, error) {
+	info, err := os.Stat(book.SourcePath)
+	if err != nil {
+		return library.Book{}, nil, fmt.Errorf("inspect book file: %w", err)
+	}
+	if sourceUnchanged(book, info) {
+		if book.Format != BookFormatEPUB {
+			return book, nil, nil
+		}
+		pkg, err := loadEPUBPackage(book.SourcePath)
+		if err != nil {
+			return library.Book{}, nil, s.translateInspectionError(err)
+		}
+		return book, pkg, nil
+	}
+	inspection, pkg, err := inspectBook(book.SourcePath)
+	if err != nil {
+		return library.Book{}, nil, s.translateInspectionError(err)
+	}
+	if inspection.Format != book.Format {
+		return library.Book{}, nil, errors.New(s.localized(
+			"The selected file format no longer matches this library entry.",
+			"選択されたファイルの形式が本棚の記録と一致しません。",
+		))
+	}
+	if inspection.FileHash != book.FileHash {
+		oldCoverPath := book.CoverThumbnailPath
+		book, err = s.library.Relink(s.appContext(), book.ID, book.SourcePath, inspection.FileHash, inspection.SizeBytes, time.Now())
+		if err != nil {
+			return library.Book{}, nil, err
+		}
+		if oldCoverPath != "" {
+			_ = os.Remove(oldCoverPath)
+		}
+		if err := s.afterImport(book, pkg); err != nil {
+			return library.Book{}, nil, err
+		}
+	}
+	if err := s.recordSourceStat(&book, inspection); err != nil {
+		return library.Book{}, nil, err
+	}
+	return book, pkg, nil
+}
+
+func sourceUnchanged(book library.Book, info os.FileInfo) bool {
+	return book.SourceModTime != "" &&
+		info.Size() == book.SizeBytes &&
+		library.FormatSourceModTime(info.ModTime()) == book.SourceModTime
+}
+
+func (s *Service) recordSourceStat(book *library.Book, inspection Inspection) error {
+	if err := s.library.RecordSourceStat(s.appContext(), book.ID, inspection.SizeBytes, inspection.ModTime, time.Now()); err != nil {
+		return err
+	}
+	book.SizeBytes = inspection.SizeBytes
+	book.SourceModTime = library.FormatSourceModTime(inspection.ModTime)
+	return nil
 }
 
 func (s *Service) RelinkBook(id string) (BookFile, error) {
@@ -194,6 +234,9 @@ func (s *Service) RelinkBook(id string) (BookFile, error) {
 		if err := s.afterImport(book, pkg); err != nil {
 			return BookFile{}, err
 		}
+	}
+	if err := s.recordSourceStat(&book, inspection); err != nil {
+		return BookFile{}, err
 	}
 	if err := s.library.MarkOpened(s.appContext(), id, time.Now()); err != nil {
 		return BookFile{}, err
@@ -449,6 +492,9 @@ func (s *Service) selectBookFile(filePath string) (BookFile, error) {
 	}
 	book, err = s.library.Get(s.appContext(), book.ID)
 	if err != nil {
+		return BookFile{}, err
+	}
+	if err := s.recordSourceStat(&book, inspection); err != nil {
 		return BookFile{}, err
 	}
 	if err := s.library.MarkOpened(s.appContext(), book.ID, time.Now()); err != nil {

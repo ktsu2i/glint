@@ -777,6 +777,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
   const isTocOpen = openPanel === "toc";
   const isSearchOpen = openPanel === "search";
   const isBookmarksOpen = openPanel === "bookmarks";
+  const pageBookmarks =
+    numPages > 0 ? bookmarks.filter((bookmark) => bookmark.pageNumber <= numPages) : bookmarks;
   const currentPageBookmarked = bookmarks.some((bookmark) => bookmark.pageNumber === pageNumber);
 
   async function toggleCurrentPageBookmark() {
@@ -1098,17 +1100,17 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
           <aside className="reader-toc reader-bookmarks" aria-label={t("reader.bookmarks")}>
             <div className="reader-toc-header">
               <span>{t("reader.bookmarks")}</span>
-              {bookmarks.length > 0 && <strong>{bookmarks.length}</strong>}
+              {pageBookmarks.length > 0 && <strong>{pageBookmarks.length}</strong>}
             </div>
             <div className="reader-toc-scroll">
               {bookmarksLoaded ? (
-                bookmarkError && bookmarks.length === 0 ? (
+                bookmarkError && pageBookmarks.length === 0 ? (
                   <p className="reader-toc-empty is-error">{bookmarkError}</p>
-                ) : bookmarks.length === 0 ? (
+                ) : pageBookmarks.length === 0 ? (
                   <p className="reader-toc-empty">{t("reader.noBookmarks")}</p>
                 ) : (
                   <ol className="reader-bookmark-list">
-                    {bookmarks.map((bookmark) => (
+                    {pageBookmarks.map((bookmark) => (
                       <li
                         key={bookmark.pageNumber}
                         className={bookmark.pageNumber === pageNumber ? "is-active" : ""}
@@ -1232,7 +1234,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
           />
           <div className="reader-slider-bookmarks">
             {document &&
-              bookmarks.map((bookmark) => {
+              pageBookmarks.map((bookmark) => {
                 const markerPosition =
                   numPages > 1 ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100 : 0;
                 const isCurrent = bookmark.pageNumber === pageNumber;

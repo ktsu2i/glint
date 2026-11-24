@@ -341,6 +341,21 @@ describe("PdfReader", () => {
     expect(pageFourMarker.getAttribute("aria-current")).toBe("page");
   });
 
+  it("hides bookmarks beyond the last page of a revised document", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 12;
+    backend.listBookmarks.mockResolvedValue([
+      { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" },
+      { pageNumber: 30, createdAt: "2026-06-23T00:01:00Z" },
+    ]);
+    resolveDocument(pdfDocument);
+    render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+
+    expect(await screen.findByRole("button", { name: "しおり付きの4ページへ移動" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "しおり付きの30ページへ移動" })).toBeNull();
+  });
+
   it("resets the reader scroll position after button, page input, and TOC navigation", async () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;

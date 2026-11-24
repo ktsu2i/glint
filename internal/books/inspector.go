@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kaito/glint/internal/library"
 )
@@ -12,6 +13,7 @@ type Inspection struct {
 	Format    string
 	FileHash  string
 	SizeBytes int64
+	ModTime   time.Time
 	Metadata  *EPUBMetadata
 }
 
@@ -32,14 +34,15 @@ var ErrUnsupportedBookFormat = errors.New("unsupported book format")
 func inspectBook(filePath string) (Inspection, *epubPackage, error) {
 	switch strings.ToLower(filepath.Ext(filePath)) {
 	case ".pdf":
-		hash, size, err := inspectPDF(filePath)
+		hash, info, err := inspectPDF(filePath)
 		if err != nil {
 			return Inspection{}, nil, err
 		}
 		return Inspection{
 			Format:    BookFormatPDF,
 			FileHash:  hash,
-			SizeBytes: size,
+			SizeBytes: info.Size(),
+			ModTime:   info.ModTime(),
 		}, nil, nil
 	case ".epub":
 		inspection, pkg, err := inspectEPUB(filePath)

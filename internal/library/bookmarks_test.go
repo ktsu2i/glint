@@ -59,7 +59,7 @@ func TestStoreValidatesAndClearsStaleBookmarks(t *testing.T) {
 	assert.ErrorIs(t, store.DeleteBookmark(t.Context(), book.ID, 0), ErrInvalidBookmark)
 }
 
-func TestStoreClearsBookmarksWhenPDFContentChanges(t *testing.T) {
+func TestStoreKeepsBookmarksWhenPDFContentChanges(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
@@ -73,5 +73,6 @@ func TestStoreClearsBookmarksWhenPDFContentChanges(t *testing.T) {
 	require.NoError(t, err)
 	bookmarks, err := store.ListBookmarks(t.Context(), book.ID)
 	require.NoError(t, err)
-	assert.Empty(t, bookmarks)
+	require.Len(t, bookmarks, 1, "bookmarks are user data and must survive a content change")
+	assert.Equal(t, 4, bookmarks[0].PageNumber)
 }
