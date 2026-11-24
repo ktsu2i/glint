@@ -2,7 +2,7 @@ import { fireEvent, render as renderBase, screen } from "@testing-library/react"
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BookSummary, LibrarySearchHit } from "../../shared/api/backend";
-import { LibrarySearch } from "./LibrarySearch";
+import { LibrarySearchField, LibrarySearchResults } from "./LibrarySearch";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
@@ -25,134 +25,153 @@ const availableBook: BookSummary = {
   available: true,
 };
 
-const defaultProps = {
+const fieldProps = {
+  searchInput: "",
+  searchStatus: "idle" as const,
+  resultCount: 0,
+  onSearchInputChange: vi.fn(),
+  onSearchSubmit: vi.fn(),
+  onClose: vi.fn(),
+};
+
+const resultProps = {
   busyBookId: "",
   searchQuery: "",
   searchInput: "",
   searchResults: [] as LibrarySearchHit[],
   searchStatus: "idle" as const,
   searchError: "",
-  onSearchInputChange: vi.fn(),
-  onSearchSubmit: vi.fn(),
-  onSearchClear: vi.fn(),
   onOpenAtPage: vi.fn(),
 };
 
-describe("LibrarySearch", () => {
-  it("submits a query and opens a result at the matched page", () => {
+const hit: LibrarySearchHit = {
+  book: availableBook,
+  totalMatches: 4,
+  pages: [
+    {
+      pageNumber: 12,
+      location: "page:12",
+      headingPath: "",
+      excerpt: "context builder filters",
+      matchCount: 3,
+    },
+    {
+      pageNumber: 50,
+      location: "page:50",
+      headingPath: "",
+      excerpt: "context builder cited",
+      matchCount: 1,
+    },
+  ],
+};
+
+describe("LibrarySearchField", () => {
+  it("focuses the field, submits a query, and reports how many books matched", () => {
     const onSearchInputChange = vi.fn();
     const onSearchSubmit = vi.fn();
-    const onOpenAtPage = vi.fn();
-    const hit: LibrarySearchHit = {
-      book: availableBook,
-      totalMatches: 4,
-      pages: [
-        {
-          pageNumber: 12,
-          location: "page:12",
-          headingPath: "",
-          excerpt: "context builder filters",
-          matchCount: 3,
-        },
-        {
-          pageNumber: 50,
-          location: "page:50",
-          headingPath: "",
-          excerpt: "context builder cited",
-          matchCount: 1,
-        },
-      ],
-    };
-
     const { rerender } = render(
-      <LibrarySearch
-        {...defaultProps}
+      <LibrarySearchField
+        {...fieldProps}
         onSearchInputChange={onSearchInputChange}
         onSearchSubmit={onSearchSubmit}
-        onOpenAtPage={onOpenAtPage}
       />,
     );
 
-    const searchBox = screen.getByRole<HTMLInputElement>("searchbox");
+    const searchBox = screen.getByRole<HTMLInputElement>("searchbox", { name: "検索語" });
+    expect(document.activeElement).toBe(searchBox);
     fireEvent.change(searchBox, { target: { value: "context builder" } });
     expect(onSearchInputChange).toHaveBeenCalledWith("context builder");
+    fireEvent.submit(searchBox.closest("form")!);
+    expect(onSearchSubmit).not.toHaveBeenCalled();
 
     rerender(
-      <LibrarySearch
-        {...defaultProps}
+      <LibrarySearchField
+        {...fieldProps}
         searchInput="context builder"
         onSearchInputChange={onSearchInputChange}
         onSearchSubmit={onSearchSubmit}
-        onOpenAtPage={onOpenAtPage}
       />,
     );
-    fireEvent.submit(screen.getByRole("searchbox").closest("form")!);
+    fireEvent.submit(searchBox.closest("form")!);
     expect(onSearchSubmit).toHaveBeenCalledOnce();
 
     rerender(
-      <LibrarySearch
-        {...defaultProps}
-        searchQuery="context builder"
+      <LibrarySearchField {...fieldProps} searchInput="context builder" searchStatus="loading" />,
+    );
+    expect(screen.getByRole("status")).toHaveProperty("textContent", "検索中");
+    rerender(
+      <LibrarySearchField
+        {...fieldProps}
         searchInput="context builder"
+        searchStatus="ready"
+        resultCount={1}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveProperty("textContent", "1冊で見つかりました");
+  });
+
+  it("closes with Escape or the esc button", () => {
+    const onClose = vi.fn();
+    render(<LibrarySearchField {...fieldProps} onClose={onClose} />);
+
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "検索を閉じる" }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("LibrarySearchResults", () => {
+  it("prompts for a query before the first search", () => {
+    render(<LibrarySearchResults {...resultProps} />);
+    expect(
+      screen.getByText("キーワードを入力すると、準備済みのページを横断検索します。"),
+    ).toBeTruthy();
+  });
+
+  it("opens a result at the matched page", () => {
+    const onOpenAtPage = vi.fn();
+    render(
+      <LibrarySearchResults
+        {...resultProps}
+        searchQuery="context builder"
         searchResults={[hit]}
         searchStatus="ready"
-        onSearchInputChange={onSearchInputChange}
-        onSearchSubmit={onSearchSubmit}
         onOpenAtPage={onOpenAtPage}
       />,
     );
 
-    expect(screen.getByText("1冊で見つかりました")).toBeTruthy();
+    expect(screen.getByText("4件")).toBeTruthy();
+    expect(screen.getByText("一致 3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideの50ページを開く" }));
     expect(onOpenAtPage).toHaveBeenCalledWith(availableBook, 50);
   });
 
-  it("shows an empty state when there are no matches and lets the user clear", () => {
-    const onSearchClear = vi.fn();
+  it("shows an empty state when there are no matches", () => {
     render(
-      <LibrarySearch
-        {...defaultProps}
+      <LibrarySearchResults
+        {...resultProps}
         searchQuery="missing term"
-        searchInput="missing term"
         searchResults={[]}
         searchStatus="ready"
-        onSearchClear={onSearchClear}
       />,
     );
 
     expect(screen.getByText("「missing term」を含む本は見つかりませんでした。")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "検索をクリア" }));
-    expect(onSearchClear).toHaveBeenCalledOnce();
   });
 
   it("disables the result button when the book file is missing", () => {
     const missingBook: BookSummary = { ...availableBook, available: false };
-    const hit: LibrarySearchHit = {
-      book: missingBook,
-      totalMatches: 1,
-      pages: [
-        {
-          pageNumber: 7,
-          location: "page:7",
-          headingPath: "",
-          excerpt: "missing match",
-          matchCount: 1,
-        },
-      ],
-    };
-
     render(
-      <LibrarySearch
-        {...defaultProps}
+      <LibrarySearchResults
+        {...resultProps}
         searchQuery="missing"
-        searchInput="missing"
-        searchResults={[hit]}
+        searchResults={[{ ...hit, book: missingBook }]}
         searchStatus="ready"
       />,
     );
 
     const button = screen.getByRole<HTMLButtonElement>("button", {
-      name: "Systems Guideの7ページを開く",
+      name: "Systems Guideの12ページを開く",
     });
     expect(button.disabled).toBe(true);
     expect(screen.getByText("ファイルが見つかりません")).toBeTruthy();
@@ -160,10 +179,9 @@ describe("LibrarySearch", () => {
 
   it("surfaces a backend error in the results region", () => {
     render(
-      <LibrarySearch
-        {...defaultProps}
+      <LibrarySearchResults
+        {...resultProps}
         searchQuery="boom"
-        searchInput="boom"
         searchStatus="error"
         searchError="本棚を検索できませんでした。"
       />,

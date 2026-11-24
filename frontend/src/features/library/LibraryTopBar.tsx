@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import {
   BookOpenTextIcon,
   GearSixIcon,
@@ -10,7 +11,7 @@ type LibraryTopBarProps = {
   title: string;
   resumeTitle: string | null;
   opening: boolean;
-  searchActive: boolean;
+  search: ReactElement | null;
   settingsActive: boolean;
   onImport: () => void;
   onResume: () => void;
@@ -18,11 +19,13 @@ type LibraryTopBarProps = {
   onSettings: () => void;
 };
 
+// LibraryTopBar is the floating glass bar of the library. While searching,
+// the title and the search button give way to the search field.
 export function LibraryTopBar({
   title,
   resumeTitle,
   opening,
-  searchActive,
+  search,
   settingsActive,
   onImport,
   onResume,
@@ -32,17 +35,28 @@ export function LibraryTopBar({
   const { t } = useTranslation();
   return (
     <header className="library-topbar glass">
-      <h1 id="library-title">{title}</h1>
-      <span className="library-topbar-spacer" />
-      <button
-        type="button"
-        className="glass-button"
-        aria-label={t("app.search")}
-        aria-pressed={searchActive}
-        onClick={onSearch}
-      >
-        <MagnifyingGlassIcon size={17} aria-hidden="true" />
-      </button>
+      {search === null ? (
+        <>
+          <h1 id="library-title">{title}</h1>
+          <span className="library-topbar-spacer" />
+          <button
+            type="button"
+            className="glass-button"
+            aria-label={t("librarySearch.open")}
+            title={t("librarySearch.open")}
+            onClick={onSearch}
+          >
+            <MagnifyingGlassIcon size={17} aria-hidden="true" />
+          </button>
+        </>
+      ) : (
+        <>
+          <h1 id="library-title" className="visually-hidden">
+            {title}
+          </h1>
+          {search}
+        </>
+      )}
       <button
         type="button"
         className="glass-button"

@@ -5,7 +5,11 @@ import { generateCoverThumbnail } from "./features/library/generateCover";
 import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
 import { Library } from "./features/library/Library";
 import { LibraryTopBar } from "./features/library/LibraryTopBar";
-import { LibrarySearch, type LibrarySearchStatus } from "./features/library/LibrarySearch";
+import {
+  LibrarySearchField,
+  LibrarySearchResults,
+  type LibrarySearchStatus,
+} from "./features/library/LibrarySearch";
 import { EpubReaderPlaceholder } from "./features/reader/EpubReaderPlaceholder";
 import { PdfReader } from "./features/reader/PdfReader";
 import { SettingsPage } from "./features/settings/SettingsPage";
@@ -52,6 +56,7 @@ function AppContent() {
   const [searchResults, setSearchResults] = useState<LibrarySearchHit[]>([]);
   const [searchStatus, setSearchStatus] = useState<LibrarySearchStatus>("idle");
   const [searchError, setSearchError] = useState("");
+  const [searchFocusSignal, setSearchFocusSignal] = useState(0);
   const indexAbortersRef = useRef<Map<string, AbortController>>(new Map());
   const searchRequestRef = useRef(0);
   const generatingCovers = useRef(new Set<string>());
@@ -405,7 +410,27 @@ function AppContent() {
 
   const showSearch = useCallback(() => {
     setView("search");
+    setSearchFocusSignal((current) => current + 1);
   }, []);
+
+  const closeSearch = useCallback(() => {
+    handleLibrarySearchClear();
+    setView("library");
+  }, [handleLibrarySearchClear]);
+
+  useEffect(() => {
+    if (view !== "library" && view !== "search") {
+      return;
+    }
+    function openLibrarySearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        showSearch();
+      }
+    }
+    window.addEventListener("keydown", openLibrarySearch);
+    return () => window.removeEventListener("keydown", openLibrarySearch);
+  }, [showSearch, view]);
 
   const resumeReader = useCallback(() => {
     if (!book) {
@@ -439,11 +464,23 @@ function AppContent() {
               title={t("app.library")}
               resumeTitle={book ? book.title : null}
               opening={opening}
-              searchActive={view === "search"}
+              search={
+                view === "search" ? (
+                  <LibrarySearchField
+                    key={searchFocusSignal}
+                    searchInput={searchInput}
+                    searchStatus={searchStatus}
+                    resultCount={searchResults.length}
+                    onSearchInputChange={setSearchInput}
+                    onSearchSubmit={handleLibrarySearchSubmit}
+                    onClose={closeSearch}
+                  />
+                ) : null
+              }
               settingsActive={view === "settings"}
               onImport={() => void handleImportPDF()}
               onResume={resumeReader}
-              onSearch={view === "search" ? showLibrary : showSearch}
+              onSearch={showSearch}
               onSettings={view === "settings" ? closeSettings : openSettings}
             />
             <div className="library-content">
@@ -456,16 +493,13 @@ function AppContent() {
                   onThemeChange={handleThemeChange}
                 />
               ) : view === "search" ? (
-                <LibrarySearch
+                <LibrarySearchResults
                   busyBookId={busyBookId}
                   searchQuery={searchQuery}
                   searchInput={searchInput}
                   searchResults={searchResults}
                   searchStatus={searchStatus}
                   searchError={searchError}
-                  onSearchInputChange={setSearchInput}
-                  onSearchSubmit={handleLibrarySearchSubmit}
-                  onSearchClear={handleLibrarySearchClear}
                   onOpenAtPage={handleOpenBookAtPage}
                 />
               ) : (

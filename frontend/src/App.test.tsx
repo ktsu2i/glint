@@ -203,6 +203,23 @@ describe("App", () => {
     unmount();
   });
 
+  it("turns the top bar into the library search with Command-F and closes it with Escape", async () => {
+    render(<App />);
+    await screen.findByText("最初の一冊を、本棚へ。");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    const searchBox = await screen.findByRole("searchbox", { name: "検索語" });
+    expect(
+      screen.getByText("キーワードを入力すると、準備済みのページを横断検索します。"),
+    ).toBeTruthy();
+    fireEvent.keyDown(searchBox, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "検索語" })).toBeNull();
+    expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "本棚を検索（⌘F）" }));
+    expect(await screen.findByRole("searchbox", { name: "検索語" })).toBeTruthy();
+  });
+
   it("opens a saved book at its reading position", async () => {
     mocks.listBooks.mockResolvedValue([summary]);
     mocks.openBook.mockResolvedValue(openedBook);
