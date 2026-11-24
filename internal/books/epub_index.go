@@ -21,15 +21,16 @@ func (s *Service) indexEPUBSpine(book library.Book, pkg *epubPackage) error {
 	total := len(pkg.Spine)
 	batch := make([]library.BookSegment, 0, epubIndexBatchSize)
 	for index, item := range pkg.Spine {
-		text, err := pkg.extractSpineItemText(&reader.Reader, item)
+		content, err := pkg.extractSpineItemText(&reader.Reader, item)
 		if err != nil {
-			text = ""
+			content = spineItemContent{}
 		}
 		batch = append(batch, library.BookSegment{
-			Ordinal:  index + 1,
-			Kind:     library.SegmentKindSection,
-			Location: library.SpineLocation(index),
-			Text:     text,
+			Ordinal:     index + 1,
+			Kind:        library.SegmentKindSection,
+			Location:    library.SpineLocation(index),
+			HeadingPath: content.Heading,
+			Text:        content.Text,
 		})
 		if len(batch) >= epubIndexBatchSize {
 			if _, err := s.library.SaveBookSegments(

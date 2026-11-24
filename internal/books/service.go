@@ -26,15 +26,23 @@ type BookFile struct {
 	Size             int64       `json:"size"`
 	InitialPage      int         `json:"initialPage"`
 	IndexedPageCount int         `json:"indexedPageCount"`
+	NextSegment      int         `json:"nextSegment"`
 	CoverStatus      string      `json:"coverStatus"`
 	SpineItems       []SpineItem `json:"spineItems,omitempty"`
 }
 
-type BookPageInput struct {
-	PageNumber int     `json:"pageNumber"`
-	Text       string  `json:"text"`
-	Width      float64 `json:"width"`
-	Height     float64 `json:"height"`
+type BookSegmentInput struct {
+	Ordinal     int    `json:"ordinal"`
+	Location    string `json:"location"`
+	HeadingPath string `json:"headingPath"`
+	Text        string `json:"text"`
+}
+
+type IndexTarget struct {
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	NextSegment int    `json:"nextSegment"`
+	Total       int    `json:"total"`
 }
 
 type BookSearchResult struct {
@@ -377,23 +385,58 @@ func (s *Service) RemoveBookmark(bookID string, pageNumber int) error {
 	return err
 }
 
-func (s *Service) SaveBookPages(bookID string, pages []BookPageInput, pageCount int) (int, error) {
-	inputs := make([]library.BookSegment, len(pages))
-	for i, page := range pages {
+func (s *Service) SaveBookSegments(bookID string, segments []BookSegmentInput, total int) (int, error) {
+	book, err := s.library.Get(s.appContext(), bookID)
+	if err != nil {
+		return 0, err
+	}
+	kind := library.SegmentKindPage
+	if book.Format == BookFormatEPUB {
+		kind = library.SegmentKindSection
+	}
+	inputs := make([]library.BookSegment, len(segments))
+	for i, segment := range segments {
 		inputs[i] = library.BookSegment{
-			Ordinal:  page.PageNumber,
-			Kind:     library.SegmentKindPage,
-			Location: library.PageLocation(page.PageNumber),
-			Text:     page.Text,
+			Ordinal:     segment.Ordinal,
+			Kind:        kind,
+			Location:    segment.Location,
+			HeadingPath: segment.HeadingPath,
+			Text:        segment.Text,
 		}
 	}
 	count, err := s.library.SaveBookSegments(
-		s.appContext(), bookID, inputs, pageCount, time.Now(),
+		s.appContext(), bookID, inputs, total, time.Now(),
 	)
 	if errors.Is(err, library.ErrInvalidSegmentBatch) {
-		return 0, errors.New(s.localized("The PDF page index is invalid.", "PDF page indexの内容が不正です。"))
+		return 0, errors.New(s.localized("The book index data is invalid.", "本の索引データが不正です。"))
 	}
 	return count, err
+}
+
+func (s *Service) PendingIndexBooks() ([]IndexTarget, error) {
+	books, err := s.library.List(s.appContext())
+	if err != nil {
+		return nil, err
+	}
+	targets := make([]IndexTarget, 0)
+	for _, book := range books {
+		if book.Format != BookFormatPDF || book.PageCount < 1 || !fileExists(book.SourcePath) {
+			continue
+		}
+		next, err := s.library.FirstMissingOrdinal(s.appContext(), book.ID)
+		if err != nil {
+			return nil, err
+		}
+		if next > book.PageCount {
+			continue
+		}
+		url, err := s.assets.Register(book.SourcePath, bookContentType(book.Format))
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, IndexTarget{ID: book.ID, URL: url, NextSegment: next, Total: book.PageCount})
+	}
+	return targets, nil
 }
 
 func (s *Service) SearchBook(bookID, query string) ([]BookSearchResult, error) {
@@ -526,6 +569,10 @@ func (s *Service) bookFile(book library.Book, pkg *epubPackage) (BookFile, error
 	if err != nil {
 		return BookFile{}, err
 	}
+	nextSegment, err := s.library.FirstMissingOrdinal(s.appContext(), book.ID)
+	if err != nil {
+		return BookFile{}, err
+	}
 	coverStatus := book.CoverThumbnailStatus
 	if coverStatus == "failed" {
 		coverStatus = "pending"
@@ -539,6 +586,7 @@ func (s *Service) bookFile(book library.Book, pkg *epubPackage) (BookFile, error
 		Size:             book.SizeBytes,
 		InitialPage:      max(1, book.LastPage),
 		IndexedPageCount: indexedPageCount,
+		NextSegment:      nextSegment,
 		CoverStatus:      coverStatus,
 	}
 	if book.Format == BookFormatEPUB && pkg != nil {

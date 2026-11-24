@@ -9,7 +9,8 @@ import {
   RemoveBook,
   RemoveBookmark,
   RenameBook,
-  SaveBookPages,
+  PendingIndexBooks,
+  SaveBookSegments,
   SaveBookCover,
   SaveReadingPosition,
   SearchBook,
@@ -41,15 +42,23 @@ export type BookFile = {
   size: number;
   initialPage: number;
   indexedPageCount: number;
+  nextSegment: number;
   coverStatus: "pending" | "ready" | "failed";
   spineItems?: EpubSpineItem[];
 };
 
-export type BookPageInput = {
-  pageNumber: number;
+export type BookSegmentInput = {
+  ordinal: number;
+  location: string;
+  headingPath: string;
   text: string;
-  width: number;
-  height: number;
+};
+
+export type IndexTarget = {
+  id: string;
+  url: string;
+  nextSegment: number;
+  total: number;
 };
 
 export type BookSearchResult = {
@@ -146,12 +155,16 @@ export async function removeBookmark(bookId: string, pageNumber: number): Promis
   await RemoveBookmark(bookId, pageNumber);
 }
 
-export async function saveBookPages(
+export async function saveBookSegments(
   bookId: string,
-  pages: BookPageInput[],
-  pageCount: number,
+  segments: BookSegmentInput[],
+  total: number,
 ): Promise<number> {
-  return SaveBookPages(bookId, pages, pageCount);
+  return SaveBookSegments(bookId, segments, total);
+}
+
+export async function pendingIndexBooks(): Promise<IndexTarget[]> {
+  return PendingIndexBooks();
 }
 
 export async function searchBook(bookId: string, query: string): Promise<BookSearchResult[]> {

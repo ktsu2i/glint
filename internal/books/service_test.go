@@ -40,6 +40,10 @@ func newHarness(t *testing.T) *harness {
 	return &harness{t: t, root: root, dataDir: dataDir, store: store, assets: assets, service: service}
 }
 
+func pdfSegment(pageNumber int, text string) BookSegmentInput {
+	return BookSegmentInput{Ordinal: pageNumber, Location: library.PageLocation(pageNumber), Text: text}
+}
+
 func (h *harness) writePDF(name, body string) string {
 	path := filepath.Join(h.root, name)
 	require.NoError(h.t, os.WriteFile(path, []byte(body), 0o600))
@@ -237,9 +241,9 @@ func TestServiceIndexesAndSearchesBookPages(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, book.IndexedPageCount)
 
-	count, err := h.service.SaveBookPages(book.ID, []BookPageInput{
-		{PageNumber: 1, Text: "Evidence from the first page.", Width: 612, Height: 792},
-		{PageNumber: 2, Text: "A retrieval pipeline returns evidence.", Width: 612, Height: 792},
+	count, err := h.service.SaveBookSegments(book.ID, []BookSegmentInput{
+		pdfSegment(1, "Evidence from the first page."),
+		pdfSegment(2, "A retrieval pipeline returns evidence."),
 	}, 2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
@@ -270,17 +274,17 @@ func TestServiceSearchesLibraryAcrossBooks(t *testing.T) {
 	notes, err := h.service.selectBookFile(notesPath)
 	require.NoError(t, err)
 
-	_, err = h.service.SaveBookPages(guide.ID, []BookPageInput{
-		{PageNumber: 1, Text: "Context builder filters what gets sent.", Width: 612, Height: 792},
-		{PageNumber: 2, Text: "Mention of context builder once more.", Width: 612, Height: 792},
+	_, err = h.service.SaveBookSegments(guide.ID, []BookSegmentInput{
+		pdfSegment(1, "Context builder filters what gets sent."),
+		pdfSegment(2, "Mention of context builder once more."),
 	}, 2)
 	require.NoError(t, err)
-	_, err = h.service.SaveBookPages(cookbook.ID, []BookPageInput{
-		{PageNumber: 1, Text: "Context builder. Context builder. Context builder.", Width: 612, Height: 792},
+	_, err = h.service.SaveBookSegments(cookbook.ID, []BookSegmentInput{
+		pdfSegment(1, "Context builder. Context builder. Context builder."),
 	}, 1)
 	require.NoError(t, err)
-	_, err = h.service.SaveBookPages(notes.ID, []BookPageInput{
-		{PageNumber: 1, Text: "Unrelated lexical evidence about retrieval.", Width: 612, Height: 792},
+	_, err = h.service.SaveBookSegments(notes.ID, []BookSegmentInput{
+		pdfSegment(1, "Unrelated lexical evidence about retrieval."),
 	}, 1)
 	require.NoError(t, err)
 
@@ -368,7 +372,7 @@ func TestOpenBookSkipsHashingWhenSizeAndModTimeAreUnchanged(t *testing.T) {
 	path := h.writePDF("Stable.pdf", "%PDF-1.7\nfirst")
 	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
-	_, err = h.service.SaveBookPages(book.ID, []BookPageInput{{PageNumber: 1, Text: "indexed"}}, 1)
+	_, err = h.service.SaveBookSegments(book.ID, []BookSegmentInput{pdfSegment(1, "indexed")}, 1)
 	require.NoError(t, err)
 	info, err := os.Stat(path)
 	require.NoError(t, err)
@@ -390,7 +394,7 @@ func TestOpenBookRecordsModTimeWhenOnlyModTimeChanges(t *testing.T) {
 	path := h.writePDF("Touched.pdf", "%PDF-1.7\nfixture")
 	book, err := h.service.selectBookFile(path)
 	require.NoError(t, err)
-	_, err = h.service.SaveBookPages(book.ID, []BookPageInput{{PageNumber: 1, Text: "indexed"}}, 1)
+	_, err = h.service.SaveBookSegments(book.ID, []BookSegmentInput{pdfSegment(1, "indexed")}, 1)
 	require.NoError(t, err)
 
 	touched := time.Now().Add(time.Hour)
@@ -432,4 +436,53 @@ func TestOpenBookLoadsEPUBSpineWithoutRehashing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, opened.SpineItems, 3)
 	assert.Equal(t, 3, opened.IndexedPageCount)
+}
+
+func TestPendingIndexBooksListsAvailablePDFsWithMissingPages(t *testing.T) {
+	h := newHarness(t)
+	partial, err := h.service.selectBookFile(h.writePDF("Partial.pdf", "%PDF-1.7\npartial"))
+	require.NoError(t, err)
+	_, err = h.service.SaveBookSegments(partial.ID, []BookSegmentInput{pdfSegment(1, "one"), pdfSegment(2, "two")}, 5)
+	require.NoError(t, err)
+
+	complete, err := h.service.selectBookFile(h.writePDF("Complete.pdf", "%PDF-1.7\ncomplete"))
+	require.NoError(t, err)
+	_, err = h.service.SaveBookSegments(complete.ID, []BookSegmentInput{pdfSegment(1, "one")}, 1)
+	require.NoError(t, err)
+
+	missingPath := h.writePDF("Missing.pdf", "%PDF-1.7\nmissing")
+	missing, err := h.service.selectBookFile(missingPath)
+	require.NoError(t, err)
+	_, err = h.service.SaveBookSegments(missing.ID, []BookSegmentInput{pdfSegment(1, "one")}, 3)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(missingPath))
+
+	_, err = h.service.selectBookFile(h.writePDF("Unopened.pdf", "%PDF-1.7\nunopened"))
+	require.NoError(t, err)
+	_, err = h.service.selectBookFile(newSampleEPUB(t))
+	require.NoError(t, err)
+
+	targets, err := h.service.PendingIndexBooks()
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, partial.ID, targets[0].ID)
+	assert.Equal(t, 3, targets[0].NextSegment)
+	assert.Equal(t, 5, targets[0].Total)
+	assert.Equal(t, partial.URL, targets[0].URL)
+
+	opened, err := h.service.OpenBook(partial.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, opened.NextSegment)
+}
+
+func TestServiceStoresEPUBSectionHeadings(t *testing.T) {
+	h := newHarness(t)
+	book, err := h.service.selectBookFile(newSampleEPUB(t))
+	require.NoError(t, err)
+	assert.Equal(t, 4, book.NextSegment)
+
+	results, err := h.service.SearchBook(book.ID, "retrieval pipeline")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Chapter Two", results[0].HeadingPath)
 }

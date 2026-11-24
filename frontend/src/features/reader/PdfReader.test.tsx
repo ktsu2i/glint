@@ -12,7 +12,7 @@ const backend = vi.hoisted(() => ({
   addBookmark: vi.fn(),
   listBookmarks: vi.fn(),
   removeBookmark: vi.fn(),
-  saveBookPages: vi.fn(),
+  saveBookSegments: vi.fn(),
   searchBook: vi.fn(),
 }));
 
@@ -26,7 +26,7 @@ vi.mock("../../shared/api/backend", () => ({
   addBookmark: backend.addBookmark,
   listBookmarks: backend.listBookmarks,
   removeBookmark: backend.removeBookmark,
-  saveBookPages: backend.saveBookPages,
+  saveBookSegments: backend.saveBookSegments,
   searchBook: backend.searchBook,
 }));
 vi.mock("../../shared/components/ToolButton", () => ({
@@ -115,6 +115,7 @@ function makeBook(url = "/book/1", indexedPageCount = 2): BookFile {
     size: 10,
     initialPage: 1,
     indexedPageCount,
+    nextSegment: indexedPageCount + 1,
     coverStatus: "pending",
   };
 }
@@ -158,7 +159,7 @@ beforeEach(() => {
     },
   );
   loader.loadPdfOutline.mockResolvedValue([]);
-  backend.saveBookPages.mockImplementation(
+  backend.saveBookSegments.mockImplementation(
     async (_bookId: string, pages: Array<{ pageNumber: number }>) => pages.at(-1)?.pageNumber ?? 0,
   );
   backend.searchBook.mockResolvedValue([]);

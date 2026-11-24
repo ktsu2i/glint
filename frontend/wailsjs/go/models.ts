@@ -43,6 +43,7 @@ export namespace books {
 	    size: number;
 	    initialPage: number;
 	    indexedPageCount: number;
+	    nextSegment: number;
 	    coverStatus: string;
 	    spineItems?: SpineItem[];
 	
@@ -60,6 +61,7 @@ export namespace books {
 	        this.size = source["size"];
 	        this.initialPage = source["initialPage"];
 	        this.indexedPageCount = source["indexedPageCount"];
+	        this.nextSegment = source["nextSegment"];
 	        this.coverStatus = source["coverStatus"];
 	        this.spineItems = this.convertValues(source["spineItems"], SpineItem);
 	    }
@@ -82,24 +84,6 @@ export namespace books {
 		    return a;
 		}
 	}
-	export class BookPageInput {
-	    pageNumber: number;
-	    text: string;
-	    width: number;
-	    height: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new BookPageInput(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pageNumber = source["pageNumber"];
-	        this.text = source["text"];
-	        this.width = source["width"];
-	        this.height = source["height"];
-	    }
-	}
 	export class BookSearchResult {
 	    pageNumber: number;
 	    location: string;
@@ -118,6 +102,24 @@ export namespace books {
 	        this.headingPath = source["headingPath"];
 	        this.excerpt = source["excerpt"];
 	        this.matchCount = source["matchCount"];
+	    }
+	}
+	export class BookSegmentInput {
+	    ordinal: number;
+	    location: string;
+	    headingPath: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BookSegmentInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ordinal = source["ordinal"];
+	        this.location = source["location"];
+	        this.headingPath = source["headingPath"];
+	        this.text = source["text"];
 	    }
 	}
 	export class BookSummary {
@@ -152,6 +154,24 @@ export namespace books {
 	        this.coverUrl = source["coverUrl"];
 	        this.coverStatus = source["coverStatus"];
 	        this.available = source["available"];
+	    }
+	}
+	export class IndexTarget {
+	    id: string;
+	    url: string;
+	    nextSegment: number;
+	    total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndexTarget(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.url = source["url"];
+	        this.nextSegment = source["nextSegment"];
+	        this.total = source["total"];
 	    }
 	}
 	export class LibrarySearchHit {

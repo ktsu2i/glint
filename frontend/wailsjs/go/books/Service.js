@@ -26,6 +26,10 @@ export function OpenBookFile() {
   return window['go']['books']['Service']['OpenBookFile']();
 }
 
+export function PendingIndexBooks() {
+  return window['go']['books']['Service']['PendingIndexBooks']();
+}
+
 export function RelinkBook(arg1) {
   return window['go']['books']['Service']['RelinkBook'](arg1);
 }
@@ -46,8 +50,8 @@ export function SaveBookCover(arg1, arg2) {
   return window['go']['books']['Service']['SaveBookCover'](arg1, arg2);
 }
 
-export function SaveBookPages(arg1, arg2, arg3) {
-  return window['go']['books']['Service']['SaveBookPages'](arg1, arg2, arg3);
+export function SaveBookSegments(arg1, arg2, arg3) {
+  return window['go']['books']['Service']['SaveBookSegments'](arg1, arg2, arg3);
 }
 
 export function SaveReadingPosition(arg1, arg2, arg3) {
