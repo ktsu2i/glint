@@ -381,8 +381,8 @@ func (s *BooksService) bookError(err error) error {
 		return s.text.error(ctx, "The bookmark is invalid.", "しおりの内容が不正です。")
 	case errors.Is(err, library.ErrInvalidHighlight):
 		return s.text.error(ctx,
-			"The highlight could not be saved. Select up to 10,000 characters on one page.",
-			"ハイライトを保存できませんでした。1ページ内で10,000文字以内を選択してください。",
+			"The highlight could not be saved. Select up to 10,000 characters.",
+			"ハイライトを保存できませんでした。10,000文字以内で選択してください。",
 		)
 	case errors.Is(err, library.ErrHighlightNotFound):
 		return s.text.error(ctx,
