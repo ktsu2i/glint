@@ -354,7 +354,7 @@ func TestPersistsHighlights(t *testing.T) {
 	input := library.NewHighlight{
 		PageNumber: 4,
 		PageCount:  12,
-		Color:      "blue",
+		Color:      "purple",
 		Text:       "interfaces belong to the consumer",
 		Rects:      []library.HighlightRect{{X: 0.1, Y: 0.4, Width: 0.6, Height: 0.03}},
 	}

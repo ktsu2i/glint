@@ -1,6 +1,6 @@
 import type { HighlightColor, HighlightRect } from "../../shared/api/backend";
 
-export const highlightColors: HighlightColor[] = ["yellow", "green", "blue", "pink"];
+export const highlightColors: HighlightColor[] = ["yellow", "green", "pink", "purple"];
 
 export type PageSelection = {
   pageNumber: number;

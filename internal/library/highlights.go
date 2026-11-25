@@ -17,7 +17,7 @@ import (
 var ErrInvalidHighlight = errors.New("invalid highlight")
 
 // HighlightColors lists the colors a highlight can take.
-var HighlightColors = []string{"yellow", "green", "blue", "pink"}
+var HighlightColors = []string{"yellow", "green", "pink", "purple"}
 
 const (
 	MaxHighlightTextRunes = 10_000

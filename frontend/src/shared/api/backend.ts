@@ -78,7 +78,7 @@ export type BookBookmark = {
   createdAt: string;
 };
 
-export type HighlightColor = "yellow" | "green" | "blue" | "pink";
+export type HighlightColor = "yellow" | "green" | "pink" | "purple";
 
 /** A rectangle on the page, in fractions of the page width and height. */
 export type HighlightRect = {

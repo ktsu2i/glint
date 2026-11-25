@@ -2143,21 +2143,30 @@ button.page-count:disabled {
   display: block;
 }
 
-/* Highlight colors are opaque pastels multiplied onto the page, so the text stays legible. */
+/*
+ * Highlights are translucent and the whole layer is multiplied onto the canvas,
+ * so the text shows through. Blending each mark would only blend it with the
+ * layer, which is its own stacking context, and cover the text. Blue is left
+ * to the text selection.
+ */
 .is-yellow {
   --highlight-color: #ffe27a;
+  --highlight-mark: rgb(255 208 0 / 45%);
 }
 
 .is-green {
   --highlight-color: #b4e8a8;
-}
-
-.is-blue {
-  --highlight-color: #aed4ff;
+  --highlight-mark: rgb(88 200 92 / 38%);
 }
 
 .is-pink {
   --highlight-color: #ffbfd8;
+  --highlight-mark: rgb(255 92 160 / 32%);
+}
+
+.is-purple {
+  --highlight-color: #d6c4ff;
+  --highlight-mark: rgb(150 100 255 / 30%);
 }
 
 .highlight-layer {
@@ -2165,13 +2174,13 @@ button.page-count:disabled {
   inset: 0;
   z-index: 1;
   pointer-events: none;
+  mix-blend-mode: multiply;
 }
 
 .highlight-mark {
   position: absolute;
   border-radius: 2px;
-  background: var(--highlight-color);
-  mix-blend-mode: multiply;
+  background: var(--highlight-mark);
 }
 
 .highlight-mark.is-active {
@@ -2220,7 +2229,7 @@ button.page-count:disabled {
 }
 
 .text-layer ::selection {
-  background: rgb(244 190 72 / 30%);
+  background: rgb(0 122 255 / 25%);
 }
 
 .text-layer .endOfContent {

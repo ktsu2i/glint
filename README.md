@@ -25,7 +25,7 @@ Your books and your reading positions stay on your machine.
 - Zoom in and out, or fit the page to the window. The layout, binding, and zoom live in the `Aa` menu.
 - Jump around with the table of contents, the page slider, or by typing a page number.
 - Bookmark pages and return to them from the bookmarks panel.
-- Select text to highlight it in yellow, green, blue, or pink, and look back over every highlight in the highlights panel. Click a highlight on the page to remove it.
+- Select text to highlight it in yellow, green, pink, or purple, and look back over every highlight in the highlights panel. Click a highlight on the page to remove it.
 - Have the current page read aloud, with automatic advance to the next page.
 - Read in light or dark mode, or follow your system setting. The page itself stays as the author made it.
 - Use Glint in English or Japanese. Both settings live in the Settings window (`⌘,`).
