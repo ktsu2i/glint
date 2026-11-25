@@ -42,7 +42,6 @@ function AppContent() {
   const [libraryError, setLibraryError] = useState("");
   const [busyBookId, setBusyBookId] = useState("");
   const [book, setBook] = useState<BookFile | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
   const [opening, setOpening] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>("system");
   const [searchInput, setSearchInput] = useState("");
@@ -193,7 +192,6 @@ function AppContent() {
   const showReader = useCallback(
     (selected: BookFile) => {
       lastSavedPosition.current = "";
-      setCurrentPage(0);
       setBook(selected);
       setView("reader");
       if (selected.format !== "epub") {
@@ -340,7 +338,6 @@ function AppContent() {
 
   const handlePageChange = useCallback(
     (pageNumber: number, pageCount: number) => {
-      setCurrentPage(pageNumber);
       if (!book || pageNumber < 1 || pageCount < 1) {
         return;
       }
@@ -385,16 +382,6 @@ function AppContent() {
     return () => window.removeEventListener("keydown", openLibrarySearch);
   }, [showSearch, view]);
 
-  const resumeReader = useCallback(() => {
-    if (!book) {
-      return;
-    }
-    if (currentPage > 0) {
-      setBook((current) => (current ? { ...current, initialPage: currentPage } : current));
-    }
-    setView("reader");
-  }, [book, currentPage]);
-
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
       <main className="app-shell">
@@ -415,7 +402,6 @@ function AppContent() {
           <div className="library-screen ambient">
             <LibraryTopBar
               title={t("app.library")}
-              resumeTitle={book ? book.title : null}
               opening={opening}
               search={
                 view === "search" ? (
@@ -431,7 +417,6 @@ function AppContent() {
                 ) : null
               }
               onImport={() => void handleImportPDF()}
-              onResume={resumeReader}
               onSearch={showSearch}
             />
             <div className="library-content">

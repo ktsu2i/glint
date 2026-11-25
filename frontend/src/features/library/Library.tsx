@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ContextMenu } from "@base-ui/react/context-menu";
 import {
   ArrowCounterClockwiseIcon,
   BookOpenTextIcon,
@@ -24,7 +25,7 @@ function readingProgress(book: BookSummary): number {
   return Math.min(100, Math.max(0, (book.lastPage / book.pageCount) * 100));
 }
 
-// The hero shows the available book the user opened most recently.
+// The hero offers to continue the available book the user opened most recently.
 function mostRecentBook(books: BookSummary[]): BookSummary | null {
   let recent: BookSummary | null = null;
   let recentTime = Number.NEGATIVE_INFINITY;
@@ -111,19 +112,6 @@ export function Library({
     return t("library.pageProgress", { current: book.lastPage, total: book.pageCount });
   }
 
-  function primaryActionLabel(book: BookSummary, busy: boolean): string {
-    if (!book.available) {
-      return busy ? t("library.choosing") : t("library.chooseAgain");
-    }
-    if (busy) {
-      return t("library.opening");
-    }
-    if (book.lastPage > 1) {
-      return t("library.continue");
-    }
-    return book.lastOpenedAt ? t("library.open") : t("library.startReading");
-  }
-
   const recent = mostRecentBook(books);
 
   return (
@@ -168,12 +156,13 @@ export function Library({
                 )}
               </span>
               <div className="library-hero-copy">
-                <p>{t("library.recentlyOpened")}</p>
                 <h2 title={recent.title}>{recent.title}</h2>
-                <span>{progressLabel(recent)}</span>
-                <span className="library-hero-progress" aria-hidden="true">
-                  <span style={{ width: `${readingProgress(recent)}%` }} />
-                </span>
+                <div className="library-hero-progress-row">
+                  <span className="library-hero-progress" aria-hidden="true">
+                    <span style={{ width: `${readingProgress(recent)}%` }} />
+                  </span>
+                  <span>{progressLabel(recent)}</span>
+                </div>
                 <button
                   type="button"
                   className="solid-button"
@@ -186,119 +175,126 @@ export function Library({
               </div>
             </section>
           )}
-
           <section className="library-shelf glass" aria-label={t("library.importedBooks")}>
-            <header className="library-shelf-heading">
-              <h2>
-                {t("library.title")} <span>{t("library.bookCount", { count: books.length })}</span>
-              </h2>
-              <p>{t("library.description")}</p>
-            </header>
             <div className="book-grid">
               {books.map((book) => {
                 const busy = busyBookId === book.id;
-                const actionIsPrimary = book.available && book.lastPage > 1;
                 return (
-                  <article
-                    className={book.available ? "book-card" : "book-card is-missing"}
-                    key={book.id}
-                  >
-                    <button
-                      type="button"
-                      className="book-cover-button"
-                      onClick={() => void onOpen(book)}
-                      disabled={!book.available || busy}
-                      aria-label={t("library.openBook", { title: book.title })}
+                  <ContextMenu.Root key={book.id} disabled={busy}>
+                    <ContextMenu.Trigger
+                      render={<article />}
+                      className={book.available ? "book-card" : "book-card is-missing"}
                     >
-                      <span className="book-cover">
-                        {book.coverUrl ? (
-                          <img src={book.coverUrl} alt="" />
-                        ) : (
-                          <PlaceholderCover book={book} />
-                        )}
-                        <span className="book-format-badge" aria-hidden="true">
-                          {formatBadgeLabel(book.format)}
-                        </span>
-                        <span className="reading-progress" aria-hidden="true">
-                          <span style={{ width: `${readingProgress(book)}%` }} />
-                        </span>
-                        {!book.available && (
-                          <span className="missing-cover-state">
-                            <WarningCircleIcon size={21} />
-                            {t("library.missingFile")}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                    <div className="book-card-copy">
-                      {editingId === book.id ? (
-                        <form
-                          className="book-rename-form"
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            commitEdit(book);
-                          }}
-                        >
-                          <input
-                            ref={inputRef}
-                            className="book-rename-input"
-                            type="text"
-                            value={draftName}
-                            maxLength={MAX_DISPLAY_NAME_LENGTH}
-                            onChange={(event) => setDraftName(event.target.value)}
-                            onBlur={() => commitEdit(book)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                cancelEdit();
-                              }
-                            }}
-                            aria-label={t("library.displayName", { title: book.title })}
-                          />
-                        </form>
-                      ) : (
-                        <h3 title={book.title}>
-                          <button
-                            type="button"
-                            className="book-title-edit"
-                            onClick={() => startEdit(book)}
-                            disabled={busy}
-                            aria-label={t("library.renameBook", { title: book.title })}
-                          >
-                            <span>{book.title}</span>
-                            <PencilSimpleIcon size={12} aria-hidden="true" />
-                          </button>
-                        </h3>
-                      )}
-                      {book.available && (
-                        <p className="book-progress-copy">{progressLabel(book)}</p>
-                      )}
-                      <div className="book-card-actions">
-                        <button
-                          type="button"
-                          className={
-                            actionIsPrimary ? "book-card-action is-primary" : "book-card-action"
-                          }
-                          onClick={() => void (book.available ? onOpen(book) : onRelink(book))}
-                          disabled={busy}
-                        >
-                          {!book.available && (
-                            <ArrowCounterClockwiseIcon size={12} weight="bold" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="book-cover-button"
+                        onClick={() => void (book.available ? onOpen(book) : onRelink(book))}
+                        disabled={busy}
+                        aria-label={
+                          book.available
+                            ? t("library.openBook", { title: book.title })
+                            : t("library.relinkBook", { title: book.title })
+                        }
+                      >
+                        <span className="book-cover">
+                          {book.coverUrl ? (
+                            <img src={book.coverUrl} alt="" />
+                          ) : (
+                            <PlaceholderCover book={book} />
                           )}
-                          {primaryActionLabel(book, busy)}
-                        </button>
-                        <button
-                          type="button"
-                          className="book-card-remove"
-                          onClick={() => void onRemove(book)}
-                          disabled={busy}
-                          aria-label={t("library.removeBook", { title: book.title })}
-                        >
-                          <TrashIcon size={14} aria-hidden="true" />
-                        </button>
+                          <span className="book-format-badge" aria-hidden="true">
+                            {formatBadgeLabel(book.format)}
+                          </span>
+                          <span className="reading-progress" aria-hidden="true">
+                            <span style={{ width: `${readingProgress(book)}%` }} />
+                          </span>
+                          {!book.available && (
+                            <span className="missing-cover-state">
+                              <WarningCircleIcon size={21} />
+                              {t("library.missingFile")}
+                              <small>
+                                <ArrowCounterClockwiseIcon
+                                  size={11}
+                                  weight="bold"
+                                  aria-hidden="true"
+                                />
+                                {busy ? t("library.choosing") : t("library.chooseAgain")}
+                              </small>
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                      <div className="book-card-copy">
+                        {editingId === book.id ? (
+                          <form
+                            className="book-rename-form"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              commitEdit(book);
+                            }}
+                          >
+                            <input
+                              ref={inputRef}
+                              className="book-rename-input"
+                              type="text"
+                              value={draftName}
+                              maxLength={MAX_DISPLAY_NAME_LENGTH}
+                              onChange={(event) => setDraftName(event.target.value)}
+                              onBlur={() => commitEdit(book)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelEdit();
+                                }
+                              }}
+                              aria-label={t("library.displayName", { title: book.title })}
+                            />
+                          </form>
+                        ) : (
+                          <h2 title={book.title}>{book.title}</h2>
+                        )}
+                        {book.available && (
+                          <p className="book-progress-copy">
+                            {busy ? t("library.opening") : progressLabel(book)}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  </article>
+                    </ContextMenu.Trigger>
+                    <ContextMenu.Portal>
+                      <ContextMenu.Positioner className="book-menu-positioner">
+                        <ContextMenu.Popup
+                          className="book-menu glass"
+                          aria-label={t("library.bookMenu", { title: book.title })}
+                          finalFocus={() => inputRef.current ?? true}
+                        >
+                          <ContextMenu.Item
+                            className="book-menu-item"
+                            onClick={() => startEdit(book)}
+                          >
+                            <PencilSimpleIcon size={14} aria-hidden="true" />
+                            {t("library.rename")}
+                          </ContextMenu.Item>
+                          {!book.available && (
+                            <ContextMenu.Item
+                              className="book-menu-item"
+                              onClick={() => void onRelink(book)}
+                            >
+                              <ArrowCounterClockwiseIcon size={14} aria-hidden="true" />
+                              {t("library.chooseFileAgain")}
+                            </ContextMenu.Item>
+                          )}
+                          <ContextMenu.Separator className="book-menu-separator" />
+                          <ContextMenu.Item
+                            className="book-menu-item is-danger"
+                            onClick={() => void onRemove(book)}
+                          >
+                            <TrashIcon size={14} aria-hidden="true" />
+                            {t("library.removeFromLibrary")}
+                          </ContextMenu.Item>
+                        </ContextMenu.Popup>
+                      </ContextMenu.Positioner>
+                    </ContextMenu.Portal>
+                  </ContextMenu.Root>
                 );
               })}
             </div>
