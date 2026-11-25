@@ -6,6 +6,23 @@ import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 
 const SEARCH_QUERY_MAX_LENGTH = 200;
 
+function foldForTitleMatch(text: string): string {
+  return text.normalize("NFKC").toLocaleLowerCase();
+}
+
+// matchBooksByTitle keeps the books whose title contains every
+// whitespace-separated term of the query, ignoring case and width.
+export function matchBooksByTitle(books: BookSummary[], query: string): BookSummary[] {
+  const terms = foldForTitleMatch(query).split(/\s+/).filter(Boolean);
+  if (terms.length === 0) {
+    return [];
+  }
+  return books.filter((book) => {
+    const title = foldForTitleMatch(book.title);
+    return terms.every((term) => title.includes(term));
+  });
+}
+
 export type LibrarySearchStatus = "idle" | "loading" | "ready" | "error";
 
 type LibrarySearchFieldProps = {
@@ -88,6 +105,7 @@ export function LibrarySearchField({
 }
 
 type LibrarySearchResultsProps = {
+  books: BookSummary[];
   busyBookId: string;
   searchQuery: string;
   searchInput: string;
@@ -95,10 +113,15 @@ type LibrarySearchResultsProps = {
   searchStatus: LibrarySearchStatus;
   searchError: string;
   onOpenAtPage: (book: BookSummary, pageNumber: number) => Promise<void>;
+  onOpenBook: (book: BookSummary) => Promise<void>;
+  onRelinkBook: (book: BookSummary) => Promise<void>;
 };
 
-// LibrarySearchResults lays the hits out where the shelf usually is.
+// LibrarySearchResults lays the hits out where the shelf usually is. Books
+// whose title matches show up while typing; the full-text hits follow once
+// the query is submitted.
 export function LibrarySearchResults({
+  books,
   busyBookId,
   searchQuery,
   searchInput,
@@ -106,20 +129,67 @@ export function LibrarySearchResults({
   searchStatus,
   searchError,
   onOpenAtPage,
+  onOpenBook,
+  onRelinkBook,
 }: LibrarySearchResultsProps) {
   const { t } = useTranslation();
   const isSearching = searchStatus === "loading";
   const hasSubmitted = searchStatus !== "idle";
   const hasResults = searchStatus === "ready" && searchResults.length > 0;
+  const titleQuery = searchInput.trim();
+  const titleMatches = matchBooksByTitle(books, titleQuery);
 
   return (
     <section className="library-search-view" aria-labelledby="library-search-title">
       <h2 id="library-search-title" className="visually-hidden">
         {t("librarySearch.title")}
       </h2>
+      {titleMatches.length > 0 && (
+        <section className="library-title-matches" aria-labelledby="library-title-matches-title">
+          <h3 id="library-title-matches-title" className="library-search-section-title">
+            {t("librarySearch.titleMatches")}
+          </h3>
+          <ul className="library-title-match-list">
+            {titleMatches.map((book) => (
+              <li key={book.id}>
+                <button
+                  type="button"
+                  className="library-title-match glass"
+                  disabled={busyBookId === book.id}
+                  onClick={() => void (book.available ? onOpenBook(book) : onRelinkBook(book))}
+                  aria-label={
+                    book.available
+                      ? t("library.openBook", { title: book.title })
+                      : t("library.relinkBook", { title: book.title })
+                  }
+                >
+                  <span className="library-search-hit-cover" aria-hidden="true">
+                    {book.coverUrl ? (
+                      <img src={book.coverUrl} alt="" />
+                    ) : (
+                      <BookOpenTextIcon size={16} weight="thin" />
+                    )}
+                  </span>
+                  <span className="library-title-match-title" title={book.title}>
+                    <HighlightedExcerpt text={book.title} query={titleQuery} />
+                  </span>
+                  {!book.available && (
+                    <span className="library-title-match-missing">{t("library.missingFile")}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="library-search-results" aria-live="polite">
+        {titleMatches.length > 0 && (hasSubmitted || searchError) && (
+          <h3 className="library-search-section-title">{t("librarySearch.textMatches")}</h3>
+        )}
         {!hasSubmitted && !searchError ? (
-          <p className="library-search-message">{t("librarySearch.prompt")}</p>
+          <p className="library-search-message">
+            {titleQuery ? t("librarySearch.submitHint") : t("librarySearch.prompt")}
+          </p>
         ) : searchError ? (
           <p className="library-search-message is-error" role="alert">
             {searchError}

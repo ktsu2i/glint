@@ -219,7 +219,9 @@ describe("App", () => {
     fireEvent.keyDown(window, { key: "f", metaKey: true });
     const searchBox = await screen.findByRole("searchbox", { name: "検索語" });
     expect(
-      screen.getByText("キーワードを入力すると、準備済みのページを横断検索します。"),
+      screen.getByText(
+        "キーワードを入力すると、タイトルで本を探したり、準備済みのページを横断検索したりできます。",
+      ),
     ).toBeTruthy();
     fireEvent.keyDown(searchBox, { key: "Escape" });
     expect(screen.queryByRole("searchbox", { name: "検索語" })).toBeNull();

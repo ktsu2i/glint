@@ -422,6 +422,7 @@ function AppContent() {
             <div className="library-content">
               {view === "search" ? (
                 <LibrarySearchResults
+                  books={books}
                   busyBookId={busyBookId}
                   searchQuery={searchQuery}
                   searchInput={searchInput}
@@ -429,6 +430,8 @@ function AppContent() {
                   searchStatus={searchStatus}
                   searchError={searchError}
                   onOpenAtPage={handleOpenBookAtPage}
+                  onOpenBook={handleOpenBook}
+                  onRelinkBook={handleRelinkBook}
                 />
               ) : (
                 <Library

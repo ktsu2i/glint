@@ -1,8 +1,8 @@
-import { fireEvent, render as renderBase, screen } from "@testing-library/react";
+import { fireEvent, render as renderBase, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BookSummary, LibrarySearchHit } from "../../shared/api/backend";
-import { LibrarySearchField, LibrarySearchResults } from "./LibrarySearch";
+import { LibrarySearchField, LibrarySearchResults, matchBooksByTitle } from "./LibrarySearch";
 import { I18nProvider } from "../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
@@ -35,6 +35,7 @@ const fieldProps = {
 };
 
 const resultProps = {
+  books: [] as BookSummary[],
   busyBookId: "",
   searchQuery: "",
   searchInput: "",
@@ -42,6 +43,8 @@ const resultProps = {
   searchStatus: "idle" as const,
   searchError: "",
   onOpenAtPage: vi.fn(),
+  onOpenBook: vi.fn(),
+  onRelinkBook: vi.fn(),
 };
 
 const hit: LibrarySearchHit = {
@@ -120,11 +123,77 @@ describe("LibrarySearchField", () => {
   });
 });
 
+describe("matchBooksByTitle", () => {
+  const books: BookSummary[] = [
+    availableBook,
+    { ...availableBook, id: "book-2", title: "Ｇｏ言語による並行処理" },
+    { ...availableBook, id: "book-3", title: "Database Internals" },
+  ];
+
+  it("matches every term regardless of case and width", () => {
+    expect(matchBooksByTitle(books, "systems").map((book) => book.id)).toEqual(["book-1"]);
+    expect(matchBooksByTitle(books, "go 並行").map((book) => book.id)).toEqual(["book-2"]);
+    expect(matchBooksByTitle(books, "guide internals")).toEqual([]);
+  });
+
+  it("matches nothing for a blank query", () => {
+    expect(matchBooksByTitle(books, "   ")).toEqual([]);
+  });
+});
+
 describe("LibrarySearchResults", () => {
+  it("lists books whose title matches while typing and opens them", () => {
+    const onOpenBook = vi.fn();
+    const onRelinkBook = vi.fn();
+    const missingBook: BookSummary = {
+      ...availableBook,
+      id: "book-2",
+      title: "Systems Design",
+      available: false,
+    };
+    render(
+      <LibrarySearchResults
+        {...resultProps}
+        books={[availableBook, missingBook, { ...availableBook, id: "book-3", title: "Other" }]}
+        searchInput="systems"
+        onOpenBook={onOpenBook}
+        onRelinkBook={onRelinkBook}
+      />,
+    );
+
+    const titles = screen.getByRole("region", { name: "タイトル" });
+    expect(within(titles).getAllByRole("button")).toHaveLength(2);
+    expect(screen.getByText("Return キーで本文を横断検索します。")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Systems Guideを開く" }));
+    expect(onOpenBook).toHaveBeenCalledWith(availableBook);
+    fireEvent.click(within(titles).getByRole("button", { name: /Systems Design/ }));
+    expect(onRelinkBook).toHaveBeenCalledWith(missingBook);
+  });
+
+  it("shows title matches above the full-text hits", () => {
+    render(
+      <LibrarySearchResults
+        {...resultProps}
+        books={[availableBook]}
+        searchInput="systems"
+        searchQuery="systems"
+        searchResults={[hit]}
+        searchStatus="ready"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "タイトル" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "本文" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Systems Guideの12ページを開く" })).toBeTruthy();
+  });
+
   it("prompts for a query before the first search", () => {
     render(<LibrarySearchResults {...resultProps} />);
     expect(
-      screen.getByText("キーワードを入力すると、準備済みのページを横断検索します。"),
+      screen.getByText(
+        "キーワードを入力すると、タイトルで本を探したり、準備済みのページを横断検索したりできます。",
+      ),
     ).toBeTruthy();
   });
 

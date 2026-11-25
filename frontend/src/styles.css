@@ -426,6 +426,70 @@ input:focus-visible,
   user-select: none;
 }
 
+.library-search-section-title {
+  margin: 0 4px 10px;
+  color: var(--ambient-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.library-title-matches {
+  margin-bottom: 22px;
+}
+
+.library-title-match-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-title-match {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  color: var(--glass-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.library-title-match:hover:not(:disabled) {
+  background: var(--glass-selected);
+}
+
+.library-title-match:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.library-title-match-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-title-match-title mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--context-marker);
+  color: inherit;
+}
+
+.library-title-match-missing {
+  flex-shrink: 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
 .library-search-message {
   max-width: 640px;
   margin: 40px auto 0;
