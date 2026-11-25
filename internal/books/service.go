@@ -277,6 +277,22 @@ func (s *Service) RemoveBookmark(ctx context.Context, bookID string, pageNumber 
 	return s.library.DeleteBookmark(ctx, bookID, pageNumber)
 }
 
+func (s *Service) ListHighlights(ctx context.Context, bookID string) ([]library.BookHighlight, error) {
+	return s.library.ListHighlights(ctx, bookID)
+}
+
+func (s *Service) AddHighlight(ctx context.Context, bookID string, input library.NewHighlight) (library.BookHighlight, error) {
+	return s.library.SaveHighlight(ctx, bookID, input, time.Now())
+}
+
+func (s *Service) ChangeHighlightColor(ctx context.Context, bookID string, id int64, color string) (library.BookHighlight, error) {
+	return s.library.UpdateHighlightColor(ctx, bookID, id, color)
+}
+
+func (s *Service) RemoveHighlight(ctx context.Context, bookID string, id int64) error {
+	return s.library.DeleteHighlight(ctx, bookID, id)
+}
+
 // SaveSegments stores extracted text. The segment kind follows the book's format.
 func (s *Service) SaveSegments(ctx context.Context, bookID string, segments []library.BookSegment, total int) (int, error) {
 	book, err := s.library.Get(ctx, bookID)

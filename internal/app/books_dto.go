@@ -51,6 +51,30 @@ type BookBookmark struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
+type HighlightRect struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type BookHighlight struct {
+	ID         int64           `json:"id"`
+	PageNumber int             `json:"pageNumber"`
+	Color      string          `json:"color"`
+	Text       string          `json:"text"`
+	Rects      []HighlightRect `json:"rects"`
+	CreatedAt  string          `json:"createdAt"`
+}
+
+type HighlightInput struct {
+	PageNumber int             `json:"pageNumber"`
+	PageCount  int             `json:"pageCount"`
+	Color      string          `json:"color"`
+	Text       string          `json:"text"`
+	Rects      []HighlightRect `json:"rects"`
+}
+
 type BookSummary struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
@@ -74,6 +98,35 @@ type LibrarySearchHit struct {
 
 func toBookBookmark(bookmark library.BookBookmark) BookBookmark {
 	return BookBookmark{PageNumber: bookmark.PageNumber, CreatedAt: bookmark.CreatedAt}
+}
+
+func toBookHighlight(highlight library.BookHighlight) BookHighlight {
+	rects := make([]HighlightRect, len(highlight.Rects))
+	for i, rect := range highlight.Rects {
+		rects[i] = HighlightRect(rect)
+	}
+	return BookHighlight{
+		ID:         highlight.ID,
+		PageNumber: highlight.PageNumber,
+		Color:      highlight.Color,
+		Text:       highlight.Text,
+		Rects:      rects,
+		CreatedAt:  highlight.CreatedAt,
+	}
+}
+
+func (input HighlightInput) toNewHighlight() library.NewHighlight {
+	rects := make([]library.HighlightRect, len(input.Rects))
+	for i, rect := range input.Rects {
+		rects[i] = library.HighlightRect(rect)
+	}
+	return library.NewHighlight{
+		PageNumber: input.PageNumber,
+		PageCount:  input.PageCount,
+		Color:      input.Color,
+		Text:       input.Text,
+		Rects:      rects,
+	}
 }
 
 func toBookSearchResults(results []library.SegmentSearchResult) []BookSearchResult {

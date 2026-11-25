@@ -229,6 +229,8 @@ func TestBookErrorsAreLocalized(t *testing.T) {
 	assert.EqualError(t, err, "The bookmark page is outside this document.")
 	_, err = h.service.SearchBook(book.ID, "   ")
 	assert.EqualError(t, err, "Search terms must be between 1 and 200 characters.")
+	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 2, Color: "yellow", Text: "text"})
+	assert.EqualError(t, err, "The highlight could not be saved. Select up to 10,000 characters on one page.")
 
 	h.useJapanese()
 	_, err = h.service.SearchLibrary("   ")
@@ -266,4 +268,38 @@ func TestSearchAndIndexReturnDTOs(t *testing.T) {
 	require.Len(t, targets, 1)
 	assert.Equal(t, book.URL, targets[0].URL)
 	assert.Equal(t, 3, targets[0].NextSegment)
+}
+
+func TestHighlightsRoundTripAsDTOs(t *testing.T) {
+	h := newHarness(t)
+	book := h.importPDF("Highlights.pdf")
+	rects := []HighlightRect{{X: 0.12, Y: 0.3, Width: 0.5, Height: 0.025}}
+
+	saved, err := h.service.AddHighlight(book.ID, HighlightInput{
+		PageNumber: 2, PageCount: 5, Color: "pink", Text: "an idea worth keeping", Rects: rects,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, saved.PageNumber)
+	assert.Equal(t, "pink", saved.Color)
+	assert.Equal(t, rects, saved.Rects)
+
+	listed, err := h.service.ListHighlights(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []BookHighlight{saved}, listed)
+
+	changed, err := h.service.ChangeHighlightColor(book.ID, saved.ID, "green")
+	require.NoError(t, err)
+	assert.Equal(t, "green", changed.Color)
+	assert.Equal(t, rects, changed.Rects)
+
+	require.NoError(t, h.service.RemoveHighlight(book.ID, saved.ID))
+	_, err = h.service.ChangeHighlightColor(book.ID, saved.ID, "green")
+	assert.EqualError(t, err, "The highlight no longer exists.")
+	listed, err = h.service.ListHighlights(book.ID)
+	require.NoError(t, err)
+	assert.Empty(t, listed)
+
+	h.useJapanese()
+	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 5, Color: "pink", Text: "x"})
+	assert.EqualError(t, err, "ハイライトを保存できませんでした。1ページ内で10,000文字以内を選択してください。")
 }

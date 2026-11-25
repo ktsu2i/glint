@@ -34,6 +34,16 @@ type BookBookmark struct {
 	CreatedAt  string
 }
 
+type BookHighlight struct {
+	ID         int64
+	BookID     string
+	PageNumber int64
+	Color      string
+	Text       string
+	Rects      string
+	CreatedAt  string
+}
+
 type BookReadingState struct {
 	BookID     string
 	PageNumber int64

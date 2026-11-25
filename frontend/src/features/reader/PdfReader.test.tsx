@@ -10,8 +10,12 @@ const loader = vi.hoisted(() => ({
 }));
 const backend = vi.hoisted(() => ({
   addBookmark: vi.fn(),
+  addHighlight: vi.fn(),
+  changeHighlightColor: vi.fn(),
   listBookmarks: vi.fn(),
+  listHighlights: vi.fn(),
   removeBookmark: vi.fn(),
+  removeHighlight: vi.fn(),
   saveBookSegments: vi.fn(),
   searchBook: vi.fn(),
   setWindowControlsVisible: vi.fn(),
@@ -25,8 +29,12 @@ vi.mock("./loadPdf", () => ({
 }));
 vi.mock("../../shared/api/backend", () => ({
   addBookmark: backend.addBookmark,
+  addHighlight: backend.addHighlight,
+  changeHighlightColor: backend.changeHighlightColor,
   listBookmarks: backend.listBookmarks,
+  listHighlights: backend.listHighlights,
   removeBookmark: backend.removeBookmark,
+  removeHighlight: backend.removeHighlight,
   saveBookSegments: backend.saveBookSegments,
   searchBook: backend.searchBook,
   setWindowControlsVisible: backend.setWindowControlsVisible,
@@ -179,6 +187,24 @@ beforeEach(() => {
     createdAt: "2026-06-23T00:00:00Z",
   }));
   backend.removeBookmark.mockResolvedValue(undefined);
+  backend.listHighlights.mockResolvedValue([]);
+  backend.addHighlight.mockImplementation(
+    async (_bookId: string, input: { pageCount: number } & Record<string, unknown>) => {
+      const { pageCount: _pageCount, ...rest } = input;
+      return { ...rest, id: 41, createdAt: "2026-11-25T00:00:00Z" };
+    },
+  );
+  backend.removeHighlight.mockResolvedValue(undefined);
+  backend.changeHighlightColor.mockImplementation(
+    async (_bookId: string, id: number, color: string) => ({
+      id,
+      pageNumber: 1,
+      color,
+      text: "Alpha Beta",
+      rects: [{ x: 0.1, y: 0.1, width: 0.5, height: 0.1 }],
+      createdAt: "2026-11-25T00:00:00Z",
+    }),
+  );
   backend.setWindowControlsVisible.mockResolvedValue(undefined);
 });
 
@@ -966,6 +992,109 @@ describe("PdfReader", () => {
     fireEvent.click(screen.getByRole("button", { name: "1ページをしおりに保存" }));
     await waitFor(() => expect(backend.addBookmark).toHaveBeenCalledWith("book-1", 1, 2));
     expect(await screen.findByText("1ページ")).toBeTruthy();
+  });
+
+  it("lists highlights, draws them on their page, jumps to them, and removes them", async () => {
+    const pdfDocument = makeDocument();
+    resolveDocument(pdfDocument);
+    backend.listHighlights.mockResolvedValue([
+      {
+        id: 7,
+        pageNumber: 2,
+        color: "green",
+        text: "依存の向きは一方向に保つ",
+        rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }],
+        createdAt: "2026-11-25T00:00:00Z",
+      },
+    ]);
+    const { container } = render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
+    await waitFor(() => expect(backend.listHighlights).toHaveBeenCalledWith("book-1"));
+    await waitFor(() => expect(container.querySelector(".pdf-page[data-page='1']")).toBeTruthy());
+    expect(container.querySelector(".highlight-mark")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "ハイライトを開く" }));
+    expect(await screen.findByText("依存の向きは一方向に保つ")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "2ページのハイライトへ移動" }));
+    await waitFor(() => expect(container.querySelector(".pdf-page[data-page='2']")).toBeTruthy());
+    const mark = container.querySelector<HTMLElement>(".highlight-mark.is-green");
+    expect(mark?.style.left).toBe("10%");
+    expect(mark?.style.width).toBe("50%");
+
+    fireEvent.click(screen.getByRole("button", { name: "2ページのハイライトを削除" }));
+    await waitFor(() => expect(backend.removeHighlight).toHaveBeenCalledWith("book-1", 7));
+    expect(screen.queryByText("依存の向きは一方向に保つ")).toBeNull();
+    expect(container.querySelector(".highlight-mark")).toBeNull();
+    expect(
+      screen.getByText("ページの文章を選択して色を選ぶと、ハイライトを引けます。"),
+    ).toBeTruthy();
+  });
+
+  it("highlights a text selection in the chosen color and removes it from the page", async () => {
+    resolveDocument();
+    const { container } = render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
+    await waitFor(() => expect(container.querySelector(".pdf-page[data-page='1']")).toBeTruthy());
+    await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalled());
+
+    const page = container.querySelector<HTMLElement>(".pdf-page[data-page='1']")!;
+    page.getBoundingClientRect = () => new DOMRect(0, 0, 200, 100);
+    const span = globalThis.document.createElement("span");
+    span.textContent = "Alpha Beta";
+    page.querySelector(".text-layer")!.append(span);
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => [new DOMRect(20, 10, 100, 10)],
+    });
+    Object.defineProperty(Range.prototype, "getBoundingClientRect", {
+      configurable: true,
+      value: () => new DOMRect(20, 10, 100, 10),
+    });
+    try {
+      window.getSelection()!.selectAllChildren(span);
+      fireEvent.mouseUp(container.querySelector(".pdf-stage")!);
+
+      fireEvent.click(await screen.findByRole("button", { name: "黄色でハイライト" }));
+      await waitFor(() =>
+        expect(backend.addHighlight).toHaveBeenCalledWith("book-1", {
+          pageNumber: 1,
+          pageCount: 2,
+          color: "yellow",
+          text: "Alpha Beta",
+          rects: [{ x: 0.1, y: 0.1, width: 0.5, height: 0.1 }],
+        }),
+      );
+      await waitFor(() =>
+        expect(container.querySelector(".highlight-mark.is-yellow")).toBeTruthy(),
+      );
+      expect(screen.queryByRole("toolbar", { name: "選択した文章をハイライト" })).toBeNull();
+      expect(window.getSelection()?.isCollapsed).toBe(true);
+
+      fireEvent.click(container.querySelector(".pdf-stage")!, { clientX: 60, clientY: 15 });
+      const actions = await screen.findByRole("toolbar", { name: "ハイライト" });
+      expect(screen.getByRole("button", { name: "黄色に変更" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "紫に変更" }));
+      await waitFor(() =>
+        expect(backend.changeHighlightColor).toHaveBeenCalledWith("book-1", 41, "purple"),
+      );
+      await waitFor(() =>
+        expect(container.querySelector(".highlight-mark.is-purple")).toBeTruthy(),
+      );
+      expect(container.querySelector(".highlight-mark.is-yellow")).toBeNull();
+      expect(screen.getByRole("button", { name: "紫に変更" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      expect(actions.textContent).toBe("");
+
+      fireEvent.click(screen.getByRole("button", { name: "ハイライトを削除" }));
+      await waitFor(() => expect(backend.removeHighlight).toHaveBeenCalledWith("book-1", 41));
+      expect(container.querySelector(".highlight-mark")).toBeNull();
+    } finally {
+      Reflect.deleteProperty(Range.prototype, "getClientRects");
+      Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+    }
   });
 
   it("renders nested outline items, jumps on click, and highlights the active section", async () => {

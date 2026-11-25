@@ -1734,6 +1734,153 @@ input:focus-visible,
   opacity: 0.3;
 }
 
+/* Highlights: the list in the side sheet and the floating color picker. */
+.reader-highlight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reader-highlight-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 10px;
+}
+
+.reader-highlight-list li:hover {
+  background: var(--glass-hover);
+}
+
+.reader-highlight-list li.is-active {
+  background: var(--glass-selected);
+}
+
+.reader-highlight-list li:hover .reader-bookmark-remove,
+.reader-highlight-list li:focus-within .reader-bookmark-remove {
+  opacity: 1;
+}
+
+.reader-highlight-list .reader-bookmark-remove {
+  margin-top: 6px;
+}
+
+.reader-highlight-link {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px 9px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+
+.reader-highlight-link::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--highlight-color);
+}
+
+.reader-highlight-link small {
+  color: var(--glass-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-highlight-link span {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow-wrap: anywhere;
+}
+
+.reader-highlight-toolbar {
+  position: absolute;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+}
+
+.reader-highlight-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 50%;
+  background: var(--highlight-color);
+  cursor: pointer;
+  transition: transform 100ms ease;
+}
+
+.reader-highlight-swatch:hover:not(:disabled) {
+  transform: scale(1.12);
+}
+
+/* The current color of a highlight carries a ring. */
+.reader-highlight-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--glass-ink);
+  outline-offset: 2px;
+}
+
+.reader-highlight-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--glass-rule);
+}
+
+.reader-highlight-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.reader-highlight-swatch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.reader-highlight-remove {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--glass-muted);
+  cursor: pointer;
+}
+
+.reader-highlight-remove:hover:not(:disabled) {
+  background: var(--error-surface);
+  color: var(--danger);
+}
+
+.reader-highlight-remove:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 /* Bottom bar: page turning, page number, and the page slider. */
 .page-count {
   min-width: 82px;
@@ -2008,6 +2155,50 @@ button.page-count:disabled {
   display: block;
 }
 
+/*
+ * Highlights are translucent and the whole layer is multiplied onto the canvas,
+ * so the text shows through. Blending each mark would only blend it with the
+ * layer, which is its own stacking context, and cover the text. Blue is left
+ * to the text selection.
+ */
+.is-yellow {
+  --highlight-color: #ffe27a;
+  --highlight-mark: rgb(255 208 0 / 45%);
+}
+
+.is-green {
+  --highlight-color: #b4e8a8;
+  --highlight-mark: rgb(88 200 92 / 38%);
+}
+
+.is-pink {
+  --highlight-color: #ffbfd8;
+  --highlight-mark: rgb(255 92 160 / 32%);
+}
+
+.is-purple {
+  --highlight-color: #d6c4ff;
+  --highlight-mark: rgb(150 100 255 / 30%);
+}
+
+.highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.highlight-mark {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--highlight-mark);
+}
+
+.highlight-mark.is-active {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--highlight-color) 55%, #000);
+}
+
 .text-layer {
   position: absolute;
   inset: 0;
@@ -2050,7 +2241,7 @@ button.page-count:disabled {
 }
 
 .text-layer ::selection {
-  background: rgb(244 190 72 / 30%);
+  background: rgb(0 122 255 / 25%);
 }
 
 .text-layer .endOfContent {

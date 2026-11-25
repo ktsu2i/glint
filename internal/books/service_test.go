@@ -347,6 +347,38 @@ func TestOpenRecordsModTimeWhenOnlyModTimeChanges(t *testing.T) {
 	assert.Equal(t, library.FormatSourceModTime(touched), stored.SourceModTime)
 }
 
+func TestPersistsHighlights(t *testing.T) {
+	h := newHarness(t)
+	opened := h.importBook(h.writePDF("Highlights.pdf", "%PDF-1.7\nfixture"))
+	id := opened.Book.ID
+	input := library.NewHighlight{
+		PageNumber: 4,
+		PageCount:  12,
+		Color:      "purple",
+		Text:       "interfaces belong to the consumer",
+		Rects:      []library.HighlightRect{{X: 0.1, Y: 0.4, Width: 0.6, Height: 0.03}},
+	}
+
+	saved, err := h.service.AddHighlight(t.Context(), id, input)
+	require.NoError(t, err)
+	assert.Positive(t, saved.ID)
+	assert.NotEmpty(t, saved.CreatedAt)
+	input.Color = "red"
+	_, err = h.service.AddHighlight(t.Context(), id, input)
+	assert.ErrorIs(t, err, library.ErrInvalidHighlight)
+
+	highlights, err := h.service.ListHighlights(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, []library.BookHighlight{saved}, highlights)
+	changed, err := h.service.ChangeHighlightColor(t.Context(), id, saved.ID, "yellow")
+	require.NoError(t, err)
+	assert.Equal(t, "yellow", changed.Color)
+	require.NoError(t, h.service.RemoveHighlight(t.Context(), id, saved.ID))
+	highlights, err = h.service.ListHighlights(t.Context(), id)
+	require.NoError(t, err)
+	assert.Empty(t, highlights)
+}
+
 func TestOpenKeepsBookmarksWhenContentChanges(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Revised.pdf", "%PDF-1.7\nfirst edition")
