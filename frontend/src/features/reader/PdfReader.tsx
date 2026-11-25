@@ -13,7 +13,6 @@ import {
   MinusIcon,
   PlusIcon,
   SpeakerHighIcon,
-  SpeakerSlashIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
@@ -989,11 +988,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
             disabled={!document || !speechSupported}
             onClick={toggleReadAloud}
           >
-            {isReadingAloud ? (
-              <SpeakerSlashIcon size={17} weight="regular" />
-            ) : (
-              <SpeakerHighIcon size={17} weight="regular" />
-            )}
+            <SpeakerHighIcon size={17} weight={isReadingAloud ? "fill" : "regular"} />
           </ToolButton>
           <ToolButton
             label={
