@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -244,7 +244,11 @@ describe("App", () => {
     mocks.renameBook.mockResolvedValue({ ...summary, title: "Architecture Guide" });
     render(<App />);
 
-    fireEvent.contextMenu(await screen.findByRole("heading", { name: "Guide" }));
+    fireEvent.contextMenu(
+      within(await screen.findByRole("region", { name: "import済みの本" })).getByRole("heading", {
+        name: "Guide",
+      }),
+    );
     fireEvent.click(await screen.findByRole("menuitem", { name: "名前を変更" }));
     const input = await screen.findByLabelText("Guideの表示名");
     fireEvent.change(input, { target: { value: "Architecture Guide" } });
@@ -253,7 +257,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(mocks.renameBook).toHaveBeenCalledWith("book-1", "Architecture Guide"),
     );
-    expect(await screen.findByRole("heading", { name: "Architecture Guide" })).toBeTruthy();
+    expect(await screen.findAllByRole("heading", { name: "Architecture Guide" })).toHaveLength(2);
   });
 
   it("restores the theme and follows the theme saved in the settings window", async () => {
