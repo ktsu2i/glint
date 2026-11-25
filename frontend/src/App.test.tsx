@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getLanguageSettings: vi.fn(),
   saveAppearanceSettings: vi.fn(),
   saveLanguageSettings: vi.fn(),
+  searchLibrary: vi.fn(),
 }));
 
 vi.mock("./shared/api/backend", () => ({
@@ -35,6 +36,7 @@ vi.mock("./shared/api/backend", () => ({
   getLanguageSettings: mocks.getLanguageSettings,
   saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLanguageSettings: mocks.saveLanguageSettings,
+  searchLibrary: mocks.searchLibrary,
 }));
 const settingsEvents = vi.hoisted(() => ({
   appearance: [] as Array<(theme: string) => void>,
@@ -219,14 +221,52 @@ describe("App", () => {
     fireEvent.keyDown(window, { key: "f", metaKey: true });
     const searchBox = await screen.findByRole("searchbox", { name: "検索語" });
     expect(
-      screen.getByText("キーワードを入力すると、準備済みのページを横断検索します。"),
+      screen.getByText(
+        "キーワードを入力すると、タイトルで本を探したり、準備済みのページを横断検索したりできます。",
+      ),
     ).toBeTruthy();
     fireEvent.keyDown(searchBox, { key: "Escape" });
     expect(screen.queryByRole("searchbox", { name: "検索語" })).toBeNull();
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "本棚を検索（⌘F）" }));
-    expect(await screen.findByRole("searchbox", { name: "検索語" })).toBeTruthy();
+    const reopened = await screen.findByRole("searchbox", { name: "検索語" });
+
+    reopened.blur();
+    fireEvent.keyDown(window, { key: "Escape", isComposing: true });
+    expect(screen.getByRole("searchbox", { name: "検索語" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "検索語" })).toBeNull();
+  });
+
+  it("searches the text of every book while typing, without pressing Return", async () => {
+    mocks.listBooks.mockResolvedValue([summary]);
+    mocks.searchLibrary.mockResolvedValue([
+      {
+        book: summary,
+        totalMatches: 2,
+        pages: [
+          {
+            pageNumber: 7,
+            location: "page:7",
+            headingPath: "",
+            excerpt: "context builder",
+            matchCount: 2,
+          },
+        ],
+      },
+    ]);
+    render(<App />);
+    await screen.findByRole("button", { name: "Guideを開く" });
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    const searchBox = await screen.findByRole("searchbox", { name: "検索語" });
+    fireEvent.change(searchBox, { target: { value: "cont" } });
+    fireEvent.change(searchBox, { target: { value: "context" } });
+
+    expect(await screen.findByRole("button", { name: "Guideの7ページを開く" })).toBeTruthy();
+    expect(mocks.searchLibrary).toHaveBeenCalledOnce();
+    expect(mocks.searchLibrary).toHaveBeenCalledWith("context");
   });
 
   it("opens a saved book at its reading position", async () => {
