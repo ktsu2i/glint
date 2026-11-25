@@ -990,7 +990,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
             onClick={toggleReadAloud}
           >
             {isReadingAloud ? (
-              <SpeakerSlashIcon size={17} weight="bold" />
+              <SpeakerSlashIcon size={17} weight="regular" />
             ) : (
               <SpeakerHighIcon size={17} weight="regular" />
             )}
