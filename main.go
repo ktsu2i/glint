@@ -74,7 +74,7 @@ func run() error {
 			TitleBar: application.MacTitleBarHiddenInsetUnified,
 		},
 	})
-	desktop.RegisterService(application.NewService(app.NewWindowService(mainWindow)))
+	desktop.RegisterService(application.NewService(app.NewWindowService(app.NewNativeWindowControls(mainWindow))))
 	return desktop.Run()
 }
 

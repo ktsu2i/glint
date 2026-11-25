@@ -1,36 +1,26 @@
 package app
 
-import "github.com/wailsapp/wails/v3/pkg/application"
-
-// windowButtons is the part of the main window that shows and hides the
-// macOS traffic-light buttons. Tests replace it with a fake.
-type windowButtons interface {
-	SetCloseButtonState(state application.ButtonState) application.Window
-	SetMinimiseButtonState(state application.ButtonState) application.Window
-	SetMaximiseButtonState(state application.ButtonState) application.Window
+// windowControls shows and hides the macOS traffic-light buttons of the main
+// window. Tests replace it with a fake.
+type windowControls interface {
+	SetVisible(visible bool)
 }
 
 // WindowService is bound to the frontend so the reader can hide the window
 // controls together with its own toolbars.
 type WindowService struct {
-	window windowButtons
+	controls windowControls
 }
 
-func NewWindowService(window windowButtons) *WindowService {
-	return &WindowService{window: window}
+func NewWindowService(controls windowControls) *WindowService {
+	return &WindowService{controls: controls}
 }
 
-// SetWindowControlsVisible shows or hides the close, minimise and zoom buttons
-// of the main window.
+// SetWindowControlsVisible fades the close, minimise and zoom buttons of the
+// main window in or out.
 func (s *WindowService) SetWindowControlsVisible(visible bool) {
-	if s.window == nil {
+	if s.controls == nil {
 		return
 	}
-	state := application.ButtonHidden
-	if visible {
-		state = application.ButtonEnabled
-	}
-	s.window.SetCloseButtonState(state)
-	s.window.SetMinimiseButtonState(state)
-	s.window.SetMaximiseButtonState(state)
+	s.controls.SetVisible(visible)
 }

@@ -41,8 +41,6 @@ import {
 } from "./loadPdf";
 
 const loadTimeoutMilliseconds = 60_000;
-// Matches the opacity transition of .reader-topbar in styles.css.
-const chromeFadeMilliseconds = 180;
 const minScale = 0.4;
 const maxScale = 3;
 const manualZoomStep = 0.1;
@@ -803,13 +801,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const windowControlsShown = !book || chromeShown || isTopbarHovered || isTopbarFocused;
 
   useEffect(() => {
-    if (windowControlsShown) {
-      showWindowControls(true);
-      return;
-    }
-    // Wait for the toolbars to fade out before the native buttons disappear.
-    const timer = window.setTimeout(() => showWindowControls(false), chromeFadeMilliseconds);
-    return () => window.clearTimeout(timer);
+    // The native buttons fade over the same duration as the toolbars.
+    showWindowControls(windowControlsShown);
   }, [windowControlsShown]);
 
   useEffect(() => () => showWindowControls(true), []);
