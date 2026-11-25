@@ -1110,6 +1110,7 @@ input:focus-visible,
   gap: 4px;
   opacity: 0;
   transform: translateY(var(--chrome-offset));
+  /* windowControlsFadeSeconds in internal/app fades the traffic lights to match. */
   transition:
     opacity 180ms ease,
     transform 180ms ease;

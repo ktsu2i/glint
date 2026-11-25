@@ -23,6 +23,7 @@ import {
   listBookmarks,
   removeBookmark,
   searchBook,
+  setWindowControlsVisible,
   type BookBookmark,
   type BookFile,
   type BookSearchResult,
@@ -62,6 +63,11 @@ type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
 type BindingDirection = "ltr" | "rtl";
 type ReaderPanel = "toc" | "search" | "bookmarks" | null;
+
+function showWindowControls(visible: boolean) {
+  // Outside the desktop shell there is no native window to update.
+  setWindowControlsVisible(visible).catch(() => {});
+}
 
 const bindingDirectionStorageKey = "glint.reader.bindingDirection";
 
@@ -116,6 +122,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const [outlineLoaded, setOutlineLoaded] = useState(false);
   const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
   const [chromeVisible, setChromeVisible] = useState(true);
+  const [isTopbarHovered, setIsTopbarHovered] = useState(false);
+  const [isTopbarFocused, setIsTopbarFocused] = useState(false);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [submittedSearchQuery, setSubmittedSearchQuery] = useState("");
@@ -787,6 +795,18 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     }
   }, [book, searchQuery, t]);
 
+  const chromeShown = chromeVisible || openPanel !== null || isViewMenuOpen;
+  // The top bar also appears on hover and focus, and the traffic lights sit
+  // inside it, so they follow the bar rather than chromeShown alone.
+  const windowControlsShown = !book || chromeShown || isTopbarHovered || isTopbarFocused;
+
+  useEffect(() => {
+    // The native buttons fade over the same duration as the toolbars.
+    showWindowControls(windowControlsShown);
+  }, [windowControlsShown]);
+
+  useEffect(() => () => showWindowControls(true), []);
+
   if (!book) {
     return (
       <section className="reader-empty" aria-label={t("reader.aria")}>
@@ -845,7 +865,6 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     }
   }
 
-  const chromeShown = chromeVisible || openPanel !== null || isViewMenuOpen;
   const panelTitle = isTocOpen
     ? t("reader.toc")
     : isSearchOpen
@@ -905,7 +924,17 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         </p>
       )}
 
-      <header className="reader-topbar glass">
+      <header
+        className="reader-topbar glass"
+        onMouseEnter={() => setIsTopbarHovered(true)}
+        onMouseLeave={() => setIsTopbarHovered(false)}
+        onFocus={() => setIsTopbarFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setIsTopbarFocused(false);
+          }
+        }}
+      >
         <div className="reader-topbar-start">
           {onBack && (
             <button type="button" className="glass-button reader-back" onClick={onBack}>

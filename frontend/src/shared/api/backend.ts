@@ -22,6 +22,7 @@ import {
   SaveAppearanceSettings,
   SaveLanguageSettings,
 } from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
+import { SetWindowControlsVisible } from "../../../bindings/github.com/kaito/glint/internal/app/windowservice";
 
 export type BookFormat = "pdf" | "epub";
 
@@ -199,4 +200,8 @@ export async function saveLanguageSettings(
   language: LanguagePreference,
 ): Promise<LanguageSettings> {
   return (await SaveLanguageSettings({ language })) as LanguageSettings;
+}
+
+export async function setWindowControlsVisible(visible: boolean): Promise<void> {
+  await SetWindowControlsVisible(visible);
 }
