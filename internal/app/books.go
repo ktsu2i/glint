@@ -180,6 +180,33 @@ func (s *BooksService) RemoveBookmark(bookID string, pageNumber int) error {
 	return nil
 }
 
+func (s *BooksService) ListHighlights(bookID string) ([]BookHighlight, error) {
+	highlights, err := s.books.ListHighlights(s.context(), bookID)
+	if err != nil {
+		return nil, s.bookError(err)
+	}
+	output := make([]BookHighlight, len(highlights))
+	for i, highlight := range highlights {
+		output[i] = toBookHighlight(highlight)
+	}
+	return output, nil
+}
+
+func (s *BooksService) AddHighlight(bookID string, input HighlightInput) (BookHighlight, error) {
+	highlight, err := s.books.AddHighlight(s.context(), bookID, input.toNewHighlight())
+	if err != nil {
+		return BookHighlight{}, s.bookError(err)
+	}
+	return toBookHighlight(highlight), nil
+}
+
+func (s *BooksService) RemoveHighlight(bookID string, id int64) error {
+	if err := s.books.RemoveHighlight(s.context(), bookID, id); err != nil {
+		return s.bookError(err)
+	}
+	return nil
+}
+
 func (s *BooksService) SaveBookSegments(bookID string, segments []BookSegmentInput, total int) (int, error) {
 	inputs := make([]library.BookSegment, len(segments))
 	for i, segment := range segments {
@@ -344,6 +371,11 @@ func (s *BooksService) bookError(err error) error {
 		)
 	case errors.Is(err, library.ErrInvalidBookmark):
 		return s.text.error(ctx, "The bookmark is invalid.", "しおりの内容が不正です。")
+	case errors.Is(err, library.ErrInvalidHighlight):
+		return s.text.error(ctx,
+			"The highlight could not be saved. Select up to 10,000 characters on one page.",
+			"ハイライトを保存できませんでした。1ページ内で10,000文字以内を選択してください。",
+		)
 	case errors.Is(err, library.ErrInvalidSegmentBatch):
 		return s.text.error(ctx, "The book index data is invalid.", "本の索引データが不正です。")
 	case errors.Is(err, library.ErrInvalidBookSearchQuery):

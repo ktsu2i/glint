@@ -8,6 +8,7 @@ import {
   CaretRightIcon,
   CornersInIcon,
   FileIcon,
+  HighlighterIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
   MinusIcon,
@@ -19,18 +20,29 @@ import { useTranslation } from "react-i18next";
 import { type PDFDocumentProxy, type PDFDocumentLoadingTask, type RenderTask } from "pdfjs-dist";
 import {
   addBookmark,
+  addHighlight,
   listBookmarks,
+  listHighlights,
   removeBookmark,
+  removeHighlight,
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
   type BookFile,
+  type BookHighlight,
   type BookSearchResult,
+  type HighlightColor,
 } from "../../shared/api/backend";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
 import { LocalizedError, translateLocalizedError } from "../../shared/i18n/error";
+import {
+  highlightColors,
+  rectContainsPoint,
+  selectionToPageSelections,
+  type PageSelection,
+} from "./highlights";
 import {
   createPdfLoadingTask,
   createPdfTextLayer,
@@ -61,7 +73,14 @@ function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
 type BindingDirection = "ltr" | "rtl";
-type ReaderPanel = "toc" | "search" | "bookmarks" | null;
+type ReaderPanel = "toc" | "search" | "bookmarks" | "highlights" | null;
+// Floating controls are placed in the reader's coordinates.
+type PendingSelection = { parts: PageSelection[]; x: number; top: number; bottom: number };
+type ActiveHighlight = { id: number; x: number; top: number; bottom: number };
+
+function sortHighlights(highlights: BookHighlight[]): BookHighlight[] {
+  return highlights.toSorted((a, b) => a.pageNumber - b.pageNumber || a.id - b.id);
+}
 
 function showWindowControls(visible: boolean) {
   // Outside the desktop shell there is no native window to update.
@@ -133,6 +152,15 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
   const [bookmarkBusyPage, setBookmarkBusyPage] = useState<number | null>(null);
   const [bookmarkError, setBookmarkError] = useState("");
+  const [highlights, setHighlights] = useState<BookHighlight[]>([]);
+  const [highlightsLoaded, setHighlightsLoaded] = useState(false);
+  const [highlightBusy, setHighlightBusy] = useState(false);
+  const [highlightError, setHighlightError] = useState("");
+  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
+  const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
+  // The pages whose canvases are on screen; highlights follow them, not the requested page.
+  const [renderedPages, setRenderedPages] = useState<number[]>([]);
+  const readerRef = useRef<HTMLElement>(null);
   const [isReadingAloud, setIsReadingAloud] = useState(false);
   const [readableText, setReadableText] = useState<{
     pageNumber: number;
@@ -146,6 +174,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
 
   const stageNodeRef = useRef<HTMLDivElement | null>(null);
   const stageClickRef = useRef<(event: MouseEvent) => void>(() => {});
+  const stageMouseUpRef = useRef<() => void>(() => {});
   const wheelCleanupRef = useRef<(() => void) | null>(null);
   const effectiveScaleRef = useRef(1);
 
@@ -188,11 +217,22 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     };
     // Clicking the page toggles the floating controls; Escape does the same from the keyboard.
     const handleClick = (event: MouseEvent) => stageClickRef.current(event);
+    // Releasing a text selection offers the highlight colors.
+    const handleMouseUp = () => stageMouseUpRef.current();
+    // Floating controls are placed for one scroll position, so scrolling dismisses them.
+    const handleScroll = () => {
+      setPendingSelection(null);
+      setActiveHighlight(null);
+    };
     node.addEventListener("wheel", handleWheel, { passive: false });
     node.addEventListener("click", handleClick);
+    node.addEventListener("mouseup", handleMouseUp);
+    node.addEventListener("scroll", handleScroll);
     wheelCleanupRef.current = () => {
       node.removeEventListener("wheel", handleWheel);
       node.removeEventListener("click", handleClick);
+      node.removeEventListener("mouseup", handleMouseUp);
+      node.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
@@ -212,6 +252,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     }
     if (!book) {
       setDocument(null);
+      setRenderedPages([]);
       setPageNumber(1);
       setError("");
       setOutline([]);
@@ -234,6 +275,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     const bookUrl = book.url;
     setError("");
     setDocument(null);
+    setRenderedPages([]);
     setOutline([]);
     setOutlineLoaded(false);
     setOpenPanel(null);
@@ -336,6 +378,56 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   }, [book?.id, t]);
 
   useEffect(() => {
+    let active = true;
+    setHighlights([]);
+    setHighlightsLoaded(false);
+    setHighlightBusy(false);
+    setHighlightError("");
+    if (!book) {
+      return () => {
+        active = false;
+      };
+    }
+    const bookId = book.id;
+    const load = async () => {
+      try {
+        const saved = await listHighlights(bookId);
+        if (active) {
+          setHighlights(sortHighlights(saved));
+          setHighlightsLoaded(true);
+        }
+      } catch (reason: unknown) {
+        if (active) {
+          setHighlightsLoaded(true);
+          setHighlightError(reason instanceof Error ? reason.message : t("error.loadHighlights"));
+        }
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+    // oxlint-disable-next-line react/exhaustive-deps -- book の id が変わった時だけ highlight を読み直す。
+  }, [book?.id, t]);
+
+  useEffect(() => {
+    setPendingSelection(null);
+    setActiveHighlight(null);
+  }, [book?.id, pageNumber, viewMode, zoomMode, stageSize]);
+
+  useEffect(() => {
+    // Clicking elsewhere collapses the selection, and the colors go with it.
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        setPendingSelection(null);
+      }
+    };
+    globalThis.document.addEventListener("selectionchange", handleSelectionChange);
+    return () => globalThis.document.removeEventListener("selectionchange", handleSelectionChange);
+  }, []);
+
+  useEffect(() => {
     if (openPanel !== "search") {
       return;
     }
@@ -410,7 +502,11 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         setPageNumber((current) => Math.max(1, current - step));
         setChromeVisible(false);
       } else if (event.key === "Escape") {
-        if (openPanel || isViewMenuOpen) {
+        if (pendingSelection || activeHighlight) {
+          setPendingSelection(null);
+          setActiveHighlight(null);
+          window.getSelection()?.removeAllRanges();
+        } else if (openPanel || isViewMenuOpen) {
           setOpenPanel(null);
           setIsViewMenuOpen(false);
         } else {
@@ -420,7 +516,15 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [document, viewMode, bindingDirection, isViewMenuOpen, openPanel]);
+  }, [
+    document,
+    viewMode,
+    bindingDirection,
+    isViewMenuOpen,
+    openPanel,
+    pendingSelection,
+    activeHighlight,
+  ]);
 
   useEffect(() => {
     stageClickRef.current = (event: MouseEvent) => {
@@ -432,6 +536,21 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
       if (selection && !selection.isCollapsed && selection.toString().trim() !== "") {
         return;
       }
+      if (activeHighlight) {
+        setActiveHighlight(null);
+        return;
+      }
+      const hit = highlightAt(event.clientX, event.clientY);
+      const reader = readerRef.current?.getBoundingClientRect();
+      if (hit && reader) {
+        setActiveHighlight({
+          id: hit.id,
+          x: event.clientX - reader.left,
+          top: event.clientY - reader.top,
+          bottom: event.clientY - reader.top,
+        });
+        return;
+      }
       if (openPanel || isViewMenuOpen) {
         setOpenPanel(null);
         setIsViewMenuOpen(false);
@@ -439,7 +558,54 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
       }
       setChromeVisible((current) => !current);
     };
-  }, [isViewMenuOpen, openPanel]);
+
+    function highlightAt(clientX: number, clientY: number): BookHighlight | undefined {
+      const pages = stageNodeRef.current?.querySelectorAll<HTMLElement>(".pdf-page[data-page]");
+      for (const page of pages ?? []) {
+        const box = page.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0) {
+          continue;
+        }
+        const x = (clientX - box.left) / box.width;
+        const y = (clientY - box.top) / box.height;
+        if (x < 0 || x > 1 || y < 0 || y > 1) {
+          continue;
+        }
+        const hitPage = Number(page.dataset.page);
+        // The latest highlight is drawn on top, so it wins.
+        return highlights.findLast(
+          (highlight) =>
+            highlight.pageNumber === hitPage &&
+            highlight.rects.some((rect) => rectContainsPoint(rect, x, y)),
+        );
+      }
+      return undefined;
+    }
+
+    stageMouseUpRef.current = () => {
+      const selection = window.getSelection();
+      const stage = stageNodeRef.current;
+      const reader = readerRef.current?.getBoundingClientRect();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0 || !stage || !reader) {
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const pages = Array.from(stage.querySelectorAll<HTMLElement>(".pdf-page[data-page]"));
+      const parts = selectionToPageSelections(range, pages);
+      if (parts.length === 0) {
+        setPendingSelection(null);
+        return;
+      }
+      const bounds = range.getBoundingClientRect();
+      setActiveHighlight(null);
+      setPendingSelection({
+        parts,
+        x: bounds.left + bounds.width / 2 - reader.left,
+        top: bounds.top - reader.top,
+        bottom: bounds.bottom - reader.top,
+      });
+    };
+  }, [activeHighlight, highlights, isViewMenuOpen, openPanel]);
 
   useEffect(() => {
     if (!document || !stageNodeRef.current) {
@@ -546,6 +712,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         context.drawImage(source.canvas, 0, 0);
       }
       setEffectiveScale(scale);
+      setRenderedPages(pageNumbers);
 
       const textContents = await Promise.all(pages.map((page) => page.getTextContent()));
       if (!active) {
@@ -864,14 +1031,106 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     }
   }
 
+  const isHighlightsOpen = openPanel === "highlights";
+  const pageHighlights =
+    numPages > 0 ? highlights.filter((highlight) => highlight.pageNumber <= numPages) : highlights;
+  const highlightedText = activeHighlight
+    ? highlights.find((highlight) => highlight.id === activeHighlight.id)
+    : undefined;
+
+  async function saveSelectionHighlight(color: HighlightColor) {
+    if (!book || !document || !pendingSelection || highlightBusy) {
+      return;
+    }
+    const bookId = book.id;
+    const pageCount = document.numPages;
+    setHighlightBusy(true);
+    setHighlightError("");
+    // A selection across a spread becomes one highlight per page.
+    const results = await Promise.allSettled(
+      pendingSelection.parts.map((part) => addHighlight(bookId, { ...part, color, pageCount })),
+    );
+    const saved = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    const failure = results.find((result) => result.status === "rejected");
+    setHighlights((current) => sortHighlights([...current, ...saved]));
+    if (failure) {
+      const reason: unknown = failure.reason;
+      setHighlightError(reason instanceof Error ? reason.message : t("error.saveHighlight"));
+    } else {
+      window.getSelection()?.removeAllRanges();
+      setPendingSelection(null);
+    }
+    setHighlightBusy(false);
+  }
+
+  async function deleteHighlight(id: number) {
+    if (!book || highlightBusy) {
+      return;
+    }
+    setHighlightBusy(true);
+    setHighlightError("");
+    try {
+      await removeHighlight(book.id, id);
+      setHighlights((current) => current.filter((highlight) => highlight.id !== id));
+      setActiveHighlight((current) => (current?.id === id ? null : current));
+    } catch (reason) {
+      setHighlightError(reason instanceof Error ? reason.message : t("error.saveHighlight"));
+    } finally {
+      setHighlightBusy(false);
+    }
+  }
+
+  function renderHighlightLayer(layerPageNumber: number | undefined) {
+    if (layerPageNumber === undefined) {
+      return null;
+    }
+    return (
+      <div className="highlight-layer" aria-hidden="true">
+        {highlights
+          .filter((highlight) => highlight.pageNumber === layerPageNumber)
+          .flatMap((highlight) =>
+            highlight.rects.map((rect) => (
+              <div
+                key={`${highlight.id}-${rect.x}-${rect.y}`}
+                className={`highlight-mark is-${highlight.color}${
+                  highlight.id === activeHighlight?.id ? " is-active" : ""
+                }`}
+                data-highlight-id={highlight.id}
+                style={{
+                  left: `${rect.x * 100}%`,
+                  top: `${rect.y * 100}%`,
+                  width: `${rect.width * 100}%`,
+                  height: `${rect.height * 100}%`,
+                }}
+              />
+            )),
+          )}
+      </div>
+    );
+  }
+
+  // Floating controls sit above their target, or below it near the top edge.
+  function floatingStyle(anchor: { x: number; top: number; bottom: number }) {
+    const readerWidth = readerRef.current?.clientWidth ?? 0;
+    const x = readerWidth > 0 ? Math.min(readerWidth - 110, Math.max(110, anchor.x)) : anchor.x;
+    return anchor.top < 110
+      ? { left: `${x}px`, top: `${anchor.bottom + 10}px` }
+      : { left: `${x}px`, top: `${anchor.top - 10}px`, transform: "translate(-50%, -100%)" };
+  }
+
   const panelTitle = isTocOpen
     ? t("reader.toc")
     : isSearchOpen
       ? t("reader.textSearch")
-      : t("reader.bookmarks");
+      : isHighlightsOpen
+        ? t("reader.highlights")
+        : t("reader.bookmarks");
 
   return (
     <section
+      ref={readerRef}
       className={`reader ambient${chromeShown ? " is-chrome-visible" : ""}`}
       aria-label={t("reader.aria")}
     >
@@ -886,12 +1145,13 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         <div
           className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}${isRtlBinding ? " is-rtl" : ""}`}
         >
-          <div className="pdf-page">
+          <div className="pdf-page" data-page={renderedPages[0]}>
             <canvas
               ref={canvasLeftRef}
               className="pdf-canvas"
               aria-label={t("app.pageLabel", { page: pageNumber })}
             />
+            {renderHighlightLayer(renderedPages[0])}
             <div
               ref={textLayerLeftRef}
               className="text-layer"
@@ -900,12 +1160,13 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
             />
           </div>
           {showRightCanvas && (
-            <div className="pdf-page">
+            <div className="pdf-page" data-page={renderedPages[1]}>
               <canvas
                 ref={canvasRightRef}
                 className="pdf-canvas"
                 aria-label={t("app.pageLabel", { page: rightPageNumber })}
               />
+              {renderHighlightLayer(renderedPages[1])}
               <div
                 ref={textLayerRightRef}
                 className="text-layer"
@@ -965,6 +1226,14 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
             disabled={!document}
           >
             <BookmarksSimpleIcon size={17} weight="regular" />
+          </ToolButton>
+          <ToolButton
+            label={isHighlightsOpen ? t("reader.closeHighlights") : t("reader.openHighlights")}
+            className={isHighlightsOpen ? "is-active" : ""}
+            onClick={() => setOpenPanel((panel) => (panel === "highlights" ? null : "highlights"))}
+            disabled={!document}
+          >
+            <HighlighterIcon size={17} weight="regular" />
           </ToolButton>
         </div>
         <div className="reader-title">
@@ -1102,9 +1371,51 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         </div>
       )}
 
-      {bookmarkError && (
+      {(bookmarkError || highlightError) && (
         <div className="reader-bookmark-error" role="alert">
-          {bookmarkError}
+          {bookmarkError || highlightError}
+        </div>
+      )}
+
+      {pendingSelection && (
+        <div
+          className="reader-highlight-toolbar glass glass-strong"
+          role="toolbar"
+          aria-label={t("reader.highlightSelection")}
+          tabIndex={-1}
+          style={floatingStyle(pendingSelection)}
+          // Keep the selection while a color is picked.
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          {highlightColors.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`reader-highlight-swatch is-${color}`}
+              aria-label={t("reader.highlightIn", { color: t(`reader.color.${color}`) })}
+              disabled={highlightBusy}
+              onClick={() => void saveSelectionHighlight(color)}
+            />
+          ))}
+        </div>
+      )}
+
+      {activeHighlight && highlightedText && (
+        <div
+          className="reader-highlight-toolbar glass glass-strong"
+          role="toolbar"
+          aria-label={t("reader.highlightActions")}
+          style={floatingStyle(activeHighlight)}
+        >
+          <button
+            type="button"
+            className="reader-highlight-remove"
+            disabled={highlightBusy}
+            onClick={() => void deleteHighlight(highlightedText.id)}
+          >
+            <XIcon size={12} weight="bold" aria-hidden="true" />
+            {t("reader.removeHighlight")}
+          </button>
         </div>
       )}
 
@@ -1117,6 +1428,9 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
             <h2>{panelTitle}</h2>
             {isBookmarksOpen && pageBookmarks.length > 0 && (
               <strong className="reader-sheet-count">{pageBookmarks.length}</strong>
+            )}
+            {isHighlightsOpen && pageHighlights.length > 0 && (
+              <strong className="reader-sheet-count">{pageHighlights.length}</strong>
             )}
             <button
               type="button"
@@ -1231,6 +1545,51 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
                 )}
               </div>
             </>
+          )}
+          {isHighlightsOpen && (
+            <div className="reader-sheet-scroll">
+              {highlightsLoaded ? (
+                highlightError && pageHighlights.length === 0 ? (
+                  <p className="reader-sheet-message is-error">{highlightError}</p>
+                ) : pageHighlights.length === 0 ? (
+                  <p className="reader-sheet-message">{t("reader.noHighlights")}</p>
+                ) : (
+                  <ol className="reader-highlight-list">
+                    {pageHighlights.map((highlight) => (
+                      <li
+                        key={highlight.id}
+                        className={`is-${highlight.color}${
+                          renderedPages.includes(highlight.pageNumber) ? " is-active" : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="reader-highlight-link"
+                          aria-label={t("reader.goToHighlight", { page: highlight.pageNumber })}
+                          onClick={() => jumpToOutlinePage(highlight.pageNumber)}
+                        >
+                          <small>{t("reader.bookmarkPage", { page: highlight.pageNumber })}</small>
+                          <span>{highlight.text}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="reader-bookmark-remove"
+                          aria-label={t("reader.removeHighlightOnPage", {
+                            page: highlight.pageNumber,
+                          })}
+                          disabled={highlightBusy}
+                          onClick={() => void deleteHighlight(highlight.id)}
+                        >
+                          <XIcon size={12} weight="bold" aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                )
+              ) : (
+                <p className="reader-sheet-message">{t("reader.loadingHighlights")}</p>
+              )}
+            </div>
           )}
           {isBookmarksOpen && (
             <div className="reader-sheet-scroll">

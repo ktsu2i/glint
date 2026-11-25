@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bindings = vi.hoisted(() => ({
   addBookmark: vi.fn(),
+  addHighlight: vi.fn(),
   listBookmarks: vi.fn(),
+  listHighlights: vi.fn(),
   listBooks: vi.fn(),
   markBookCoverFailed: vi.fn(),
   openBook: vi.fn(),
@@ -10,6 +12,7 @@ const bindings = vi.hoisted(() => ({
   relinkBook: vi.fn(),
   removeBook: vi.fn(),
   removeBookmark: vi.fn(),
+  removeHighlight: vi.fn(),
   renameBook: vi.fn(),
   saveBookCover: vi.fn(),
   saveBookSegments: vi.fn(),
@@ -23,7 +26,9 @@ const bindings = vi.hoisted(() => ({
 
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
   AddBookmark: bindings.addBookmark,
+  AddHighlight: bindings.addHighlight,
   ListBookmarks: bindings.listBookmarks,
+  ListHighlights: bindings.listHighlights,
   ListBooks: bindings.listBooks,
   MarkBookCoverFailed: bindings.markBookCoverFailed,
   OpenBook: bindings.openBook,
@@ -31,6 +36,7 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", ()
   RelinkBook: bindings.relinkBook,
   RemoveBook: bindings.removeBook,
   RemoveBookmark: bindings.removeBookmark,
+  RemoveHighlight: bindings.removeHighlight,
   RenameBook: bindings.renameBook,
   SaveBookCover: bindings.saveBookCover,
   SaveBookSegments: bindings.saveBookSegments,
@@ -47,15 +53,18 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice",
 
 import {
   addBookmark,
+  addHighlight,
   getAppearanceSettings,
   listBooks,
   listBookmarks,
+  listHighlights,
   markBookCoverFailed,
   openBook,
   openBookFile,
   relinkBook,
   removeBook,
   removeBookmark,
+  removeHighlight,
   renameBook,
   saveBookCover,
   saveBookSegments,
@@ -182,5 +191,28 @@ describe("backend facade", () => {
     expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
     expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
     expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");
+  });
+
+  it("passes highlights through and treats a missing list as empty", async () => {
+    const highlight = {
+      id: 3,
+      pageNumber: 2,
+      color: "green",
+      text: "keep this",
+      rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }],
+      createdAt: "2026-11-25T00:00:00Z",
+    };
+    bindings.listHighlights.mockResolvedValueOnce(null).mockResolvedValueOnce([highlight]);
+    bindings.addHighlight.mockResolvedValue(highlight);
+    const { id: _id, createdAt: _createdAt, ...rest } = highlight;
+    const input = { ...rest, color: "green" as const, pageCount: 10 };
+
+    await expect(listHighlights("book-1")).resolves.toEqual([]);
+    await expect(listHighlights("book-1")).resolves.toEqual([highlight]);
+    await expect(addHighlight("book-1", input)).resolves.toEqual(highlight);
+    await removeHighlight("book-1", 3);
+
+    expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", input);
+    expect(bindings.removeHighlight).toHaveBeenCalledWith("book-1", 3);
   });
 });

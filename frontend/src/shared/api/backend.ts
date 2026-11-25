@@ -1,6 +1,8 @@
 import {
   AddBookmark,
+  AddHighlight,
   ListBookmarks,
+  ListHighlights,
   ListBooks,
   MarkBookCoverFailed,
   OpenBook,
@@ -8,6 +10,7 @@ import {
   RelinkBook,
   RemoveBook,
   RemoveBookmark,
+  RemoveHighlight,
   RenameBook,
   PendingIndexBooks,
   SaveBookSegments,
@@ -73,6 +76,33 @@ export type BookSearchResult = {
 export type BookBookmark = {
   pageNumber: number;
   createdAt: string;
+};
+
+export type HighlightColor = "yellow" | "green" | "blue" | "pink";
+
+/** A rectangle on the page, in fractions of the page width and height. */
+export type HighlightRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type BookHighlight = {
+  id: number;
+  pageNumber: number;
+  color: HighlightColor;
+  text: string;
+  rects: HighlightRect[];
+  createdAt: string;
+};
+
+export type HighlightInput = {
+  pageNumber: number;
+  pageCount: number;
+  color: HighlightColor;
+  text: string;
+  rects: HighlightRect[];
 };
 
 export type BookSummary = {
@@ -154,6 +184,18 @@ export async function addBookmark(
 
 export async function removeBookmark(bookId: string, pageNumber: number): Promise<void> {
   await RemoveBookmark(bookId, pageNumber);
+}
+
+export async function listHighlights(bookId: string): Promise<BookHighlight[]> {
+  return ((await ListHighlights(bookId)) ?? []) as BookHighlight[];
+}
+
+export async function addHighlight(bookId: string, input: HighlightInput): Promise<BookHighlight> {
+  return (await AddHighlight(bookId, input)) as BookHighlight;
+}
+
+export async function removeHighlight(bookId: string, id: number): Promise<void> {
+  await RemoveHighlight(bookId, id);
 }
 
 export async function saveBookSegments(

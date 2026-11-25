@@ -1,0 +1,114 @@
+package library
+
+import (
+	"math"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func sampleHighlight(page int) NewHighlight {
+	return NewHighlight{
+		PageNumber: page,
+		PageCount:  20,
+		Color:      "yellow",
+		Text:       "  a highlighted sentence  ",
+		Rects:      []HighlightRect{{X: 0.1, Y: 0.2, Width: 0.5, Height: 0.02}},
+	}
+}
+
+func TestStorePersistsHighlightsInPageOrderAndDeletesThem(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	store, err := Open(path)
+	require.NoError(t, err)
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
+	require.NoError(t, err)
+
+	later, err := store.SaveHighlight(t.Context(), book.ID, sampleHighlight(7), now)
+	require.NoError(t, err)
+	assert.Equal(t, "a highlighted sentence", later.Text, "surrounding whitespace is trimmed")
+	green := sampleHighlight(3)
+	green.Color = "green"
+	green.Rects = append(green.Rects, HighlightRect{X: 0.1, Y: 0.23, Width: 0.3, Height: 0.02})
+	earlier, err := store.SaveHighlight(t.Context(), book.ID, green, now.Add(time.Minute))
+	require.NoError(t, err)
+	require.NoError(t, store.Close())
+
+	store, err = Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	highlights, err := store.ListHighlights(t.Context(), book.ID)
+	require.NoError(t, err)
+	require.Len(t, highlights, 2)
+	assert.Equal(t, earlier, highlights[0])
+	assert.Equal(t, later, highlights[1])
+
+	require.NoError(t, store.DeleteHighlight(t.Context(), book.ID, later.ID))
+	require.NoError(t, store.DeleteHighlight(t.Context(), book.ID, later.ID), "deletion is idempotent")
+	highlights, err = store.ListHighlights(t.Context(), book.ID)
+	require.NoError(t, err)
+	require.Len(t, highlights, 1)
+	assert.Equal(t, earlier.ID, highlights[0].ID)
+}
+
+func TestStoreValidatesHighlights(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
+	require.NoError(t, err)
+
+	invalid := map[string]func(*NewHighlight){
+		"page zero":        func(h *NewHighlight) { h.PageNumber = 0 },
+		"page past end":    func(h *NewHighlight) { h.PageNumber = 21 },
+		"unknown color":    func(h *NewHighlight) { h.Color = "red" },
+		"blank text":       func(h *NewHighlight) { h.Text = "   " },
+		"text too long":    func(h *NewHighlight) { h.Text = strings.Repeat("あ", MaxHighlightTextRunes+1) },
+		"no rects":         func(h *NewHighlight) { h.Rects = nil },
+		"zero width":       func(h *NewHighlight) { h.Rects[0].Width = 0 },
+		"outside the page": func(h *NewHighlight) { h.Rects[0].X = 0.9 },
+		"not a number":     func(h *NewHighlight) { h.Rects[0].Y = math.NaN() },
+	}
+	for name, mutate := range invalid {
+		t.Run(name, func(t *testing.T) {
+			input := sampleHighlight(2)
+			mutate(&input)
+			_, err := store.SaveHighlight(t.Context(), book.ID, input, now)
+			assert.ErrorIs(t, err, ErrInvalidHighlight)
+		})
+	}
+
+	_, err = store.SaveHighlight(t.Context(), "missing", sampleHighlight(1), now)
+	assert.ErrorIs(t, err, ErrBookNotFound)
+	_, err = store.ListHighlights(t.Context(), "missing")
+	assert.ErrorIs(t, err, ErrBookNotFound)
+	assert.ErrorIs(t, store.DeleteHighlight(t.Context(), book.ID, 0), ErrInvalidHighlight)
+}
+
+func TestStoreDeletesHighlightsOnlyFromTheirBook(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	first, err := store.Import(t.Context(), "book-1", "/tmp/A.pdf", "hash-1", "pdf", 10, now)
+	require.NoError(t, err)
+	second, err := store.Import(t.Context(), "book-2", "/tmp/B.pdf", "hash-2", "pdf", 10, now)
+	require.NoError(t, err)
+	saved, err := store.SaveHighlight(t.Context(), first.ID, sampleHighlight(1), now)
+	require.NoError(t, err)
+
+	require.NoError(t, store.DeleteHighlight(t.Context(), second.ID, saved.ID))
+	highlights, err := store.ListHighlights(t.Context(), first.ID)
+	require.NoError(t, err)
+	assert.Len(t, highlights, 1)
+
+	require.NoError(t, store.Remove(t.Context(), first.ID))
+	_, err = store.ListHighlights(t.Context(), first.ID)
+	assert.ErrorIs(t, err, ErrBookNotFound)
+}
