@@ -192,6 +192,7 @@ describe("PdfReader", () => {
       expect(loader.createPdfLoadingTask).toHaveBeenCalledWith("/book/1", expect.any(AbortSignal)),
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await waitFor(() => expect(onPageChange).toHaveBeenCalledWith(1, 2));
     expect(page.render).toHaveBeenCalledWith(
@@ -209,11 +210,15 @@ describe("PdfReader", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "拡大" }));
     await screen.findByText("40%");
-    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("");
+    expect(screen.getByRole("button", { name: "全体を表示" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
     fireEvent.click(screen.getByRole("button", { name: "縮小" }));
     await screen.findByText("40%");
     fireEvent.click(screen.getByRole("button", { name: "全体を表示" }));
-    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
+    expect(screen.getByRole("button", { name: "全体を表示" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
     await waitFor(() => expect(document.getPage).toHaveBeenCalledWith(2));
@@ -427,6 +432,7 @@ describe("PdfReader", () => {
     const page = makePage();
     resolveDocument(makeDocument(page));
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
     await screen.findByText("200%");
 
@@ -436,7 +442,9 @@ describe("PdfReader", () => {
       stage.dispatchEvent(plainEvent);
     });
     expect(plainEvent.defaultPrevented).toBe(false);
-    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
+    expect(screen.getByRole("button", { name: "全体を表示" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
 
     const pinchEvent = new WheelEvent("wheel", {
       deltaY: -20,
@@ -449,7 +457,9 @@ describe("PdfReader", () => {
     });
     expect(pinchEvent.defaultPrevented).toBe(true);
     await screen.findByText("244%");
-    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("");
+    expect(screen.getByRole("button", { name: "全体を表示" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
 
     const zoomOutEvent = new WheelEvent("wheel", {
       deltaY: 400,
@@ -472,6 +482,7 @@ describe("PdfReader", () => {
     });
     resolveDocument(makeDocument(page));
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
 
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
@@ -480,7 +491,9 @@ describe("PdfReader", () => {
     const canvas = globalThis.document.querySelector(".pdf-canvas") as HTMLCanvasElement;
     expect(canvas.style.width).toBe("150px");
     expect(canvas.style.height).toBe("300px");
-    expect(screen.getByRole("button", { name: "全体を表示" }).className).toBe("is-active");
+    expect(screen.getByRole("button", { name: "全体を表示" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
   });
 
   it("restores and clamps the saved reading position", async () => {
@@ -670,10 +683,11 @@ describe("PdfReader", () => {
     resolveDocument(pdfDocument);
     const onPageChange = vi.fn();
     render(<PdfReader book={makeBook()} onPageChange={onPageChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
     const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
@@ -693,10 +707,11 @@ describe("PdfReader", () => {
     };
     resolveDocument(pdfDocument);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pageOne.render).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
     await waitFor(() => expect(pageTwo.render).toHaveBeenCalledTimes(1));
     await screen.findByText("200%");
 
@@ -741,10 +756,11 @@ describe("PdfReader", () => {
     pdfDocument.numPages = 6;
     resolveDocument(pdfDocument);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
     fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
@@ -766,10 +782,11 @@ describe("PdfReader", () => {
     pdfDocument.numPages = 1;
     resolveDocument(pdfDocument);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
 
     const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
     expect(canvases.length).toBe(1);
@@ -781,13 +798,14 @@ describe("PdfReader", () => {
     pdfDocument.numPages = 4;
     resolveDocument(pdfDocument);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
     await waitFor(() => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(2));
 
-    fireEvent.click(screen.getByRole("button", { name: "1ページ表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "1ページ" }));
     await waitFor(() => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(1));
   });
 
@@ -813,8 +831,9 @@ describe("PdfReader", () => {
       .mockResolvedValueOnce(textLayerOne)
       .mockResolvedValueOnce(textLayerTwo);
     const { unmount } = render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
-    fireEvent.click(screen.getByRole("button", { name: "見開き表示に切り替え" }));
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
 
     await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalledTimes(2));
     const containers = globalThis.document.querySelectorAll<HTMLElement>(".text-layer[data-page]");
@@ -843,6 +862,47 @@ describe("PdfReader", () => {
     fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
     await screen.findByText("目次データが見つかりませんでした。");
     expect(screen.getByRole("button", { name: "目次を閉じる" })).toBeTruthy();
+  });
+
+  it("hides the floating controls while reading and brings them back on demand", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 6;
+    resolveDocument(pdfDocument);
+    const onBack = vi.fn();
+    render(<PdfReader book={makeBook()} onPageChange={vi.fn()} onBack={onBack} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    const reader = screen.getByRole("region", { name: "PDFリーダー" });
+    const stage = globalThis.document.querySelector(".pdf-stage") as HTMLDivElement;
+    expect(reader.className).toContain("is-chrome-visible");
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    await waitFor(() => expect(reader.className).not.toContain("is-chrome-visible"));
+    expect(globalThis.document.querySelector(".reader-status")?.textContent).toBe("2 / 6");
+
+    fireEvent.click(stage);
+    expect(reader.className).toContain("is-chrome-visible");
+    fireEvent.click(stage);
+    expect(reader.className).not.toContain("is-chrome-visible");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(reader.className).toContain("is-chrome-visible");
+
+    fireEvent.click(screen.getByRole("button", { name: "目次を開く" }));
+    expect(screen.getByRole("complementary", { name: "目次" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("complementary", { name: "目次" })).toBeNull();
+    expect(reader.className).toContain("is-chrome-visible");
+
+    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
+    fireEvent.click(stage);
+    expect(screen.queryByRole("complementary", { name: "しおり" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
+    fireEvent.click(screen.getByRole("button", { name: "パネルを閉じる" }));
+    expect(screen.queryByRole("complementary", { name: "本文検索" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it("persists page bookmarks, navigates from the bookmark panel, and removes them", async () => {
@@ -1015,5 +1075,49 @@ describe("PdfReader", () => {
     await act(async () => {});
 
     expect(onPageChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the page layout, binding, and zoom in the view menu", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 6;
+    resolveDocument(pdfDocument);
+    window.localStorage.clear();
+    render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+
+    expect(screen.queryByRole("dialog", { name: "表示" })).toBeNull();
+    const toggle = screen.getByRole("button", { name: "表示" });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("dialog", { name: "表示" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "1ページ" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByText("左から右へ読みます。")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "右綴じ" }));
+    expect(screen.getByRole("button", { name: "右綴じ" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByText("右から左へ読みます。")).toBeTruthy();
+    expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBe("rtl");
+    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    await waitFor(() =>
+      expect(globalThis.document.querySelector(".pdf-spread")?.className).toBe(
+        "pdf-spread is-spread is-rtl",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "左綴じ" }));
+    expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBe("ltr");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "表示" })).toBeNull();
+    fireEvent.click(toggle);
+    fireEvent.click(globalThis.document.querySelector(".pdf-stage")!);
+    expect(screen.queryByRole("dialog", { name: "表示" })).toBeNull();
+    expect(screen.getByRole("region", { name: "PDFリーダー" }).className).toContain(
+      "is-chrome-visible",
+    );
   });
 });

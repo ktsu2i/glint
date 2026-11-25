@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -36,6 +36,24 @@ vi.mock("./shared/api/backend", () => ({
   saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLanguageSettings: mocks.saveLanguageSettings,
 }));
+const settingsEvents = vi.hoisted(() => ({
+  appearance: [] as Array<(theme: string) => void>,
+  language: [] as Array<(language: string) => void>,
+}));
+vi.mock("./shared/api/events", () => ({
+  onAppearanceChanged: (callback: (theme: string) => void) => {
+    settingsEvents.appearance.push(callback);
+    return () => {
+      settingsEvents.appearance = settingsEvents.appearance.filter((entry) => entry !== callback);
+    };
+  },
+  onLanguageChanged: (callback: (language: string) => void) => {
+    settingsEvents.language.push(callback);
+    return () => {
+      settingsEvents.language = settingsEvents.language.filter((entry) => entry !== callback);
+    };
+  },
+}));
 vi.mock("./features/library/indexer", () => ({
   indexBookPages: mocks.indexBookPages,
   isAbortError: () => false,
@@ -48,16 +66,21 @@ vi.mock("./features/reader/PdfReader", () => ({
     book,
     initialPage,
     onPageChange,
+    onBack,
   }: {
     book: { name: string } | null;
     initialPage: number;
     onPageChange: (page: number, pageCount: number) => void;
+    onBack: () => void;
   }) => (
     <div data-testid="pdf-reader">
       <span>{book?.name ?? "no-book"}</span>
       <span>initial-{initialPage}</span>
       <button type="button" onClick={() => onPageChange(4, 12)}>
         set-page
+      </button>
+      <button type="button" onClick={onBack}>
+        back-to-library
       </button>
     </div>
   ),
@@ -107,6 +130,8 @@ beforeEach(() => {
   mocks.getLanguageSettings.mockResolvedValue({ language: "ja" });
   mocks.saveAppearanceSettings.mockImplementation(async (theme: string) => ({ theme }));
   mocks.saveLanguageSettings.mockImplementation(async (language: string) => ({ language }));
+  settingsEvents.appearance = [];
+  settingsEvents.language = [];
 });
 
 describe("App", () => {
@@ -138,32 +163,17 @@ describe("App", () => {
     expect(mocks.pendingIndexBooks).toHaveBeenCalledTimes(1);
   });
 
-  it("defaults to English and switches the interface to Japanese from Settings", async () => {
+  it("defaults to English and follows a language saved in the settings window", async () => {
     mocks.getLanguageSettings.mockResolvedValue({ language: "en" });
     render(<App />);
 
     expect(await screen.findByText("Add your first book.")).toBeTruthy();
     expect(document.documentElement.lang).toBe("en");
 
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Japanese/ }));
-
-    await waitFor(() => expect(mocks.saveLanguageSettings).toHaveBeenCalledWith("ja"));
-    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
+    act(() => settingsEvents.language.forEach((callback) => callback("ja")));
+    expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
     expect(document.documentElement.lang).toBe("ja");
-  });
-
-  it("rolls back the language when persistence fails", async () => {
-    mocks.getLanguageSettings.mockResolvedValue({ language: "en" });
-    mocks.saveLanguageSettings.mockRejectedValue(new Error("language storage unavailable"));
-    render(<App />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Japanese/ }));
-
-    expect(await screen.findByText("language storage unavailable")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeTruthy();
-    expect(document.documentElement.lang).toBe("en");
+    expect(mocks.saveLanguageSettings).not.toHaveBeenCalled();
   });
 
   it("starts in the library, imports a PDF, saves the reading position, and returns", async () => {
@@ -176,9 +186,8 @@ describe("App", () => {
     const { unmount } = render(<App />);
 
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "メインナビゲーション" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "本棚" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("button", { name: "読書" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /読書に戻る/ })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     expect(screen.getByText("選択しています…")).toBeTruthy();
@@ -188,22 +197,32 @@ describe("App", () => {
     mocks.openBookFile.mockResolvedValueOnce(openedBook);
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     await waitFor(() => expect(screen.getByText("initial-3")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "読書" }).getAttribute("aria-current")).toBe("page");
 
     fireEvent.click(screen.getByRole("button", { name: "set-page" }));
-    expect(screen.getByLabelText("4ページ")).toBeTruthy();
-    expect(screen.getByText("004")).toBeTruthy();
     expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12);
 
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
-    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "設定" }).getAttribute("aria-current")).toBe("page");
-    fireEvent.click(screen.getByRole("button", { name: "読書" }));
+    fireEvent.click(screen.getByRole("button", { name: "back-to-library" }));
+    expect(await screen.findByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Guideの読書に戻る" }));
     expect(await screen.findByText("initial-4")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
-    expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
     unmount();
+  });
+
+  it("turns the top bar into the library search with Command-F and closes it with Escape", async () => {
+    render(<App />);
+    await screen.findByText("最初の一冊を、本棚へ。");
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
+    const searchBox = await screen.findByRole("searchbox", { name: "検索語" });
+    expect(
+      screen.getByText("キーワードを入力すると、準備済みのページを横断検索します。"),
+    ).toBeTruthy();
+    fireEvent.keyDown(searchBox, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "検索語" })).toBeNull();
+    expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "本棚を検索（⌘F）" }));
+    expect(await screen.findByRole("searchbox", { name: "検索語" })).toBeTruthy();
   });
 
   it("opens a saved book at its reading position", async () => {
@@ -236,50 +255,15 @@ describe("App", () => {
     ).toBeTruthy();
   });
 
-  it("opens the settings page from the library and returns", async () => {
-    render(<App />);
-    await screen.findByText("最初の一冊を、本棚へ。");
-
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
-    expect(await screen.findByRole("heading", { name: "設定", level: 1 })).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "表示", level: 2 })).toBeTruthy();
-    expect(screen.queryByText(/API key/i)).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "本棚" }));
-    expect(await screen.findByRole("heading", { name: "本棚" })).toBeTruthy();
-  });
-
-  it("restores, applies, and persists the appearance theme", async () => {
+  it("restores the theme and follows the theme saved in the settings window", async () => {
     mocks.getAppearanceSettings.mockResolvedValue({ theme: "dark" });
     render(<App />);
 
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
-    const light = await screen.findByRole("button", { name: /ライト/ });
-    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-
-    fireEvent.click(light);
-    await waitFor(() => expect(mocks.saveAppearanceSettings).toHaveBeenCalledWith("light"));
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+    act(() => settingsEvents.appearance.forEach((callback) => callback("light")));
     expect(document.documentElement.dataset.theme).toBe("light");
-    expect(light.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  it("rolls back the visible theme when persistence fails", async () => {
-    mocks.getAppearanceSettings.mockResolvedValue({ theme: "dark" });
-    mocks.saveAppearanceSettings.mockRejectedValue(new Error("settings unavailable"));
-    render(<App />);
-
-    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
-    fireEvent.click(await screen.findByRole("button", { name: /ライト/ }));
-
-    expect(await screen.findByText("settings unavailable")).toBeTruthy();
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(screen.getByRole("button", { name: /ダーク/ }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
+    expect(mocks.saveAppearanceSettings).not.toHaveBeenCalled();
   });
 
   it("generates a pending cover without blocking the reader", async () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render as renderBase, screen } from "@testing-library/react";
+import { fireEvent, render as renderBase, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BookSummary } from "../../shared/api/backend";
@@ -52,13 +52,44 @@ describe("Library", () => {
     const onOpen = vi.fn();
     render(<Library {...defaultProps} books={[availableBook]} onOpen={onOpen} />);
 
-    expect(screen.getByText("50 / 200ページ")).toBeTruthy();
-    expect(screen.getByRole("presentation")).toHaveProperty(
+    const shelf = screen.getByRole("region", { name: "import済みの本" });
+    expect(within(shelf).getByText("50 / 200ページ")).toBeTruthy();
+    expect(within(shelf).getByText("PDF")).toBeTruthy();
+    expect(within(shelf).getByRole("presentation")).toHaveProperty(
       "src",
       expect.stringContaining("/cover/1"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideを開く" }));
     expect(onOpen).toHaveBeenCalledWith(availableBook);
+  });
+
+  it("features the most recently opened book and continues reading from it", () => {
+    const onOpen = vi.fn();
+    const older = {
+      ...availableBook,
+      id: "book-0",
+      title: "Older Notes",
+      lastOpenedAt: "2026-06-01T00:00:00Z",
+    };
+    const unopened = {
+      ...availableBook,
+      id: "book-2",
+      title: "Fresh Book",
+      lastOpenedAt: "",
+      lastPage: 1,
+    };
+    render(<Library {...defaultProps} books={[older, availableBook, unopened]} onOpen={onOpen} />);
+
+    const hero = screen.getByRole("region", { name: "最近開いた本" });
+    expect(within(hero).getByRole("heading", { name: "Systems Guide" })).toBeTruthy();
+    expect(within(hero).getByText("50 / 200ページ")).toBeTruthy();
+    fireEvent.click(within(hero).getByRole("button", { name: "Systems Guideの続きを読む" }));
+    expect(onOpen).toHaveBeenCalledWith(availableBook);
+
+    const shelf = screen.getByRole("region", { name: "import済みの本" });
+    expect(within(shelf).getByText("3冊")).toBeTruthy();
+    expect(within(shelf).getByText("まだ開いていません")).toBeTruthy();
+    expect(within(shelf).getByRole("button", { name: "読み始める" })).toBeTruthy();
   });
 
   it("uses a placeholder and offers recovery for a missing source PDF", () => {

@@ -19,19 +19,20 @@ Your books and your reading positions stay on your machine.
 
 ### Read
 
+- Read with the page in front and the controls out of the way. Click the page or press `Esc` to show or hide the floating toolbar and page slider.
 - Read PDFs page by page, or as two-page spreads.
 - Switch between left-side and right-side binding, so Japanese books turn the right way.
-- Zoom in and out, or fit the page to the window.
+- Zoom in and out, or fit the page to the window. The layout, binding, and zoom live in the `Aa` menu.
 - Jump around with the table of contents, the page slider, or by typing a page number.
 - Bookmark pages and return to them from the bookmarks panel.
 - Have the current page read aloud, with automatic advance to the next page.
 - Read in light or dark mode, or follow your system setting. The page itself stays as the author made it.
-- Use Glint in English or Japanese.
+- Use Glint in English or Japanese. Both settings live in the Settings window (`⌘,`).
 
 ### Search
 
 - Search inside the book you are reading with `⌘F` and jump to any matching page.
-- Search across every book you have imported and open the right book at the right page.
+- Search across every book you have imported from the library with `⌘F`, and open the right book at the right page.
 
 ### EPUB, for now
 

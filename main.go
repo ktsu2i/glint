@@ -54,7 +54,9 @@ func run() error {
 		OnShutdown: func() { _ = store.Close() },
 	})
 	booksSvc := app.NewBooksService(books.New(store, dataDirectory), assetSrv, settingsManager, desktop)
-	settingsSvc := app.NewSettingsService(settingsManager)
+	settingsSvc := app.NewSettingsService(settingsManager, desktop.Event)
+	settingsWindow := app.NewSettingsWindow(desktop)
+	desktop.Menu.SetApplicationMenu(app.ApplicationMenu("Glint", settingsWindow.Show))
 	desktop.RegisterService(application.NewService(booksSvc))
 	desktop.RegisterService(application.NewService(settingsSvc))
 	desktop.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
@@ -67,9 +69,9 @@ func run() error {
 		MinWidth:         1024,
 		MinHeight:        700,
 		URL:              "/",
-		BackgroundColour: application.NewRGB(243, 239, 231),
+		BackgroundColour: application.NewRGB(221, 230, 227),
 		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBarHiddenInset,
+			TitleBar: application.MacTitleBarHiddenInsetUnified,
 		},
 	})
 	return desktop.Run()

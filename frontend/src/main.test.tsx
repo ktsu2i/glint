@@ -7,6 +7,9 @@ const reactRoot = vi.hoisted(() => ({
 
 vi.mock("react-dom/client", () => ({ createRoot: reactRoot.createRoot }));
 vi.mock("./App", () => ({ default: () => <div>app</div> }));
+vi.mock("./features/settings/SettingsWindow", () => ({
+  SettingsWindowApp: () => <div>settings</div>,
+}));
 
 beforeEach(() => {
   vi.resetModules();
@@ -21,5 +24,18 @@ describe("frontend entrypoint", () => {
 
     expect(reactRoot.createRoot).toHaveBeenCalledWith(document.querySelector("#root"));
     expect(reactRoot.render).toHaveBeenCalledOnce();
+    expect(JSON.stringify(reactRoot.render.mock.calls[0]?.[0])).not.toContain("settings");
+  });
+
+  it("renders the settings window when opened with the settings hash", async () => {
+    window.location.hash = "#settings";
+    try {
+      await import("./main");
+      const element = reactRoot.render.mock.calls[0]?.[0] as { props: { children: unknown } };
+      const child = element.props.children as { type: { name: string } };
+      expect(child.type.name).toBe("SettingsWindowApp");
+    } finally {
+      window.location.hash = "";
+    }
   });
 });

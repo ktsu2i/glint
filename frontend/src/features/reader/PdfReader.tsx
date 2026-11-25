@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
   BookOpenIcon,
   BookOpenTextIcon,
   BookmarkSimpleIcon,
@@ -86,9 +84,10 @@ type PdfReaderProps = {
   book: BookFile | null;
   initialPage?: number;
   onPageChange: (pageNumber: number, pageCount: number) => void;
+  onBack?: () => void;
 };
 
-export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProps) {
+export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfReaderProps) {
   const { t, i18n } = useTranslation();
   const canvasLeftRef = useRef<HTMLCanvasElement>(null);
   const canvasRightRef = useRef<HTMLCanvasElement>(null);
@@ -116,6 +115,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   const [outlineLoaded, setOutlineLoaded] = useState(false);
   const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [submittedSearchQuery, setSubmittedSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
@@ -137,6 +138,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
   const searchRequestRef = useRef(0);
 
   const stageNodeRef = useRef<HTMLDivElement | null>(null);
+  const stageClickRef = useRef<(event: MouseEvent) => void>(() => {});
   const wheelCleanupRef = useRef<(() => void) | null>(null);
   const effectiveScaleRef = useRef(1);
 
@@ -177,9 +179,13 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
         return { kind: "manual", value: next };
       });
     };
+    // Clicking the page toggles the floating controls; Escape does the same from the keyboard.
+    const handleClick = (event: MouseEvent) => stageClickRef.current(event);
     node.addEventListener("wheel", handleWheel, { passive: false });
+    node.addEventListener("click", handleClick);
     wheelCleanupRef.current = () => {
       node.removeEventListener("wheel", handleWheel);
+      node.removeEventListener("click", handleClick);
     };
   }, []);
 
@@ -224,6 +230,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
     setOutline([]);
     setOutlineLoaded(false);
     setOpenPanel(null);
+    setIsViewMenuOpen(false);
+    setChromeVisible(true);
     setSearchQuery("");
     setSubmittedSearchQuery("");
     setSearchResults([]);
@@ -389,14 +397,42 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
       if (forwardKeys.includes(event.key)) {
         event.preventDefault();
         setPageNumber((current) => Math.min(numPages, current + step));
+        setChromeVisible(false);
       } else if (backwardKeys.includes(event.key)) {
         event.preventDefault();
         setPageNumber((current) => Math.max(1, current - step));
+        setChromeVisible(false);
+      } else if (event.key === "Escape") {
+        if (openPanel || isViewMenuOpen) {
+          setOpenPanel(null);
+          setIsViewMenuOpen(false);
+        } else {
+          setChromeVisible((current) => !current);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [document, viewMode, bindingDirection]);
+  }, [document, viewMode, bindingDirection, isViewMenuOpen, openPanel]);
+
+  useEffect(() => {
+    stageClickRef.current = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("button, a, input, textarea, select")) {
+        return;
+      }
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.toString().trim() !== "") {
+        return;
+      }
+      if (openPanel || isViewMenuOpen) {
+        setOpenPanel(null);
+        setIsViewMenuOpen(false);
+        return;
+      }
+      setChromeVisible((current) => !current);
+    };
+  }, [isViewMenuOpen, openPanel]);
 
   useEffect(() => {
     if (!document || !stageNodeRef.current) {
@@ -683,6 +719,11 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
     });
   }
 
+  function changeBinding(next: BindingDirection) {
+    setBindingDirection(next);
+    persistBindingDirection(book?.id, next);
+  }
+
   function adjustZoom(delta: number) {
     setZoomMode((current) => {
       const base = current.kind === "manual" ? current.value : effectiveScale;
@@ -804,17 +845,82 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
     }
   }
 
+  const chromeShown = chromeVisible || openPanel !== null || isViewMenuOpen;
+  const panelTitle = isTocOpen
+    ? t("reader.toc")
+    : isSearchOpen
+      ? t("reader.textSearch")
+      : t("reader.bookmarks");
+
   return (
-    <section className="reader" aria-label={t("reader.aria")}>
-      <div className="reader-toolbar">
-        <div className="reader-section-label">
+    <section
+      className={`reader ambient${chromeShown ? " is-chrome-visible" : ""}`}
+      aria-label={t("reader.aria")}
+    >
+      <div className="reader-drag-region" aria-hidden="true" />
+
+      <div className="pdf-stage" ref={stageRef}>
+        {error && (
+          <div className="reader-error" role="alert">
+            {error}
+          </div>
+        )}
+        <div
+          className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}${isRtlBinding ? " is-rtl" : ""}`}
+        >
+          <div className="pdf-page">
+            <canvas
+              ref={canvasLeftRef}
+              className="pdf-canvas"
+              aria-label={t("app.pageLabel", { page: pageNumber })}
+            />
+            <div
+              ref={textLayerLeftRef}
+              className="text-layer"
+              data-page={pageNumber}
+              aria-hidden="true"
+            />
+          </div>
+          {showRightCanvas && (
+            <div className="pdf-page">
+              <canvas
+                ref={canvasRightRef}
+                className="pdf-canvas"
+                aria-label={t("app.pageLabel", { page: rightPageNumber })}
+              />
+              <div
+                ref={textLayerRightRef}
+                className="text-layer"
+                data-page={rightPageNumber}
+                aria-hidden="true"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {document && (
+        <p className="reader-status" aria-hidden="true">
+          {pageRangeLabel} / {numPages}
+        </p>
+      )}
+
+      <header className="reader-topbar glass">
+        <div className="reader-topbar-start">
+          {onBack && (
+            <button type="button" className="glass-button reader-back" onClick={onBack}>
+              <CaretLeftIcon size={15} weight="bold" aria-hidden="true" />
+              {t("reader.backToLibrary")}
+            </button>
+          )}
+          <span className="reader-topbar-separator" aria-hidden="true" />
           <ToolButton
             label={isTocOpen ? t("reader.closeToc") : t("reader.openToc")}
             className={isTocOpen ? "is-active" : ""}
             onClick={() => setOpenPanel((panel) => (panel === "toc" ? null : "toc"))}
             disabled={!document}
           >
-            <ListBulletsIcon size={15} weight="regular" />
+            <ListBulletsIcon size={17} weight="regular" />
           </ToolButton>
           <ToolButton
             label={isSearchOpen ? t("reader.closeSearch") : t("reader.openSearch")}
@@ -822,7 +928,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
             onClick={() => setOpenPanel((panel) => (panel === "search" ? null : "search"))}
             disabled={!document}
           >
-            <MagnifyingGlassIcon size={15} weight="bold" />
+            <MagnifyingGlassIcon size={17} weight="regular" />
           </ToolButton>
           <ToolButton
             label={isBookmarksOpen ? t("reader.closeBookmarks") : t("reader.openBookmarks")}
@@ -830,82 +936,35 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
             onClick={() => setOpenPanel((panel) => (panel === "bookmarks" ? null : "bookmarks"))}
             disabled={!document}
           >
-            <BookmarksSimpleIcon size={15} weight="bold" />
+            <BookmarksSimpleIcon size={17} weight="regular" />
           </ToolButton>
         </div>
-        <div className="reader-controls" aria-label={t("reader.pageControls")}>
-          <ToolButton
-            label={isRtlBinding ? t("reader.nextPage") : t("reader.previousPage")}
-            disabled={
-              isRtlBinding ? !document || pageNumber + step > document.numPages : pageNumber <= 1
-            }
-            onClick={() =>
-              isRtlBinding
-                ? setPageNumber((current) =>
-                    Math.min(document?.numPages ?? current, current + step),
-                  )
-                : setPageNumber((current) => Math.max(1, current - step))
-            }
-          >
-            <CaretLeftIcon size={15} weight="bold" />
-          </ToolButton>
-          {isEditingPage ? (
-            <form
-              className="page-count is-editing"
-              onSubmit={(event) => {
-                event.preventDefault();
-                commitPageInput();
-                setIsEditingPage(false);
-              }}
-            >
-              <input
-                ref={pageInputRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                aria-label={t("reader.pageNumber")}
-                value={pageInput}
-                size={pageInputWidth}
-                onChange={(event) => setPageInput(event.target.value.replaceAll(/[^0-9]/g, ""))}
-                onBlur={() => {
-                  commitPageInput();
-                  setIsEditingPage(false);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    setPageInput(String(pageNumber));
-                    setIsEditingPage(false);
-                  }
-                }}
-              />
-              <span>/ {document?.numPages ?? "–"}</span>
-            </form>
-          ) : (
-            <button
-              type="button"
-              className="page-count"
-              aria-label={t("reader.goToPage")}
-              onClick={startEditingPage}
-              disabled={!document}
-            >
-              {pageRangeLabel} <span>/ {document?.numPages ?? "–"}</span>
-            </button>
+        <div className="reader-title">
+          <strong title={book.title}>{book.title}</strong>
+          {document && (
+            <span>
+              {pageRangeLabel} / {numPages}
+            </span>
           )}
+        </div>
+        <div className="reader-topbar-end">
           <ToolButton
-            label={isRtlBinding ? t("reader.previousPage") : t("reader.nextPage")}
-            disabled={
-              isRtlBinding ? pageNumber <= 1 : !document || pageNumber + step > document.numPages
+            label={
+              speechSupported
+                ? isReadingAloud
+                  ? t("reader.stopReadAloud")
+                  : t("reader.startReadAloud")
+                : t("reader.readAloudUnsupported")
             }
-            onClick={() =>
-              isRtlBinding
-                ? setPageNumber((current) => Math.max(1, current - step))
-                : setPageNumber((current) =>
-                    Math.min(document?.numPages ?? current, current + step),
-                  )
-            }
+            className={isReadingAloud ? "is-active is-reading" : ""}
+            disabled={!document || !speechSupported}
+            onClick={toggleReadAloud}
           >
-            <CaretRightIcon size={15} weight="bold" />
+            {isReadingAloud ? (
+              <SpeakerSlashIcon size={17} weight="bold" />
+            ) : (
+              <SpeakerHighIcon size={17} weight="regular" />
+            )}
           </ToolButton>
           <ToolButton
             label={
@@ -919,72 +978,103 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
             disabled={!document || bookmarkBusyPage !== null}
             onClick={() => void toggleCurrentPageBookmark()}
           >
-            <BookmarkSimpleIcon size={15} weight={currentPageBookmarked ? "fill" : "regular"} />
+            <BookmarkSimpleIcon size={17} weight={currentPageBookmarked ? "fill" : "regular"} />
           </ToolButton>
-          <ToolButton
-            label={
-              speechSupported
-                ? isReadingAloud
-                  ? t("reader.stopReadAloud")
-                  : t("reader.startReadAloud")
-                : t("reader.readAloudUnsupported")
-            }
-            className={isReadingAloud ? "is-active" : ""}
-            disabled={!document || !speechSupported}
-            onClick={toggleReadAloud}
+          <button
+            type="button"
+            className="glass-button reader-view-toggle"
+            aria-label={t("reader.view")}
+            aria-pressed={isViewMenuOpen}
+            aria-expanded={isViewMenuOpen}
+            onClick={() => setIsViewMenuOpen((current) => !current)}
           >
-            {isReadingAloud ? (
-              <SpeakerSlashIcon size={15} weight="bold" />
-            ) : (
-              <SpeakerHighIcon size={15} weight="regular" />
-            )}
-          </ToolButton>
+            Aa
+          </button>
         </div>
-        <div className="zoom-controls" aria-label={t("reader.zoomControls")}>
-          <ToolButton
-            label={isRtlBinding ? t("reader.bindingSwitchToLtr") : t("reader.bindingSwitchToRtl")}
-            className={isRtlBinding ? "is-active" : ""}
-            onClick={() =>
-              setBindingDirection((current) => {
-                const next: BindingDirection = current === "rtl" ? "ltr" : "rtl";
-                persistBindingDirection(book?.id, next);
-                return next;
-              })
-            }
-          >
-            {isRtlBinding ? (
-              <ArrowLeftIcon size={14} weight="bold" />
-            ) : (
-              <ArrowRightIcon size={14} weight="bold" />
-            )}
-          </ToolButton>
-          <ToolButton
-            label={viewMode === "spread" ? t("reader.singlePage") : t("reader.spread")}
-            className={viewMode === "spread" ? "is-active" : ""}
-            onClick={() => setViewMode((current) => (current === "spread" ? "single" : "spread"))}
-          >
-            {viewMode === "spread" ? (
-              <FileIcon size={14} weight="bold" />
-            ) : (
-              <BookOpenIcon size={14} weight="bold" />
-            )}
-          </ToolButton>
-          <ToolButton
-            label={t("reader.fitPage")}
-            className={zoomMode.kind === "fit-page" ? "is-active" : ""}
-            onClick={() => setZoomMode({ kind: "fit-page" })}
-          >
-            <CornersInIcon size={14} weight="bold" />
-          </ToolButton>
-          <ToolButton label={t("reader.zoomOut")} onClick={() => adjustZoom(-manualZoomStep)}>
-            <MinusIcon size={14} weight="bold" />
-          </ToolButton>
-          <span>{Math.round(effectiveScale * 100)}%</span>
-          <ToolButton label={t("reader.zoomIn")} onClick={() => adjustZoom(manualZoomStep)}>
-            <PlusIcon size={14} weight="bold" />
-          </ToolButton>
+      </header>
+
+      {isViewMenuOpen && (
+        <div
+          className="reader-view-menu glass glass-strong"
+          role="dialog"
+          aria-label={t("reader.view")}
+        >
+          <section>
+            <h2>{t("reader.layoutHeading")}</h2>
+            <div className="segmented" role="group" aria-label={t("reader.layoutHeading")}>
+              <button
+                type="button"
+                aria-pressed={viewMode === "single"}
+                onClick={() => setViewMode("single")}
+              >
+                <FileIcon size={14} aria-hidden="true" />
+                {t("reader.layoutSingle")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={viewMode === "spread"}
+                onClick={() => setViewMode("spread")}
+              >
+                <BookOpenIcon size={14} aria-hidden="true" />
+                {t("reader.layoutSpread")}
+              </button>
+            </div>
+          </section>
+          <section>
+            <h2>{t("reader.bindingHeading")}</h2>
+            <div className="segmented" role="group" aria-label={t("reader.bindingHeading")}>
+              <button
+                type="button"
+                aria-pressed={!isRtlBinding}
+                onClick={() => changeBinding("ltr")}
+              >
+                {t("reader.bindingLtr")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={isRtlBinding}
+                onClick={() => changeBinding("rtl")}
+              >
+                {t("reader.bindingRtl")}
+              </button>
+            </div>
+            <p>{isRtlBinding ? t("reader.bindingRtlNote") : t("reader.bindingLtrNote")}</p>
+          </section>
+          <section>
+            <h2>{t("reader.zoomHeading")}</h2>
+            <div className="reader-zoom-row">
+              <div className="reader-zoom-stepper">
+                <button
+                  type="button"
+                  className="glass-button"
+                  aria-label={t("reader.zoomOut")}
+                  onClick={() => adjustZoom(-manualZoomStep)}
+                >
+                  <MinusIcon size={13} weight="bold" aria-hidden="true" />
+                </button>
+                <span>{Math.round(effectiveScale * 100)}%</span>
+                <button
+                  type="button"
+                  className="glass-button"
+                  aria-label={t("reader.zoomIn")}
+                  onClick={() => adjustZoom(manualZoomStep)}
+                >
+                  <PlusIcon size={13} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="reader-fit-button"
+                aria-pressed={zoomMode.kind === "fit-page"}
+                onClick={() => setZoomMode({ kind: "fit-page" })}
+              >
+                <CornersInIcon size={14} aria-hidden="true" />
+                {t("reader.fitPage")}
+              </button>
+            </div>
+          </section>
         </div>
-      </div>
+      )}
 
       {bookmarkError && (
         <div className="reader-bookmark-error" role="alert">
@@ -992,15 +1082,29 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
         </div>
       )}
 
-      <div className={`reader-body ${openPanel ? "toc-open" : "toc-closed"}`}>
-        {isTocOpen && (
-          <aside className="reader-toc" aria-label={t("reader.toc")}>
-            <div className="reader-toc-header">
-              <span>{t("reader.toc")}</span>
-            </div>
-            <div className="reader-toc-scroll">
+      {openPanel && (
+        <aside
+          className={`reader-sheet glass glass-strong reader-sheet-${openPanel}`}
+          aria-label={panelTitle}
+        >
+          <div className="reader-sheet-header">
+            <h2>{panelTitle}</h2>
+            {isBookmarksOpen && pageBookmarks.length > 0 && (
+              <strong className="reader-sheet-count">{pageBookmarks.length}</strong>
+            )}
+            <button
+              type="button"
+              className="glass-button reader-sheet-close"
+              aria-label={t("reader.closePanel")}
+              onClick={() => setOpenPanel(null)}
+            >
+              <XIcon size={14} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+          {isTocOpen && (
+            <div className="reader-sheet-scroll">
               {outline.length === 0 ? (
-                <p className="reader-toc-empty">
+                <p className="reader-sheet-message">
                   {outlineLoaded ? t("reader.noToc") : t("reader.loadingToc")}
                 </p>
               ) : (
@@ -1013,101 +1117,102 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
                 />
               )}
             </div>
-          </aside>
-        )}
-        {isSearchOpen && (
-          <aside className="reader-toc reader-search" aria-label={t("reader.textSearch")}>
-            <div className="reader-search-header">
+          )}
+          {isSearchOpen && (
+            <>
               <form
+                className="reader-search-form"
                 role="search"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void submitBookSearch();
                 }}
               >
-                <MagnifyingGlassIcon size={14} aria-hidden="true" />
-                <input
-                  ref={searchInputRef}
-                  type="search"
-                  aria-label={t("reader.openSearch")}
-                  placeholder={t("reader.searchPlaceholder")}
-                  maxLength={200}
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-                <button type="submit" disabled={!searchQuery.trim() || isSearching}>
+                <label className="reader-search-field">
+                  <MagnifyingGlassIcon size={14} aria-hidden="true" />
+                  <input
+                    ref={searchInputRef}
+                    type="search"
+                    aria-label={t("reader.openSearch")}
+                    placeholder={t("reader.searchPlaceholder")}
+                    maxLength={200}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="solid-button"
+                  disabled={!searchQuery.trim() || isSearching}
+                >
                   {isSearching ? t("reader.searchingAction") : t("reader.searchAction")}
                 </button>
               </form>
-            </div>
-            <div className="reader-search-scroll">
-              {searchError ? (
-                <p className="reader-search-message is-error" role="alert">
-                  {searchError}
-                </p>
-              ) : submittedSearchQuery ? (
-                isSearching ? (
-                  <p className="reader-search-message">
-                    {t("reader.searchingFor", { query: submittedSearchQuery })}
+              <div className="reader-sheet-scroll">
+                {searchError ? (
+                  <p className="reader-sheet-message is-error" role="alert">
+                    {searchError}
                   </p>
-                ) : searchResults.length === 0 ? (
-                  <p className="reader-search-message">
-                    {t("reader.noResults", { query: submittedSearchQuery })}
-                  </p>
-                ) : (
-                  <>
-                    <p className="reader-search-count">
-                      {t("reader.resultsFound", { count: searchResults.length })}
+                ) : submittedSearchQuery ? (
+                  isSearching ? (
+                    <p className="reader-sheet-message">
+                      {t("reader.searchingFor", { query: submittedSearchQuery })}
                     </p>
-                    <ol className="reader-search-results">
-                      {searchResults.map((result) => (
-                        <li key={result.pageNumber}>
-                          <button
-                            type="button"
-                            className={result.pageNumber === pageNumber ? "is-active" : ""}
-                            aria-label={t("reader.goToResult", {
-                              page: result.pageNumber,
-                            })}
-                            onClick={() => jumpToOutlinePage(result.pageNumber)}
-                          >
-                            <span className="reader-search-result-meta">
-                              <strong>PAGE {String(result.pageNumber).padStart(3, "0")}</strong>
-                              <span>
-                                {t("reader.matches", {
-                                  count: result.matchCount,
-                                })}
+                  ) : searchResults.length === 0 ? (
+                    <p className="reader-sheet-message">
+                      {t("reader.noResults", { query: submittedSearchQuery })}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="reader-search-count">
+                        {t("reader.resultsFound", { count: searchResults.length })}
+                      </p>
+                      <ol className="reader-search-results">
+                        {searchResults.map((result) => (
+                          <li key={result.pageNumber}>
+                            <button
+                              type="button"
+                              className={result.pageNumber === pageNumber ? "is-active" : ""}
+                              aria-label={t("reader.goToResult", {
+                                page: result.pageNumber,
+                              })}
+                              onClick={() => jumpToOutlinePage(result.pageNumber)}
+                            >
+                              <span className="reader-search-result-meta">
+                                <strong>
+                                  {t("reader.bookmarkPage", { page: result.pageNumber })}
+                                </strong>
+                                <span>
+                                  {t("reader.matches", {
+                                    count: result.matchCount,
+                                  })}
+                                </span>
                               </span>
-                            </span>
-                            <span className="reader-search-excerpt">
-                              <HighlightedExcerpt
-                                text={result.excerpt}
-                                query={submittedSearchQuery}
-                              />
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ol>
-                  </>
-                )
-              ) : (
-                <p className="reader-search-message">{t("reader.searchPrompt")}</p>
-              )}
-            </div>
-          </aside>
-        )}
-        {isBookmarksOpen && (
-          <aside className="reader-toc reader-bookmarks" aria-label={t("reader.bookmarks")}>
-            <div className="reader-toc-header">
-              <span>{t("reader.bookmarks")}</span>
-              {pageBookmarks.length > 0 && <strong>{pageBookmarks.length}</strong>}
-            </div>
-            <div className="reader-toc-scroll">
+                              <span className="reader-search-excerpt">
+                                <HighlightedExcerpt
+                                  text={result.excerpt}
+                                  query={submittedSearchQuery}
+                                />
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  )
+                ) : (
+                  <p className="reader-sheet-message">{t("reader.searchPrompt")}</p>
+                )}
+              </div>
+            </>
+          )}
+          {isBookmarksOpen && (
+            <div className="reader-sheet-scroll">
               {bookmarksLoaded ? (
                 bookmarkError && pageBookmarks.length === 0 ? (
-                  <p className="reader-toc-empty is-error">{bookmarkError}</p>
+                  <p className="reader-sheet-message is-error">{bookmarkError}</p>
                 ) : pageBookmarks.length === 0 ? (
-                  <p className="reader-toc-empty">{t("reader.noBookmarks")}</p>
+                  <p className="reader-sheet-message">{t("reader.noBookmarks")}</p>
                 ) : (
                   <ol className="reader-bookmark-list">
                     {pageBookmarks.map((bookmark) => (
@@ -1123,7 +1228,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
                           })}
                           onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
                         >
-                          <BookmarkSimpleIcon size={16} weight="fill" aria-hidden="true" />
+                          <BookmarkSimpleIcon size={15} weight="fill" aria-hidden="true" />
                           <span>
                             <strong>
                               {t("reader.bookmarkPage", {
@@ -1161,105 +1266,138 @@ export function PdfReader({ book, initialPage = 1, onPageChange }: PdfReaderProp
                               .finally(() => setBookmarkBusyPage(null));
                           }}
                         >
-                          <XIcon size={13} weight="bold" aria-hidden="true" />
+                          <XIcon size={12} weight="bold" aria-hidden="true" />
                         </button>
                       </li>
                     ))}
                   </ol>
                 )
               ) : (
-                <p className="reader-toc-empty">{t("reader.loadingBookmarks")}</p>
+                <p className="reader-sheet-message">{t("reader.loadingBookmarks")}</p>
               )}
             </div>
-          </aside>
-        )}
-        <div className="pdf-stage" ref={stageRef}>
-          {error && (
-            <div className="reader-error" role="alert">
-              {error}
-            </div>
           )}
-          <div
-            className={`pdf-spread ${viewMode === "spread" ? "is-spread" : "is-single"}${isRtlBinding ? " is-rtl" : ""}`}
+        </aside>
+      )}
+
+      <footer className="reader-bottombar glass" aria-label={t("reader.pageControls")}>
+        <ToolButton
+          label={isRtlBinding ? t("reader.nextPage") : t("reader.previousPage")}
+          disabled={
+            isRtlBinding ? !document || pageNumber + step > document.numPages : pageNumber <= 1
+          }
+          onClick={() =>
+            isRtlBinding
+              ? setPageNumber((current) => Math.min(document?.numPages ?? current, current + step))
+              : setPageNumber((current) => Math.max(1, current - step))
+          }
+        >
+          <CaretLeftIcon size={16} weight="bold" />
+        </ToolButton>
+        {isEditingPage ? (
+          <form
+            className="page-count is-editing"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitPageInput();
+              setIsEditingPage(false);
+            }}
           >
-            <div className="pdf-page">
-              <canvas
-                ref={canvasLeftRef}
-                className="pdf-canvas"
-                aria-label={t("app.pageLabel", { page: pageNumber })}
-              />
-              <div
-                ref={textLayerLeftRef}
-                className="text-layer"
-                data-page={pageNumber}
-                aria-hidden="true"
-              />
-            </div>
-            {showRightCanvas && (
-              <div className="pdf-page">
-                <canvas
-                  ref={canvasRightRef}
-                  className="pdf-canvas"
-                  aria-label={t("app.pageLabel", { page: rightPageNumber })}
-                />
-                <div
-                  ref={textLayerRightRef}
-                  className="text-layer"
-                  data-page={rightPageNumber}
-                  aria-hidden="true"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="reader-page-slider">
-        <div className={`reader-page-rail${isRtlBinding ? " is-rtl" : ""}`}>
-          <input
-            id="reader-page-slider"
-            type="range"
-            min={1}
-            max={sliderMaximum}
-            step={1}
-            value={sliderValue}
-            aria-label={t("reader.pageSlider")}
-            aria-valuetext={t("reader.pageOfTotal", {
-              current: sliderValue,
-              total: numPages || 1,
-            })}
+            <input
+              ref={pageInputRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label={t("reader.pageNumber")}
+              value={pageInput}
+              size={pageInputWidth}
+              onChange={(event) => setPageInput(event.target.value.replaceAll(/[^0-9]/g, ""))}
+              onBlur={() => {
+                commitPageInput();
+                setIsEditingPage(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setPageInput(String(pageNumber));
+                  setIsEditingPage(false);
+                }
+              }}
+            />
+            <span>/ {document?.numPages ?? "–"}</span>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="page-count"
+            aria-label={t("reader.goToPage")}
+            onClick={startEditingPage}
             disabled={!document}
-            dir={isRtlBinding ? "rtl" : "ltr"}
-            style={{ "--page-progress": `${sliderProgress}%` }}
-            onChange={(event) => setPageNumber(Number(event.target.value))}
-          />
-          <div className="reader-slider-bookmarks">
-            {document &&
-              pageBookmarks.map((bookmark) => {
-                const markerPosition =
-                  numPages > 1 ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100 : 0;
-                const isCurrent = bookmark.pageNumber === pageNumber;
-                return (
-                  <button
-                    key={bookmark.pageNumber}
-                    type="button"
-                    className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
-                    style={{ "--bookmark-position": `${markerPosition}%` }}
-                    aria-label={t("reader.sliderBookmark", {
-                      page: bookmark.pageNumber,
-                    })}
-                    aria-current={isCurrent ? "page" : undefined}
-                    data-tooltip={t("reader.bookmarkPage", {
-                      page: bookmark.pageNumber,
-                    })}
-                    onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
-                  >
-                    <span className="reader-slider-bookmark-dot" aria-hidden="true" />
-                  </button>
-                );
+          >
+            {pageRangeLabel} <span>/ {document?.numPages ?? "–"}</span>
+          </button>
+        )}
+        <ToolButton
+          label={isRtlBinding ? t("reader.previousPage") : t("reader.nextPage")}
+          disabled={
+            isRtlBinding ? pageNumber <= 1 : !document || pageNumber + step > document.numPages
+          }
+          onClick={() =>
+            isRtlBinding
+              ? setPageNumber((current) => Math.max(1, current - step))
+              : setPageNumber((current) => Math.min(document?.numPages ?? current, current + step))
+          }
+        >
+          <CaretRightIcon size={16} weight="bold" />
+        </ToolButton>
+        <div className="reader-page-slider">
+          <div className={`reader-page-rail${isRtlBinding ? " is-rtl" : ""}`}>
+            <input
+              id="reader-page-slider"
+              type="range"
+              min={1}
+              max={sliderMaximum}
+              step={1}
+              value={sliderValue}
+              aria-label={t("reader.pageSlider")}
+              aria-valuetext={t("reader.pageOfTotal", {
+                current: sliderValue,
+                total: numPages || 1,
               })}
+              disabled={!document}
+              dir={isRtlBinding ? "rtl" : "ltr"}
+              style={{ "--page-progress": `${sliderProgress}%` }}
+              onChange={(event) => setPageNumber(Number(event.target.value))}
+            />
+            <div className="reader-slider-bookmarks">
+              {document &&
+                pageBookmarks.map((bookmark) => {
+                  const markerPosition =
+                    numPages > 1 ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100 : 0;
+                  const isCurrent = bookmark.pageNumber === pageNumber;
+                  return (
+                    <button
+                      key={bookmark.pageNumber}
+                      type="button"
+                      className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
+                      style={{ "--bookmark-position": `${markerPosition}%` }}
+                      aria-label={t("reader.sliderBookmark", {
+                        page: bookmark.pageNumber,
+                      })}
+                      aria-current={isCurrent ? "page" : undefined}
+                      data-tooltip={t("reader.bookmarkPage", {
+                        page: bookmark.pageNumber,
+                      })}
+                      onClick={() => jumpToOutlinePage(bookmark.pageNumber)}
+                    >
+                      <span className="reader-slider-bookmark-dot" aria-hidden="true" />
+                    </button>
+                  );
+                })}
+            </div>
           </div>
         </div>
-      </div>
+      </footer>
     </section>
   );
 }
