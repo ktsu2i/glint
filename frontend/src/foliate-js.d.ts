@@ -45,11 +45,30 @@ declare module "foliate-js/view.js" {
     setStyles(styles: string): void;
   };
 
+  export type FoliateAnnotation = { value: string };
+
+  export type FoliateDrawAnnotationDetail = {
+    annotation: FoliateAnnotation;
+    draw: (
+      draw: (rects: DOMRectList, options: { color: string }) => SVGElement,
+      options: { color: string },
+    ) => void;
+  };
+
+  export type FoliateShowAnnotationDetail = {
+    value: string;
+    index: number;
+    range: Range;
+  };
+
   type FoliateViewEventMap = {
     relocate: FoliateRelocateDetail;
     load: FoliateLoadDetail;
     link: FoliateLinkDetail;
     "external-link": FoliateLinkDetail;
+    "create-overlay": { index: number };
+    "draw-annotation": FoliateDrawAnnotationDetail;
+    "show-annotation": FoliateShowAnnotationDetail;
   };
 
   export class View extends HTMLElement {
@@ -66,6 +85,10 @@ declare module "foliate-js/view.js" {
     prev(): Promise<void>;
     search(options: { query: string; index?: number }): AsyncGenerator<FoliateSearchResult>;
     clearSearch(): void;
+    getCFI(index: number, range: Range): string;
+    getTOCItemOf(target: string): Promise<FoliateTocItem | undefined>;
+    addAnnotation(annotation: FoliateAnnotation): Promise<unknown>;
+    deleteAnnotation(annotation: FoliateAnnotation): Promise<unknown>;
     addEventListener<K extends keyof FoliateViewEventMap>(
       type: K,
       listener: (event: CustomEvent<FoliateViewEventMap[K]>) => void,
@@ -77,4 +100,15 @@ declare module "foliate-js/view.js" {
       options?: boolean | AddEventListenerOptions,
     ): void;
   }
+}
+
+declare module "foliate-js/overlayer.js" {
+  export const Overlayer: {
+    highlight(rects: DOMRectList, options: { color: string }): SVGElement;
+  };
+}
+
+declare module "foliate-js/epubcfi.js" {
+  /** Orders two CFIs by their position in the book. */
+  export function compare(a: string, b: string): number;
 }

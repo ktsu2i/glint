@@ -25,6 +25,7 @@ var HighlightColors = []string{"yellow", "green", "pink", "purple"}
 const (
 	MaxHighlightTextRunes = 10_000
 	MaxHighlightRects     = 1_000
+	MaxHighlightCFIBytes  = 4_096
 	// rectTolerance absorbs rounding where the selection touches a page edge.
 	rectTolerance = 0.01
 )
@@ -38,12 +39,15 @@ type HighlightRect struct {
 	Height float64 `json:"height"`
 }
 
+// BookHighlight is placed on a PDF page by Rects, or in an EPUB by CFI; the
+// other is empty. For an EPUB, PageNumber is the section, counted from 1.
 type BookHighlight struct {
 	ID         int64
 	PageNumber int
 	Color      string
 	Text       string
 	Rects      []HighlightRect
+	CFI        string
 	CreatedAt  string
 }
 
@@ -53,6 +57,7 @@ type NewHighlight struct {
 	Color      string
 	Text       string
 	Rects      []HighlightRect
+	CFI        string
 }
 
 func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewHighlight, now time.Time) (BookHighlight, error) {
@@ -60,6 +65,9 @@ func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewH
 	text := strings.TrimSpace(input.Text)
 	if bookID == "" || !validHighlight(input, text) {
 		return BookHighlight{}, ErrInvalidHighlight
+	}
+	if input.Rects == nil {
+		input.Rects = []HighlightRect{}
 	}
 	rects, err := json.Marshal(input.Rects)
 	if err != nil {
@@ -82,6 +90,7 @@ func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewH
 			Color:      input.Color,
 			Text:       text,
 			Rects:      string(rects),
+			Cfi:        input.CFI,
 			CreatedAt:  timestamp,
 		})
 		return err
@@ -95,6 +104,7 @@ func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewH
 		Color:      input.Color,
 		Text:       text,
 		Rects:      slices.Clone(input.Rects),
+		CFI:        input.CFI,
 		CreatedAt:  timestamp,
 	}, nil
 }
@@ -159,6 +169,7 @@ func highlightFromRow(row librarydb.GetHighlightRow) (BookHighlight, error) {
 		Color:      row.Color,
 		Text:       row.Text,
 		Rects:      rects,
+		CFI:        row.Cfi,
 		CreatedAt:  row.CreatedAt,
 	}, nil
 }
@@ -187,10 +198,19 @@ func validHighlight(input NewHighlight, text string) bool {
 	if text == "" || utf8.RuneCountInString(text) > MaxHighlightTextRunes {
 		return false
 	}
+	if input.CFI != "" {
+		// An EPUB highlight is placed by its CFI alone.
+		return len(input.Rects) == 0 && validCFI(input.CFI)
+	}
 	if len(input.Rects) == 0 || len(input.Rects) > MaxHighlightRects {
 		return false
 	}
 	return !slices.ContainsFunc(input.Rects, func(rect HighlightRect) bool { return !rect.valid() })
+}
+
+func validCFI(cfi string) bool {
+	return len(cfi) <= MaxHighlightCFIBytes && utf8.ValidString(cfi) &&
+		strings.HasPrefix(cfi, "epubcfi(") && strings.HasSuffix(cfi, ")")
 }
 
 func (rect HighlightRect) valid() bool {

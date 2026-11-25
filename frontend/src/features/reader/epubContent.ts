@@ -1,4 +1,6 @@
+import { compare as compareCFI } from "foliate-js/epubcfi.js";
 import type { FoliateTocItem } from "foliate-js/view.js";
+import type { BookHighlight, HighlightColor } from "../../shared/api/backend";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;
@@ -193,5 +195,49 @@ export function loadEpubFontScale(): number {
 export function saveEpubFontScale(value: number) {
   try {
     window.localStorage.setItem(fontScaleStorageKey, String(value));
+  } catch {}
+}
+
+/**
+ * The fill of each highlight color. foliate-js draws it at the opacity the
+ * reader sets, under the text, so it reads in both themes.
+ */
+export const epubHighlightFills: Record<HighlightColor, string> = {
+  yellow: "#ffd000",
+  green: "#4cc552",
+  pink: "#ff5ca0",
+  purple: "#9664ff",
+};
+
+/** Orders highlights as they appear in the book. */
+export function sortEpubHighlights(highlights: BookHighlight[]): BookHighlight[] {
+  return highlights.toSorted((a, b) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber;
+    }
+    try {
+      return compareCFI(a.cfi, b.cfi) || a.id - b.id;
+    } catch {
+      return a.id - b.id;
+    }
+  });
+}
+
+export type EpubLayout = "single" | "spread";
+
+const layoutStorageKey = "glint.epub.layout";
+
+/** A spread shows two pages side by side when the window is wide enough for them. */
+export function loadEpubLayout(): EpubLayout {
+  try {
+    return window.localStorage.getItem(layoutStorageKey) === "single" ? "single" : "spread";
+  } catch {
+    return "spread";
+  }
+}
+
+export function saveEpubLayout(layout: EpubLayout) {
+  try {
+    window.localStorage.setItem(layoutStorageKey, layout);
   } catch {}
 }

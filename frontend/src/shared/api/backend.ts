@@ -89,12 +89,17 @@ export type HighlightRect = {
   height: number;
 };
 
+/**
+ * A highlight sits on a PDF page by its rectangles, or in an EPUB by its CFI.
+ * For an EPUB, pageNumber is the section, counted from 1.
+ */
 export type BookHighlight = {
   id: number;
   pageNumber: number;
   color: HighlightColor;
   text: string;
   rects: HighlightRect[];
+  cfi: string;
   createdAt: string;
 };
 
@@ -104,6 +109,7 @@ export type HighlightInput = {
   color: HighlightColor;
   text: string;
   rects: HighlightRect[];
+  cfi?: string;
 };
 
 export type BookSummary = {
@@ -192,7 +198,7 @@ export async function listHighlights(bookId: string): Promise<BookHighlight[]> {
 }
 
 export async function addHighlight(bookId: string, input: HighlightInput): Promise<BookHighlight> {
-  return (await AddHighlight(bookId, input)) as BookHighlight;
+  return (await AddHighlight(bookId, { ...input, cfi: input.cfi ?? "" })) as BookHighlight;
 }
 
 export async function changeHighlightColor(
