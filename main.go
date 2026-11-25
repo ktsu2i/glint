@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
@@ -41,6 +42,7 @@ func run() error {
 
 	assetSrv := assetserver.New()
 	settingsManager := settings.NewManager(store)
+	mainWindowState := app.NewMainWindowState(settingsManager)
 	desktop := application.New(application.Options{
 		Name: "Glint",
 		Assets: application.AssetOptions{
@@ -51,7 +53,10 @@ func run() error {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		OnShutdown: func() { _ = store.Close() },
+		OnShutdown: func() {
+			mainWindowState.Save(context.Background())
+			_ = store.Close()
+		},
 	})
 	booksSvc := app.NewBooksService(books.New(store, dataDirectory), assetSrv, settingsManager, desktop)
 	settingsSvc := app.NewSettingsService(settingsManager, desktop.Event)
@@ -62,7 +67,7 @@ func run() error {
 	desktop.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
 		update.Start()
 	})
-	mainWindow := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
+	mainWindow := desktop.Window.NewWithOptions(mainWindowState.Options(context.Background(), application.WebviewWindowOptions{
 		Title:            "Glint",
 		Width:            1440,
 		Height:           900,
@@ -73,7 +78,8 @@ func run() error {
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarHiddenInsetUnified,
 		},
-	})
+	}))
+	mainWindowState.Track(mainWindow, desktop.Screen.GetAll)
 	desktop.RegisterService(application.NewService(app.NewWindowService(app.NewNativeWindowControls(mainWindow))))
 	return desktop.Run()
 }
