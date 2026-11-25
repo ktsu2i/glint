@@ -1338,14 +1338,7 @@ input:focus-visible,
   transform: translateX(-50%);
 }
 
-.reader-view-toggle {
-  min-width: 40px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-/* The Aa menu holds the page layout, binding, and zoom. */
+/* The view menu holds the page layout, binding, and zoom. */
 .reader-view-menu {
   position: absolute;
   z-index: 7;

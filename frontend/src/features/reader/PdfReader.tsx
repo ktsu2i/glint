@@ -1009,16 +1009,18 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
           >
             <BookmarkSimpleIcon size={17} weight={currentPageBookmarked ? "fill" : "regular"} />
           </ToolButton>
-          <button
-            type="button"
-            className="glass-button reader-view-toggle"
-            aria-label={t("reader.view")}
-            aria-pressed={isViewMenuOpen}
-            aria-expanded={isViewMenuOpen}
+          <ToolButton
+            label={t("reader.view")}
+            className={isViewMenuOpen ? "is-active" : ""}
+            expanded={isViewMenuOpen}
             onClick={() => setIsViewMenuOpen((current) => !current)}
           >
-            Aa
-          </button>
+            {viewMode === "spread" ? (
+              <BookOpenIcon size={17} weight="regular" />
+            ) : (
+              <FileIcon size={17} weight="regular" />
+            )}
+          </ToolButton>
         </div>
       </header>
 

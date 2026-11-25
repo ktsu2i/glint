@@ -36,16 +36,24 @@ vi.mock("../../shared/components/ToolButton", () => ({
     label,
     className = "",
     disabled = false,
+    expanded,
     onClick,
     children,
   }: {
     label: string;
     className?: string;
     disabled?: boolean;
+    expanded?: boolean;
     onClick?: () => void;
     children: React.ReactNode;
   }) => (
-    <button aria-label={label} className={className} disabled={disabled} onClick={onClick}>
+    <button
+      aria-label={label}
+      aria-expanded={expanded}
+      className={className}
+      disabled={disabled}
+      onClick={onClick}
+    >
       {children}
     </button>
   ),
@@ -690,7 +698,7 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
     const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
@@ -714,7 +722,7 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pageOne.render).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
     await waitFor(() => expect(pageTwo.render).toHaveBeenCalledTimes(1));
     await screen.findByText("200%");
 
@@ -763,7 +771,7 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
     fireEvent.click(screen.getByRole("button", { name: "次のページ" }));
@@ -789,7 +797,7 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
 
     const canvases = globalThis.document.querySelectorAll(".pdf-canvas");
     expect(canvases.length).toBe(1);
@@ -805,10 +813,10 @@ describe("PdfReader", () => {
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
     await waitFor(() => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(2));
 
-    fireEvent.click(screen.getByRole("button", { name: "1ページ" }));
+    fireEvent.click(screen.getByRole("button", { name: "片開き" }));
     await waitFor(() => expect(globalThis.document.querySelectorAll(".pdf-canvas").length).toBe(1));
   });
 
@@ -836,7 +844,7 @@ describe("PdfReader", () => {
     const { unmount } = render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "表示" }));
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 800, height: 300 } }]));
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
 
     await waitFor(() => expect(loader.createPdfTextLayer).toHaveBeenCalledTimes(2));
     const containers = globalThis.document.querySelectorAll<HTMLElement>(".text-layer[data-page]");
@@ -1116,7 +1124,7 @@ describe("PdfReader", () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("dialog", { name: "表示" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "1ページ" }).getAttribute("aria-pressed")).toBe(
+    expect(screen.getByRole("button", { name: "片開き" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
     expect(screen.getByText("左から右へ読みます。")).toBeTruthy();
@@ -1127,7 +1135,7 @@ describe("PdfReader", () => {
     );
     expect(screen.getByText("右から左へ読みます。")).toBeTruthy();
     expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBe("rtl");
-    fireEvent.click(screen.getByRole("button", { name: "見開き" }));
+    fireEvent.click(screen.getByRole("button", { name: "両開き" }));
     await waitFor(() =>
       expect(globalThis.document.querySelector(".pdf-spread")?.className).toBe(
         "pdf-spread is-spread is-rtl",

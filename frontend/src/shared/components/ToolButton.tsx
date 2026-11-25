@@ -6,6 +6,7 @@ type ToolButtonProps = {
   children: ReactNode;
   className?: string;
   disabled?: boolean;
+  expanded?: boolean;
   onClick?: () => void;
 };
 
@@ -14,6 +15,7 @@ export function ToolButton({
   children,
   className = "",
   disabled = false,
+  expanded,
   onClick,
 }: ToolButtonProps) {
   return (
@@ -21,6 +23,7 @@ export function ToolButton({
       <Tooltip.Trigger
         className={`tool-button ${className}`.trim()}
         disabled={disabled}
+        aria-expanded={expanded}
         render={<button type="button" aria-label={label} disabled={disabled} onClick={onClick} />}
       >
         {children}
