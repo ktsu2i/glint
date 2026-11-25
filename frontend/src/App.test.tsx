@@ -230,7 +230,13 @@ describe("App", () => {
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "本棚を検索（⌘F）" }));
-    expect(await screen.findByRole("searchbox", { name: "検索語" })).toBeTruthy();
+    const reopened = await screen.findByRole("searchbox", { name: "検索語" });
+
+    reopened.blur();
+    fireEvent.keyDown(window, { key: "Escape", isComposing: true });
+    expect(screen.getByRole("searchbox", { name: "検索語" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("searchbox", { name: "検索語" })).toBeNull();
   });
 
   it("searches the text of every book while typing, without pressing Return", async () => {

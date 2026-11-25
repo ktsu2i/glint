@@ -418,6 +418,22 @@ function AppContent() {
     return () => window.removeEventListener("keydown", openLibrarySearch);
   }, [showSearch, view]);
 
+  // Escape closes the library search wherever the focus is, not only in the field.
+  useEffect(() => {
+    if (view !== "search") {
+      return;
+    }
+    function closeLibrarySearch(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      closeSearch();
+    }
+    window.addEventListener("keydown", closeLibrarySearch);
+    return () => window.removeEventListener("keydown", closeLibrarySearch);
+  }, [closeSearch, view]);
+
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
       <main className="app-shell">

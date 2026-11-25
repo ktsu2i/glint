@@ -81,7 +81,8 @@ export function LibrarySearchField({
         maxLength={SEARCH_QUERY_MAX_LENGTH}
         onChange={(event) => onSearchInputChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          // Escape during IME composition only cancels the composition.
+          if (event.key === "Escape" && !event.nativeEvent.isComposing) {
             event.preventDefault();
             onClose();
           }

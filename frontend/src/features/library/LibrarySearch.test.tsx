@@ -117,6 +117,8 @@ describe("LibrarySearchField", () => {
     const onClose = vi.fn();
     render(<LibrarySearchField {...fieldProps} onClose={onClose} />);
 
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Escape", isComposing: true });
+    expect(onClose).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "検索を閉じる" }));
     expect(onClose).toHaveBeenCalledTimes(2);
