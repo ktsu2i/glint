@@ -13,9 +13,9 @@ Your books and your reading positions stay on your machine.
 ![The Glint library, showing imported books as covers with reading progress](assets/library-en.png)
 
 - Add technical books from your Mac with the native file picker (PDF, and EPUB for search).
-- See every imported book on a shelf with its cover, and pick up exactly where you stopped.
-- Rename a book to whatever you actually call it, or remove it from the shelf.
-- If you move or delete the original file, Glint tells you and lets you point it at the file again.
+- See every imported book on a shelf with its cover, most recently read first, and click a cover to pick up exactly where you stopped.
+- Right-click a book to rename it to whatever you actually call it, or to remove it from the shelf.
+- If you move or delete the original file, Glint tells you and lets you point it at the file again from its cover.
 
 ### Read
 

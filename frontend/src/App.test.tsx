@@ -186,8 +186,10 @@ describe("App", () => {
     const { unmount } = render(<App />);
 
     expect(await screen.findByText("最初の一冊を、本棚へ。")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /読書に戻る/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: "本棚", level: 1 })).toHaveProperty(
+      "className",
+      "visually-hidden",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
     expect(screen.getByText("選択しています…")).toBeTruthy();
@@ -201,9 +203,11 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "set-page" }));
     expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12);
 
+    mocks.listBooks.mockResolvedValue([{ ...summary, lastPage: 4 }]);
+    mocks.openBook.mockResolvedValue({ ...openedBook, initialPage: 4 });
     fireEvent.click(screen.getByRole("button", { name: "back-to-library" }));
-    expect(await screen.findByRole("heading", { name: "本棚", level: 1 })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Guideの読書に戻る" }));
+    expect(screen.queryByRole("button", { name: /読書に戻る/ })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Guideを開く" }));
     expect(await screen.findByText("initial-4")).toBeTruthy();
     unmount();
   });
@@ -235,24 +239,21 @@ describe("App", () => {
     expect(mocks.openBook).toHaveBeenCalledWith("book-1");
   });
 
-  it("renames a saved book from its title", async () => {
+  it("renames a saved book from its context menu", async () => {
     mocks.listBooks.mockResolvedValue([summary]);
     mocks.renameBook.mockResolvedValue({ ...summary, title: "Architecture Guide" });
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Guideの名前を変更" }));
-    const input = screen.getByLabelText("Guideの表示名");
+    fireEvent.contextMenu(await screen.findByRole("heading", { name: "Guide" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "名前を変更" }));
+    const input = await screen.findByLabelText("Guideの表示名");
     fireEvent.change(input, { target: { value: "Architecture Guide" } });
     fireEvent.blur(input);
 
     await waitFor(() =>
       expect(mocks.renameBook).toHaveBeenCalledWith("book-1", "Architecture Guide"),
     );
-    expect(
-      await screen.findByRole("button", {
-        name: "Architecture Guideの名前を変更",
-      }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Architecture Guide" })).toBeTruthy();
   });
 
   it("restores the theme and follows the theme saved in the settings window", async () => {

@@ -63,14 +63,7 @@ describe("Library", () => {
     expect(onOpen).toHaveBeenCalledWith(availableBook);
   });
 
-  it("features the most recently opened book and continues reading from it", () => {
-    const onOpen = vi.fn();
-    const older = {
-      ...availableBook,
-      id: "book-0",
-      title: "Older Notes",
-      lastOpenedAt: "2026-06-01T00:00:00Z",
-    };
+  it("has no shelf heading or featured book, only the covers in the given order", () => {
     const unopened = {
       ...availableBook,
       id: "book-2",
@@ -78,21 +71,22 @@ describe("Library", () => {
       lastOpenedAt: "",
       lastPage: 1,
     };
-    render(<Library {...defaultProps} books={[older, availableBook, unopened]} onOpen={onOpen} />);
+    render(<Library {...defaultProps} books={[availableBook, unopened]} />);
 
-    const hero = screen.getByRole("region", { name: "最近開いた本" });
-    expect(within(hero).getByRole("heading", { name: "Systems Guide" })).toBeTruthy();
-    expect(within(hero).getByText("50 / 200ページ")).toBeTruthy();
-    fireEvent.click(within(hero).getByRole("button", { name: "Systems Guideの続きを読む" }));
-    expect(onOpen).toHaveBeenCalledWith(availableBook);
-
+    expect(screen.queryByRole("region", { name: "最近開いた本" })).toBeNull();
+    expect(screen.queryByText("2冊")).toBeNull();
     const shelf = screen.getByRole("region", { name: "import済みの本" });
-    expect(within(shelf).getByText("3冊")).toBeTruthy();
+    expect(
+      within(shelf)
+        .getAllByRole("heading")
+        .map((heading) => heading.textContent),
+    ).toEqual(["Systems Guide", "Fresh Book"]);
     expect(within(shelf).getByText("まだ開いていません")).toBeTruthy();
-    expect(within(shelf).getByRole("button", { name: "読み始める" })).toBeTruthy();
+    expect(within(shelf).queryByRole("button", { name: "続きを読む" })).toBeNull();
   });
 
-  it("uses a placeholder and offers recovery for a missing source PDF", () => {
+  it("relinks a missing source PDF from its cover", () => {
+    const onOpen = vi.fn();
     const onRelink = vi.fn();
     const missing = {
       ...availableBook,
@@ -101,33 +95,44 @@ describe("Library", () => {
       coverStatus: "failed" as const,
       available: false,
     };
-    render(<Library {...defaultProps} books={[missing]} onRelink={onRelink} />);
+    render(<Library {...defaultProps} books={[missing]} onOpen={onOpen} onRelink={onRelink} />);
 
     expect(screen.getByText("ファイルが見つかりません")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Systems Guideを開く" })).toHaveProperty(
-      "disabled",
-      true,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "再選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "Systems Guideのファイルを再選択" }));
+    expect(onRelink).toHaveBeenCalledWith(missing);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("offers relinking in the context menu of a missing book", async () => {
+    const onRelink = vi.fn();
+    const missing = { ...availableBook, id: "missing", available: false };
+    render(<Library {...defaultProps} books={[missing]} onRelink={onRelink} />);
+
+    fireEvent.contextMenu(screen.getByRole("heading", { name: "Systems Guide" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "ファイルを再選択…" }));
     expect(onRelink).toHaveBeenCalledWith(missing);
   });
 
-  it("invokes onRemove when the delete button is clicked", () => {
+  it("removes a book from its context menu", async () => {
     const onRemove = vi.fn();
     render(<Library {...defaultProps} books={[availableBook]} onRemove={onRemove} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Systems Guideを本棚から削除" }));
+    expect(screen.queryByRole("button", { name: /削除/ })).toBeNull();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Systems Guideを開く" }));
+    const menu = await screen.findByRole("menu", { name: "Systems Guideの操作" });
+    expect(within(menu).queryByRole("menuitem", { name: "ファイルを再選択…" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "本棚から削除" }));
     expect(onRemove).toHaveBeenCalledWith(availableBook);
   });
 
-  it("renames a book through the inline editor and trims whitespace", () => {
+  it("renames a book from its context menu and trims whitespace", async () => {
     const onRename = vi.fn();
     render(<Library {...defaultProps} books={[availableBook]} onRename={onRename} />);
 
-    const titleButton = screen.getByRole("button", { name: "Systems Guideの名前を変更" });
-    expect(titleButton).toHaveProperty("textContent", "Systems Guide");
-    fireEvent.click(titleButton);
-    const input = screen.getByLabelText<HTMLInputElement>("Systems Guideの表示名");
+    expect(screen.queryByRole("button", { name: /名前を変更/ })).toBeNull();
+    fireEvent.contextMenu(screen.getByRole("heading", { name: "Systems Guide" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "名前を変更" }));
+    const input = await screen.findByLabelText<HTMLInputElement>("Systems Guideの表示名");
     expect(input.value).toBe("Systems Guide");
     fireEvent.change(input, { target: { value: "  Real Title  " } });
     fireEvent.submit(input.closest("form")!);
@@ -135,17 +140,19 @@ describe("Library", () => {
     expect(screen.queryByLabelText("Systems Guideの表示名")).toBeNull();
   });
 
-  it("cancels with Escape and skips blank names on blur", () => {
+  it("cancels with Escape and skips blank names on blur", async () => {
     const onRename = vi.fn();
     render(<Library {...defaultProps} books={[availableBook]} onRename={onRename} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Systems Guideの名前を変更" }));
-    fireEvent.keyDown(screen.getByLabelText("Systems Guideの表示名"), { key: "Escape" });
+    fireEvent.contextMenu(screen.getByRole("heading", { name: "Systems Guide" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "名前を変更" }));
+    fireEvent.keyDown(await screen.findByLabelText("Systems Guideの表示名"), { key: "Escape" });
     expect(onRename).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Systems Guideの表示名")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Systems Guideの名前を変更" }));
-    const input = screen.getByLabelText<HTMLInputElement>("Systems Guideの表示名");
+    fireEvent.contextMenu(screen.getByRole("heading", { name: "Systems Guide" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "名前を変更" }));
+    const input = await screen.findByLabelText<HTMLInputElement>("Systems Guideの表示名");
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.blur(input);
     expect(onRename).not.toHaveBeenCalled();
