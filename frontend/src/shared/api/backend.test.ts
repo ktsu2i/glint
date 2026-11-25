@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const bindings = vi.hoisted(() => ({
   addBookmark: vi.fn(),
   addHighlight: vi.fn(),
+  changeHighlightColor: vi.fn(),
   listBookmarks: vi.fn(),
   listHighlights: vi.fn(),
   listBooks: vi.fn(),
@@ -27,6 +28,7 @@ const bindings = vi.hoisted(() => ({
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
   AddBookmark: bindings.addBookmark,
   AddHighlight: bindings.addHighlight,
+  ChangeHighlightColor: bindings.changeHighlightColor,
   ListBookmarks: bindings.listBookmarks,
   ListHighlights: bindings.listHighlights,
   ListBooks: bindings.listBooks,
@@ -54,6 +56,7 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice",
 import {
   addBookmark,
   addHighlight,
+  changeHighlightColor,
   getAppearanceSettings,
   listBooks,
   listBookmarks,
@@ -210,9 +213,14 @@ describe("backend facade", () => {
     await expect(listHighlights("book-1")).resolves.toEqual([]);
     await expect(listHighlights("book-1")).resolves.toEqual([highlight]);
     await expect(addHighlight("book-1", input)).resolves.toEqual(highlight);
+    bindings.changeHighlightColor.mockResolvedValue({ ...highlight, color: "purple" });
+    await expect(changeHighlightColor("book-1", 3, "purple")).resolves.toMatchObject({
+      color: "purple",
+    });
     await removeHighlight("book-1", 3);
 
     expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", input);
+    expect(bindings.changeHighlightColor).toHaveBeenCalledWith("book-1", 3, "purple");
     expect(bindings.removeHighlight).toHaveBeenCalledWith("book-1", 3);
   });
 });

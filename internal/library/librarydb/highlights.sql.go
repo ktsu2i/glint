@@ -24,6 +24,40 @@ func (q *Queries) DeleteHighlight(ctx context.Context, arg DeleteHighlightParams
 	return err
 }
 
+const getHighlight = `-- name: GetHighlight :one
+SELECT id, page_number, color, text, rects, created_at
+  FROM book_highlights
+ WHERE book_id = ?1 AND id = ?2
+`
+
+type GetHighlightParams struct {
+	BookID string
+	ID     int64
+}
+
+type GetHighlightRow struct {
+	ID         int64
+	PageNumber int64
+	Color      string
+	Text       string
+	Rects      string
+	CreatedAt  string
+}
+
+func (q *Queries) GetHighlight(ctx context.Context, arg GetHighlightParams) (GetHighlightRow, error) {
+	row := q.db.QueryRowContext(ctx, getHighlight, arg.BookID, arg.ID)
+	var i GetHighlightRow
+	err := row.Scan(
+		&i.ID,
+		&i.PageNumber,
+		&i.Color,
+		&i.Text,
+		&i.Rects,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertHighlight = `-- name: InsertHighlight :one
 INSERT INTO book_highlights (book_id, page_number, color, text, rects, created_at)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -97,4 +131,24 @@ func (q *Queries) ListHighlights(ctx context.Context, bookID string) ([]ListHigh
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateHighlightColor = `-- name: UpdateHighlightColor :execrows
+UPDATE book_highlights
+   SET color = ?1
+ WHERE book_id = ?2 AND id = ?3
+`
+
+type UpdateHighlightColorParams struct {
+	Color  string
+	BookID string
+	ID     int64
+}
+
+func (q *Queries) UpdateHighlightColor(ctx context.Context, arg UpdateHighlightColorParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateHighlightColor, arg.Color, arg.BookID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

@@ -14,6 +14,7 @@ import {
   MinusIcon,
   PlusIcon,
   SpeakerHighIcon,
+  TrashIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +26,7 @@ import {
   listHighlights,
   removeBookmark,
   removeHighlight,
+  changeHighlightColor,
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
@@ -1065,6 +1067,24 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     setHighlightBusy(false);
   }
 
+  async function recolorHighlight(id: number, color: HighlightColor) {
+    if (!book || highlightBusy) {
+      return;
+    }
+    setHighlightBusy(true);
+    setHighlightError("");
+    try {
+      const updated = await changeHighlightColor(book.id, id, color);
+      setHighlights((current) =>
+        current.map((highlight) => (highlight.id === id ? updated : highlight)),
+      );
+    } catch (reason) {
+      setHighlightError(reason instanceof Error ? reason.message : t("error.saveHighlight"));
+    } finally {
+      setHighlightBusy(false);
+    }
+  }
+
   async function deleteHighlight(id: number) {
     if (!book || highlightBusy) {
       return;
@@ -1407,14 +1427,31 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
           aria-label={t("reader.highlightActions")}
           style={floatingStyle(activeHighlight)}
         >
+          {highlightColors.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`reader-highlight-swatch is-${color}`}
+              aria-label={t("reader.changeHighlightColor", { color: t(`reader.color.${color}`) })}
+              aria-pressed={highlightedText.color === color}
+              disabled={highlightBusy}
+              onClick={() => {
+                if (highlightedText.color !== color) {
+                  void recolorHighlight(highlightedText.id, color);
+                }
+              }}
+            />
+          ))}
+          <span className="reader-highlight-divider" aria-hidden="true" />
           <button
             type="button"
             className="reader-highlight-remove"
+            aria-label={t("reader.removeHighlight")}
+            title={t("reader.removeHighlight")}
             disabled={highlightBusy}
             onClick={() => void deleteHighlight(highlightedText.id)}
           >
-            <XIcon size={12} weight="bold" aria-hidden="true" />
-            {t("reader.removeHighlight")}
+            <TrashIcon size={15} aria-hidden="true" />
           </button>
         </div>
       )}

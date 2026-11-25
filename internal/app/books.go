@@ -200,6 +200,14 @@ func (s *BooksService) AddHighlight(bookID string, input HighlightInput) (BookHi
 	return toBookHighlight(highlight), nil
 }
 
+func (s *BooksService) ChangeHighlightColor(bookID string, id int64, color string) (BookHighlight, error) {
+	highlight, err := s.books.ChangeHighlightColor(s.context(), bookID, id, color)
+	if err != nil {
+		return BookHighlight{}, s.bookError(err)
+	}
+	return toBookHighlight(highlight), nil
+}
+
 func (s *BooksService) RemoveHighlight(bookID string, id int64) error {
 	if err := s.books.RemoveHighlight(s.context(), bookID, id); err != nil {
 		return s.bookError(err)
@@ -375,6 +383,11 @@ func (s *BooksService) bookError(err error) error {
 		return s.text.error(ctx,
 			"The highlight could not be saved. Select up to 10,000 characters on one page.",
 			"ハイライトを保存できませんでした。1ページ内で10,000文字以内を選択してください。",
+		)
+	case errors.Is(err, library.ErrHighlightNotFound):
+		return s.text.error(ctx,
+			"The highlight no longer exists.",
+			"ハイライトが見つかりません。",
 		)
 	case errors.Is(err, library.ErrInvalidSegmentBatch):
 		return s.text.error(ctx, "The book index data is invalid.", "本の索引データが不正です。")

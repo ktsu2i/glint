@@ -285,6 +285,10 @@ func (s *Service) AddHighlight(ctx context.Context, bookID string, input library
 	return s.library.SaveHighlight(ctx, bookID, input, time.Now())
 }
 
+func (s *Service) ChangeHighlightColor(ctx context.Context, bookID string, id int64, color string) (library.BookHighlight, error) {
+	return s.library.UpdateHighlightColor(ctx, bookID, id, color)
+}
+
 func (s *Service) RemoveHighlight(ctx context.Context, bookID string, id int64) error {
 	return s.library.DeleteHighlight(ctx, bookID, id)
 }

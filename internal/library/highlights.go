@@ -14,7 +14,10 @@ import (
 	"github.com/kaito/glint/internal/library/librarydb"
 )
 
-var ErrInvalidHighlight = errors.New("invalid highlight")
+var (
+	ErrInvalidHighlight  = errors.New("invalid highlight")
+	ErrHighlightNotFound = errors.New("highlight not found")
+)
 
 // HighlightColors lists the colors a highlight can take.
 var HighlightColors = []string{"yellow", "green", "pink", "purple"}
@@ -110,20 +113,54 @@ func (store *Store) ListHighlights(ctx context.Context, bookID string) ([]BookHi
 	}
 	highlights := make([]BookHighlight, len(rows))
 	for i, row := range rows {
-		var rects []HighlightRect
-		if err := json.Unmarshal([]byte(row.Rects), &rects); err != nil {
-			return nil, fmt.Errorf("decode highlight %d rects: %w", row.ID, err)
+		highlight, err := highlightFromRow(librarydb.GetHighlightRow(row))
+		if err != nil {
+			return nil, err
 		}
-		highlights[i] = BookHighlight{
-			ID:         row.ID,
-			PageNumber: int(row.PageNumber),
-			Color:      row.Color,
-			Text:       row.Text,
-			Rects:      rects,
-			CreatedAt:  row.CreatedAt,
-		}
+		highlights[i] = highlight
 	}
 	return highlights, nil
+}
+
+func (store *Store) UpdateHighlightColor(ctx context.Context, bookID string, id int64, color string) (BookHighlight, error) {
+	bookID = strings.TrimSpace(bookID)
+	if bookID == "" || id < 1 || !slices.Contains(HighlightColors, color) {
+		return BookHighlight{}, ErrInvalidHighlight
+	}
+	if _, err := store.Get(ctx, bookID); err != nil {
+		return BookHighlight{}, err
+	}
+	affected, err := store.queries.UpdateHighlightColor(ctx, librarydb.UpdateHighlightColorParams{
+		Color:  color,
+		BookID: bookID,
+		ID:     id,
+	})
+	if err != nil {
+		return BookHighlight{}, fmt.Errorf("update highlight color: %w", err)
+	}
+	if affected == 0 {
+		return BookHighlight{}, ErrHighlightNotFound
+	}
+	row, err := store.queries.GetHighlight(ctx, librarydb.GetHighlightParams{BookID: bookID, ID: id})
+	if err != nil {
+		return BookHighlight{}, fmt.Errorf("read updated highlight: %w", err)
+	}
+	return highlightFromRow(row)
+}
+
+func highlightFromRow(row librarydb.GetHighlightRow) (BookHighlight, error) {
+	var rects []HighlightRect
+	if err := json.Unmarshal([]byte(row.Rects), &rects); err != nil {
+		return BookHighlight{}, fmt.Errorf("decode highlight %d rects: %w", row.ID, err)
+	}
+	return BookHighlight{
+		ID:         row.ID,
+		PageNumber: int(row.PageNumber),
+		Color:      row.Color,
+		Text:       row.Text,
+		Rects:      rects,
+		CreatedAt:  row.CreatedAt,
+	}, nil
 }
 
 func (store *Store) DeleteHighlight(ctx context.Context, bookID string, id int64) error {

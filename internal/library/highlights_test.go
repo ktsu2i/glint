@@ -157,3 +157,31 @@ func TestMigrationTurnsBlueHighlightsPurple(t *testing.T) {
 	}, time.Now())
 	assert.ErrorIs(t, err, ErrInvalidHighlight)
 }
+
+func TestStoreChangesHighlightColor(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	first, err := store.Import(t.Context(), "book-1", "/tmp/A.pdf", "hash-1", "pdf", 10, now)
+	require.NoError(t, err)
+	second, err := store.Import(t.Context(), "book-2", "/tmp/B.pdf", "hash-2", "pdf", 10, now)
+	require.NoError(t, err)
+	saved, err := store.SaveHighlight(t.Context(), first.ID, sampleHighlight(2), now)
+	require.NoError(t, err)
+
+	updated, err := store.UpdateHighlightColor(t.Context(), first.ID, saved.ID, "purple")
+	require.NoError(t, err)
+	saved.Color = "purple"
+	assert.Equal(t, saved, updated)
+	highlights, err := store.ListHighlights(t.Context(), first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []BookHighlight{saved}, highlights)
+
+	_, err = store.UpdateHighlightColor(t.Context(), first.ID, saved.ID, "blue")
+	assert.ErrorIs(t, err, ErrInvalidHighlight)
+	_, err = store.UpdateHighlightColor(t.Context(), second.ID, saved.ID, "green")
+	assert.ErrorIs(t, err, ErrHighlightNotFound, "a highlight is changed only through its own book")
+	_, err = store.UpdateHighlightColor(t.Context(), "missing", saved.ID, "green")
+	assert.ErrorIs(t, err, ErrBookNotFound)
+}

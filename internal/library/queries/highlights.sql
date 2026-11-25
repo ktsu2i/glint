@@ -12,3 +12,13 @@ SELECT id, page_number, color, text, rects, created_at
 -- name: DeleteHighlight :exec
 DELETE FROM book_highlights
  WHERE book_id = @book_id AND id = @id;
+
+-- name: UpdateHighlightColor :execrows
+UPDATE book_highlights
+   SET color = @color
+ WHERE book_id = @book_id AND id = @id;
+
+-- name: GetHighlight :one
+SELECT id, page_number, color, text, rects, created_at
+  FROM book_highlights
+ WHERE book_id = @book_id AND id = @id;

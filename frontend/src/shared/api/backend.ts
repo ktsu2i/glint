@@ -1,6 +1,7 @@
 import {
   AddBookmark,
   AddHighlight,
+  ChangeHighlightColor,
   ListBookmarks,
   ListHighlights,
   ListBooks,
@@ -192,6 +193,14 @@ export async function listHighlights(bookId: string): Promise<BookHighlight[]> {
 
 export async function addHighlight(bookId: string, input: HighlightInput): Promise<BookHighlight> {
   return (await AddHighlight(bookId, input)) as BookHighlight;
+}
+
+export async function changeHighlightColor(
+  bookId: string,
+  id: number,
+  color: HighlightColor,
+): Promise<BookHighlight> {
+  return (await ChangeHighlightColor(bookId, id, color)) as BookHighlight;
 }
 
 export async function removeHighlight(bookId: string, id: number): Promise<void> {

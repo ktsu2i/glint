@@ -287,7 +287,14 @@ func TestHighlightsRoundTripAsDTOs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []BookHighlight{saved}, listed)
 
+	changed, err := h.service.ChangeHighlightColor(book.ID, saved.ID, "green")
+	require.NoError(t, err)
+	assert.Equal(t, "green", changed.Color)
+	assert.Equal(t, rects, changed.Rects)
+
 	require.NoError(t, h.service.RemoveHighlight(book.ID, saved.ID))
+	_, err = h.service.ChangeHighlightColor(book.ID, saved.ID, "green")
+	assert.EqualError(t, err, "The highlight no longer exists.")
 	listed, err = h.service.ListHighlights(book.ID)
 	require.NoError(t, err)
 	assert.Empty(t, listed)

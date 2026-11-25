@@ -11,6 +11,7 @@ const loader = vi.hoisted(() => ({
 const backend = vi.hoisted(() => ({
   addBookmark: vi.fn(),
   addHighlight: vi.fn(),
+  changeHighlightColor: vi.fn(),
   listBookmarks: vi.fn(),
   listHighlights: vi.fn(),
   removeBookmark: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("./loadPdf", () => ({
 vi.mock("../../shared/api/backend", () => ({
   addBookmark: backend.addBookmark,
   addHighlight: backend.addHighlight,
+  changeHighlightColor: backend.changeHighlightColor,
   listBookmarks: backend.listBookmarks,
   listHighlights: backend.listHighlights,
   removeBookmark: backend.removeBookmark,
@@ -193,6 +195,16 @@ beforeEach(() => {
     },
   );
   backend.removeHighlight.mockResolvedValue(undefined);
+  backend.changeHighlightColor.mockImplementation(
+    async (_bookId: string, id: number, color: string) => ({
+      id,
+      pageNumber: 1,
+      color,
+      text: "Alpha Beta",
+      rects: [{ x: 0.1, y: 0.1, width: 0.5, height: 0.1 }],
+      createdAt: "2026-11-25T00:00:00Z",
+    }),
+  );
   backend.setWindowControlsVisible.mockResolvedValue(undefined);
 });
 
@@ -1059,7 +1071,24 @@ describe("PdfReader", () => {
       expect(window.getSelection()?.isCollapsed).toBe(true);
 
       fireEvent.click(container.querySelector(".pdf-stage")!, { clientX: 60, clientY: 15 });
-      fireEvent.click(await screen.findByRole("button", { name: "ハイライトを削除" }));
+      const actions = await screen.findByRole("toolbar", { name: "ハイライト" });
+      expect(screen.getByRole("button", { name: "黄色に変更" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "紫に変更" }));
+      await waitFor(() =>
+        expect(backend.changeHighlightColor).toHaveBeenCalledWith("book-1", 41, "purple"),
+      );
+      await waitFor(() =>
+        expect(container.querySelector(".highlight-mark.is-purple")).toBeTruthy(),
+      );
+      expect(container.querySelector(".highlight-mark.is-yellow")).toBeNull();
+      expect(screen.getByRole("button", { name: "紫に変更" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      expect(actions.textContent).toBe("");
+
+      fireEvent.click(screen.getByRole("button", { name: "ハイライトを削除" }));
       await waitFor(() => expect(backend.removeHighlight).toHaveBeenCalledWith("book-1", 41));
       expect(container.querySelector(".highlight-mark")).toBeNull();
     } finally {
