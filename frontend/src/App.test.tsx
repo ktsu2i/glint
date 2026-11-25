@@ -193,13 +193,13 @@ describe("App", () => {
       "visually-hidden",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
+    fireEvent.click(screen.getByRole("button", { name: "本を追加" }));
     expect(screen.getByText("選択しています…")).toBeTruthy();
     resolveEmpty({ ...openedBook, id: "", url: "" });
-    await waitFor(() => expect(screen.getByRole("button", { name: "PDFを追加" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "本を追加" })).toBeTruthy());
 
     mocks.openBookFile.mockResolvedValueOnce(openedBook);
-    fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
+    fireEvent.click(screen.getByRole("button", { name: "本を追加" }));
     await waitFor(() => expect(screen.getByText("initial-3")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: "set-page" }));
@@ -316,7 +316,7 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("最初の一冊を、本棚へ。");
 
-    fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
+    fireEvent.click(screen.getByRole("button", { name: "本を追加" }));
     await waitFor(() =>
       expect(mocks.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover"),
     );
@@ -325,13 +325,13 @@ describe("App", () => {
 
   it.each([
     [new Error("dialog failed"), "dialog failed"],
-    ["unknown", "PDFを追加できませんでした。"],
+    ["unknown", "本を追加できませんでした。"],
   ])("shows PDF selection errors", async (reason, message) => {
     mocks.openBookFile.mockRejectedValueOnce(reason);
     render(<App />);
     await screen.findByText("最初の一冊を、本棚へ。");
 
-    fireEvent.click(screen.getByRole("button", { name: "PDFを追加" }));
+    fireEvent.click(screen.getByRole("button", { name: "本を追加" }));
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
       expect.stringContaining(message),

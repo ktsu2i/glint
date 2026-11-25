@@ -225,7 +225,12 @@ export function LibrarySearchResults({
                         })}
                       >
                         <span className="library-search-hit-page-meta">
-                          <strong>{t("reader.bookmarkPage", { page: page.pageNumber })}</strong>
+                          <strong>
+                            {hit.book.format === "epub"
+                              ? page.headingPath ||
+                                t("reader.sectionNumber", { number: page.pageNumber })
+                              : t("reader.bookmarkPage", { page: page.pageNumber })}
+                          </strong>
                           <span>{t("reader.matches", { count: page.matchCount })}</span>
                         </span>
                         <span className="library-search-hit-excerpt">

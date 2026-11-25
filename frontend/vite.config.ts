@@ -81,8 +81,70 @@ function pdfjsAssetsPlugin(): Plugin {
   };
 }
 
+// foliate-js can also open PDFs with its own copy of PDF.js. Glint reads PDFs
+// with its own reader, so that path is replaced with a stub and the copy stays
+// out of the build.
+function foliateWithoutPdfPlugin(): Plugin {
+  const stubId = "\0foliate-pdf-stub";
+  return {
+    name: "foliate-without-pdf",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (source === "./pdf.js" && importer?.includes("/foliate-js/") === true) {
+        return stubId;
+      }
+      return null;
+    },
+    load(id) {
+      if (id === stubId) {
+        return 'export const makePDF = () => { throw new Error("PDF is read by the PDF reader"); };';
+      }
+      return null;
+    },
+  };
+}
+
+/*
+ * The Content Security Policy of the built app. EPUB sections are shown from
+ * blob: URLs on this origin, in frames that must allow scripts for WebKit to
+ * deliver events to the reader, so this policy is what keeps a book's scripts
+ * from running: blob: documents inherit it, and it allows only the app's own.
+ * The Wails runtime is injected by the webview and is not subject to it. The
+ * development server needs inline scripts, so the policy applies to builds.
+ */
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' blob:",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
+  "connect-src 'self' data: blob:",
+  "frame-src 'self' blob:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ");
+
+function contentSecurityPolicyPlugin(): Plugin {
+  return {
+    name: "content-security-policy",
+    apply: "build",
+    transformIndexHtml() {
+      return [
+        {
+          tag: "meta",
+          attrs: { "http-equiv": "Content-Security-Policy", content: contentSecurityPolicy },
+          injectTo: "head-prepend",
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), pdfjsAssetsPlugin()],
+  plugins: [react(), pdfjsAssetsPlugin(), foliateWithoutPdfPlugin(), contentSecurityPolicyPlugin()],
   clearScreen: false,
   test: {
     environment: "jsdom",

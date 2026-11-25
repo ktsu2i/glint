@@ -11,7 +11,7 @@ import {
   LibrarySearchResults,
   type LibrarySearchStatus,
 } from "./features/library/LibrarySearch";
-import { EpubReaderPlaceholder } from "./features/reader/EpubReaderPlaceholder";
+import { EpubReader } from "./features/reader/EpubReader";
 import { PdfReader } from "./features/reader/PdfReader";
 import { syncDocumentTheme } from "./features/settings/theme";
 import { onAppearanceChanged } from "./shared/api/events";
@@ -211,7 +211,7 @@ function AppContent() {
     [ensureCover, ensureBookIndexed],
   );
 
-  async function handleImportPDF() {
+  async function handleImportBook() {
     setOpening(true);
     setLibraryError("");
     try {
@@ -221,7 +221,7 @@ function AppContent() {
         await refreshLibrary();
       }
     } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.addPdf"));
+      setLibraryError(reason instanceof Error ? reason.message : t("error.addBook"));
     } finally {
       setOpening(false);
     }
@@ -372,7 +372,7 @@ function AppContent() {
         await refreshLibrary();
       }
     } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.relinkPdf"));
+      setLibraryError(reason instanceof Error ? reason.message : t("error.relinkBook"));
     } finally {
       setBusyBookId("");
     }
@@ -446,7 +446,13 @@ function AppContent() {
         {view === "reader" ? (
           <div className="workspace">
             {book?.format === "epub" ? (
-              <EpubReaderPlaceholder book={book} onBack={showLibrary} />
+              <EpubReader
+                key={`${book.id}:${book.initialPage}`}
+                book={book}
+                initialSection={book.initialPage}
+                onPageChange={handlePageChange}
+                onBack={showLibrary}
+              />
             ) : (
               <PdfReader
                 book={book}
@@ -475,7 +481,7 @@ function AppContent() {
                 ) : null
               }
               sortOrder={sortOrder}
-              onImport={() => void handleImportPDF()}
+              onImport={() => void handleImportBook()}
               onSearch={showSearch}
               onSortOrderChange={setSortOrder}
             />
@@ -500,7 +506,7 @@ function AppContent() {
                   error={libraryError}
                   busyBookId={busyBookId}
                   opening={opening}
-                  onImport={handleImportPDF}
+                  onImport={handleImportBook}
                   onOpen={handleOpenBook}
                   onRelink={handleRelinkBook}
                   onRemove={handleRemoveBook}

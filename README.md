@@ -12,7 +12,7 @@ Your books and your reading positions stay on your machine.
 
 ![The Glint library, showing imported books as covers with reading progress](assets/library-en.png)
 
-- Add technical books from your Mac with the native file picker (PDF, and EPUB for search).
+- Add technical books from your Mac with the native file picker, as PDF or EPUB.
 - See every imported book on a shelf with its cover, most recently read first, and click a cover to pick up exactly where you stopped.
 - Right-click a book to rename it to whatever you actually call it, or to remove it from the shelf.
 - If you move or delete the original file, Glint tells you and lets you point it at the file again from its cover.
@@ -36,9 +36,13 @@ Your books and your reading positions stay on your machine.
 - Search across every book you have imported from the library with `⌘F`, and open the right book at the right page.
 - Find a book by its title in the same library search. Matching titles and pages both appear as you type.
 
-### EPUB, for now
+### Read EPUBs
 
-EPUB files can be imported and searched from the library, and they appear on your shelf like any other book. The EPUB reading view is still being built, so opening one shows a placeholder for the moment. PDFs are fully readable today.
+- Read EPUBs as pages that reflow to fit the window, with two pages side by side when the window is wide.
+- Turn pages with the arrow keys, a trackpad swipe, or the page buttons, and move around with the table of contents, the progress slider, or links in the book.
+- Make the text larger or smaller from the `Aa` menu. The text follows light or dark mode.
+- Reopen an EPUB on the page where you stopped.
+- Bookmarks, highlights, and reading aloud are available for PDFs only for now.
 
 ## Getting started
 
