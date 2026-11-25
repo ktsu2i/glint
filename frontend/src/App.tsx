@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import { useTranslation } from "react-i18next";
 import { generateCoverThumbnail } from "./features/library/generateCover";
 import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
 import { Library } from "./features/library/Library";
 import { LibraryTopBar } from "./features/library/LibraryTopBar";
+import { sortBooks, useLibrarySortOrder } from "./features/library/librarySort";
 import {
   LibrarySearchField,
   LibrarySearchResults,
@@ -38,9 +39,14 @@ import {
 const LIBRARY_SEARCH_DEBOUNCE_MS = 250;
 
 function AppContent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [view, setView] = useState<"library" | "search" | "reader">("library");
   const [books, setBooks] = useState<BookSummary[]>([]);
+  const [sortOrder, setSortOrder] = useLibrarySortOrder();
+  const shelfBooks = useMemo(
+    () => sortBooks(books, sortOrder, i18n.language),
+    [books, sortOrder, i18n.language],
+  );
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState("");
   const [busyBookId, setBusyBookId] = useState("");
@@ -468,8 +474,10 @@ function AppContent() {
                   />
                 ) : null
               }
+              sortOrder={sortOrder}
               onImport={() => void handleImportPDF()}
               onSearch={showSearch}
+              onSortOrderChange={setSortOrder}
             />
             <div className="library-content">
               {view === "search" ? (
@@ -487,7 +495,7 @@ function AppContent() {
                 />
               ) : (
                 <Library
-                  books={books}
+                  books={shelfBooks}
                   loading={libraryLoading}
                   error={libraryError}
                   busyBookId={busyBookId}

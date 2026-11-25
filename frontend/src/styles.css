@@ -1026,6 +1026,26 @@ input:focus-visible,
   color: inherit;
 }
 
+.book-menu-label {
+  padding: 4px 10px 3px;
+  color: var(--glass-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: default;
+}
+
+/* Sort choices keep their text aligned whether or not they are checked. */
+.book-menu-check {
+  width: 13px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.book-menu-item[data-highlighted] .book-menu-check {
+  color: inherit;
+}
+
 .book-menu-separator {
   height: 1px;
   margin: 4px 6px;
