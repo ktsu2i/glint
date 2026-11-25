@@ -62,7 +62,7 @@ func run() error {
 	desktop.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
 		update.Start()
 	})
-	desktop.Window.NewWithOptions(application.WebviewWindowOptions{
+	mainWindow := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "Glint",
 		Width:            1440,
 		Height:           900,
@@ -74,6 +74,7 @@ func run() error {
 			TitleBar: application.MacTitleBarHiddenInsetUnified,
 		},
 	})
+	desktop.RegisterService(application.NewService(app.NewWindowService(mainWindow)))
 	return desktop.Run()
 }
 

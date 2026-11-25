@@ -14,6 +14,7 @@ const backend = vi.hoisted(() => ({
   removeBookmark: vi.fn(),
   saveBookSegments: vi.fn(),
   searchBook: vi.fn(),
+  setWindowControlsVisible: vi.fn(),
 }));
 
 vi.mock("./loadPdf", () => ({
@@ -28,6 +29,7 @@ vi.mock("../../shared/api/backend", () => ({
   removeBookmark: backend.removeBookmark,
   saveBookSegments: backend.saveBookSegments,
   searchBook: backend.searchBook,
+  setWindowControlsVisible: backend.setWindowControlsVisible,
 }));
 vi.mock("../../shared/components/ToolButton", () => ({
   ToolButton: ({
@@ -169,6 +171,7 @@ beforeEach(() => {
     createdAt: "2026-06-23T00:00:00Z",
   }));
   backend.removeBookmark.mockResolvedValue(undefined);
+  backend.setWindowControlsVisible.mockResolvedValue(undefined);
 });
 
 describe("PdfReader", () => {
@@ -903,6 +906,28 @@ describe("PdfReader", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "本棚" }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the window controls with the toolbars and restores them on close", async () => {
+    const pdfDocument = makeDocument();
+    pdfDocument.numPages = 6;
+    resolveDocument(pdfDocument);
+    const { unmount } = render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+    act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
+    await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
+    expect(backend.setWindowControlsVisible).toHaveBeenLastCalledWith(true);
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    await waitFor(() => expect(backend.setWindowControlsVisible).toHaveBeenLastCalledWith(false));
+
+    const topbar = globalThis.document.querySelector(".reader-topbar") as HTMLElement;
+    fireEvent.mouseEnter(topbar);
+    expect(backend.setWindowControlsVisible).toHaveBeenLastCalledWith(true);
+    fireEvent.mouseLeave(topbar);
+    await waitFor(() => expect(backend.setWindowControlsVisible).toHaveBeenLastCalledWith(false));
+
+    unmount();
+    expect(backend.setWindowControlsVisible).toHaveBeenLastCalledWith(true);
   });
 
   it("persists page bookmarks, navigates from the bookmark panel, and removes them", async () => {
