@@ -80,6 +80,7 @@ func run() error {
 		},
 	}))
 	mainWindowState.Track(mainWindow, desktop.Screen.GetAll)
+	app.CompactFullscreenTitleBar(mainWindow)
 	desktop.RegisterService(application.NewService(app.NewWindowService(app.NewNativeWindowControls(mainWindow))))
 	return desktop.Run()
 }
