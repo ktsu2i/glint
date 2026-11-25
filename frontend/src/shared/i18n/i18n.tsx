@@ -72,7 +72,6 @@ export const en = {
   "librarySearch.goTo": "Open {title} at page {page}",
   "librarySearch.titleMatches": "Titles",
   "librarySearch.textMatches": "Text",
-  "librarySearch.submitHint": "Press Return to search the text of every book.",
   "settings.items": "Settings sections",
   "settings.appearance": "Appearance",
   "settings.appearanceDescription":
@@ -227,7 +226,6 @@ export const ja: Record<keyof typeof en, string> = {
   "librarySearch.goTo": "{title}の{page}ページを開く",
   "librarySearch.titleMatches": "タイトル",
   "librarySearch.textMatches": "本文",
-  "librarySearch.submitHint": "Return キーで本文を横断検索します。",
   "settings.items": "設定項目",
   "settings.appearance": "表示",
   "settings.appearanceDescription":

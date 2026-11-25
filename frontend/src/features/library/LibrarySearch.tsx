@@ -135,7 +135,9 @@ export function LibrarySearchResults({
   const { t } = useTranslation();
   const isSearching = searchStatus === "loading";
   const hasSubmitted = searchStatus !== "idle";
-  const hasResults = searchStatus === "ready" && searchResults.length > 0;
+  // Keep the previous hits on screen while the next query runs, so typing
+  // does not make the results flicker.
+  const hasResults = (searchStatus === "ready" || isSearching) && searchResults.length > 0;
   const titleQuery = searchInput.trim();
   const titleMatches = matchBooksByTitle(books, titleQuery);
 
@@ -187,16 +189,12 @@ export function LibrarySearchResults({
           <h3 className="library-search-section-title">{t("librarySearch.textMatches")}</h3>
         )}
         {!hasSubmitted && !searchError ? (
-          <p className="library-search-message">
-            {titleQuery ? t("librarySearch.submitHint") : t("librarySearch.prompt")}
-          </p>
+          titleQuery ? null : (
+            <p className="library-search-message">{t("librarySearch.prompt")}</p>
+          )
         ) : searchError ? (
           <p className="library-search-message is-error" role="alert">
             {searchError}
-          </p>
-        ) : isSearching ? (
-          <p className="library-search-message">
-            {t("librarySearch.searchingFor", { query: searchQuery || searchInput })}
           </p>
         ) : hasResults ? (
           <ul className="library-search-hits">
@@ -242,6 +240,10 @@ export function LibrarySearchResults({
               </li>
             ))}
           </ul>
+        ) : isSearching ? (
+          <p className="library-search-message">
+            {t("librarySearch.searchingFor", { query: searchQuery || searchInput })}
+          </p>
         ) : (
           <p className="library-search-message">
             {t("librarySearch.noResults", { query: searchQuery })}

@@ -163,7 +163,11 @@ describe("LibrarySearchResults", () => {
 
     const titles = screen.getByRole("region", { name: "タイトル" });
     expect(within(titles).getAllByRole("button")).toHaveLength(2);
-    expect(screen.getByText("Return キーで本文を横断検索します。")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "キーワードを入力すると、タイトルで本を探したり、準備済みのページを横断検索したりできます。",
+      ),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideを開く" }));
     expect(onOpenBook).toHaveBeenCalledWith(availableBook);
@@ -213,6 +217,21 @@ describe("LibrarySearchResults", () => {
     expect(screen.getByText("一致 3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Systems Guideの50ページを開く" }));
     expect(onOpenAtPage).toHaveBeenCalledWith(availableBook, 50);
+  });
+
+  it("keeps the previous hits on screen while the next query runs", () => {
+    render(
+      <LibrarySearchResults
+        {...resultProps}
+        searchInput="context b"
+        searchQuery="context b"
+        searchResults={[hit]}
+        searchStatus="loading"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Systems Guideの12ページを開く" })).toBeTruthy();
+    expect(screen.queryByText("「context b」を検索しています…")).toBeNull();
   });
 
   it("shows an empty state when there are no matches", () => {

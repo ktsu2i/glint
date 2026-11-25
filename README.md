@@ -33,7 +33,7 @@ Your books and your reading positions stay on your machine.
 
 - Search inside the book you are reading with `⌘F` and jump to any matching page.
 - Search across every book you have imported from the library with `⌘F`, and open the right book at the right page.
-- Find a book by its title in the same library search: matching titles appear as you type.
+- Find a book by its title in the same library search. Matching titles and pages both appear as you type.
 
 ### EPUB, for now
 

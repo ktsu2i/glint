@@ -34,6 +34,9 @@ import {
   type ThemePreference,
 } from "./shared/api/backend";
 
+// Long enough to skip the keystrokes in a word, short enough to feel live.
+const LIBRARY_SEARCH_DEBOUNCE_MS = 250;
+
 function AppContent() {
   const { t } = useTranslation();
   const [view, setView] = useState<"library" | "search" | "reader">("library");
@@ -253,32 +256,40 @@ function AppContent() {
     }
   }
 
-  const handleLibrarySearchSubmit = useCallback(async () => {
-    const query = searchInput.trim();
-    if (!query) {
-      return;
-    }
-    const request = searchRequestRef.current + 1;
-    searchRequestRef.current = request;
-    setSearchQuery(query);
-    setSearchStatus("loading");
-    setSearchError("");
-    try {
-      const hits = await searchLibrary(query);
-      if (searchRequestRef.current !== request) {
+  const runLibrarySearch = useCallback(
+    async (input: string) => {
+      const query = input.trim();
+      if (!query) {
         return;
       }
-      setSearchResults(hits);
-      setSearchStatus("ready");
-    } catch (reason) {
-      if (searchRequestRef.current !== request) {
-        return;
+      const request = searchRequestRef.current + 1;
+      searchRequestRef.current = request;
+      setSearchQuery(query);
+      setSearchStatus("loading");
+      setSearchError("");
+      try {
+        const hits = await searchLibrary(query);
+        if (searchRequestRef.current !== request) {
+          return;
+        }
+        setSearchResults(hits);
+        setSearchStatus("ready");
+      } catch (reason) {
+        if (searchRequestRef.current !== request) {
+          return;
+        }
+        setSearchResults([]);
+        setSearchStatus("error");
+        setSearchError(reason instanceof Error ? reason.message : t("error.searchLibrary"));
       }
-      setSearchResults([]);
-      setSearchStatus("error");
-      setSearchError(reason instanceof Error ? reason.message : t("error.searchLibrary"));
-    }
-  }, [searchInput, t]);
+    },
+    [t],
+  );
+
+  const handleLibrarySearchSubmit = useCallback(
+    () => runLibrarySearch(searchInput),
+    [runLibrarySearch, searchInput],
+  );
 
   const handleLibrarySearchClear = useCallback(() => {
     searchRequestRef.current += 1;
@@ -288,6 +299,31 @@ function AppContent() {
     setSearchStatus("idle");
     setSearchError("");
   }, []);
+
+  // Search the text of every book as the query is typed, once typing pauses.
+  useEffect(() => {
+    if (view !== "search") {
+      return;
+    }
+    const query = searchInput.trim();
+    if (!query || query === searchQuery) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void runLibrarySearch(query);
+    }, LIBRARY_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [runLibrarySearch, searchInput, searchQuery, view]);
+
+  const handleLibrarySearchInputChange = useCallback(
+    (value: string) => {
+      if (!value.trim()) {
+        handleLibrarySearchClear();
+      }
+      setSearchInput(value);
+    },
+    [handleLibrarySearchClear],
+  );
 
   async function handleRemoveBook(summary: BookSummary) {
     setBusyBookId(summary.id);
@@ -410,7 +446,7 @@ function AppContent() {
                     searchInput={searchInput}
                     searchStatus={searchStatus}
                     resultCount={searchResults.length}
-                    onSearchInputChange={setSearchInput}
+                    onSearchInputChange={handleLibrarySearchInputChange}
                     onSearchSubmit={handleLibrarySearchSubmit}
                     onClose={closeSearch}
                   />
