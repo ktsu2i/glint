@@ -38,11 +38,12 @@ Your books and your reading positions stay on your machine.
 
 ### Read EPUBs
 
-- Read EPUBs as pages that reflow to fit the window, with two pages side by side when the window is wide.
+- Read EPUBs as pages that reflow to fit the window, one page at a time or as two-page spreads when the window is wide enough.
 - Turn pages with the arrow keys, a trackpad swipe, or the page buttons, and move around with the table of contents, the progress slider, or links in the book.
-- Make the text larger or smaller from the `Aa` menu. The text follows light or dark mode.
+- Make the text larger or smaller, and switch between single pages and spreads, from the `Aa` menu. The text follows light or dark mode.
+- Select text to highlight it in yellow, green, pink, or purple, look back over every highlight in the highlights panel, and click a highlight to change its color or remove it, as with PDFs.
 - Reopen an EPUB on the page where you stopped.
-- Bookmarks, highlights, and reading aloud are available for PDFs only for now.
+- Bookmarks and reading aloud are available for PDFs only for now.
 
 ## Getting started
 

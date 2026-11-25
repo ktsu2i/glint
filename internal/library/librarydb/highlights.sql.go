@@ -25,7 +25,7 @@ func (q *Queries) DeleteHighlight(ctx context.Context, arg DeleteHighlightParams
 }
 
 const getHighlight = `-- name: GetHighlight :one
-SELECT id, page_number, color, text, rects, created_at
+SELECT id, page_number, color, text, rects, cfi, created_at
   FROM book_highlights
  WHERE book_id = ?1 AND id = ?2
 `
@@ -41,6 +41,7 @@ type GetHighlightRow struct {
 	Color      string
 	Text       string
 	Rects      string
+	Cfi        string
 	CreatedAt  string
 }
 
@@ -53,14 +54,15 @@ func (q *Queries) GetHighlight(ctx context.Context, arg GetHighlightParams) (Get
 		&i.Color,
 		&i.Text,
 		&i.Rects,
+		&i.Cfi,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const insertHighlight = `-- name: InsertHighlight :one
-INSERT INTO book_highlights (book_id, page_number, color, text, rects, created_at)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+INSERT INTO book_highlights (book_id, page_number, color, text, rects, cfi, created_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
 RETURNING id
 `
 
@@ -70,6 +72,7 @@ type InsertHighlightParams struct {
 	Color      string
 	Text       string
 	Rects      string
+	Cfi        string
 	CreatedAt  string
 }
 
@@ -80,6 +83,7 @@ func (q *Queries) InsertHighlight(ctx context.Context, arg InsertHighlightParams
 		arg.Color,
 		arg.Text,
 		arg.Rects,
+		arg.Cfi,
 		arg.CreatedAt,
 	)
 	var id int64
@@ -88,7 +92,7 @@ func (q *Queries) InsertHighlight(ctx context.Context, arg InsertHighlightParams
 }
 
 const listHighlights = `-- name: ListHighlights :many
-SELECT id, page_number, color, text, rects, created_at
+SELECT id, page_number, color, text, rects, cfi, created_at
   FROM book_highlights
  WHERE book_id = ?1
  ORDER BY page_number ASC, id ASC
@@ -100,6 +104,7 @@ type ListHighlightsRow struct {
 	Color      string
 	Text       string
 	Rects      string
+	Cfi        string
 	CreatedAt  string
 }
 
@@ -118,6 +123,7 @@ func (q *Queries) ListHighlights(ctx context.Context, bookID string) ([]ListHigh
 			&i.Color,
 			&i.Text,
 			&i.Rects,
+			&i.Cfi,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

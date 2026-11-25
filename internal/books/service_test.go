@@ -457,3 +457,35 @@ func TestStoresEPUBSectionHeadings(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Equal(t, "Chapter Two", results[0].HeadingPath)
 }
+
+func TestAddHighlightPlacesItByTheBookFormat(t *testing.T) {
+	h := newHarness(t)
+	pdf := h.importBook(h.writePDF("Guide.pdf", "%PDF-1.7\nfixture"))
+	epub := h.importBook(newSampleEPUB(t))
+	rects := []library.HighlightRect{{X: 0.1, Y: 0.2, Width: 0.3, Height: 0.02}}
+	const cfi = "epubcfi(/6/4!/4/2,/1:0,/1:5)"
+
+	_, err := h.service.AddHighlight(t.Context(), pdf.Book.ID, library.NewHighlight{
+		PageNumber: 1, PageCount: 3, Color: "yellow", Text: "page text", Rects: rects,
+	})
+	require.NoError(t, err)
+	_, err = h.service.AddHighlight(t.Context(), pdf.Book.ID, library.NewHighlight{
+		PageNumber: 1, PageCount: 3, Color: "yellow", Text: "page text", CFI: cfi,
+	})
+	require.ErrorIs(t, err, library.ErrInvalidHighlight, "a PDF highlight needs rectangles")
+
+	saved, err := h.service.AddHighlight(t.Context(), epub.Book.ID, library.NewHighlight{
+		PageNumber: 2, PageCount: 3, Color: "green", Text: "section text", CFI: cfi,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, cfi, saved.CFI)
+	assert.Empty(t, saved.Rects)
+	_, err = h.service.AddHighlight(t.Context(), epub.Book.ID, library.NewHighlight{
+		PageNumber: 2, PageCount: 3, Color: "green", Text: "section text", Rects: rects,
+	})
+	require.ErrorIs(t, err, library.ErrInvalidHighlight, "an EPUB highlight needs a CFI")
+
+	listed, err := h.service.ListHighlights(t.Context(), epub.Book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []library.BookHighlight{saved}, listed)
+}

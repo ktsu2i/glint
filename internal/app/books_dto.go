@@ -64,6 +64,7 @@ type BookHighlight struct {
 	Color      string          `json:"color"`
 	Text       string          `json:"text"`
 	Rects      []HighlightRect `json:"rects"`
+	CFI        string          `json:"cfi"`
 	CreatedAt  string          `json:"createdAt"`
 }
 
@@ -73,6 +74,7 @@ type HighlightInput struct {
 	Color      string          `json:"color"`
 	Text       string          `json:"text"`
 	Rects      []HighlightRect `json:"rects"`
+	CFI        string          `json:"cfi"`
 }
 
 type BookSummary struct {
@@ -111,6 +113,7 @@ func toBookHighlight(highlight library.BookHighlight) BookHighlight {
 		Color:      highlight.Color,
 		Text:       highlight.Text,
 		Rects:      rects,
+		CFI:        highlight.CFI,
 		CreatedAt:  highlight.CreatedAt,
 	}
 }
@@ -126,6 +129,7 @@ func (input HighlightInput) toNewHighlight() library.NewHighlight {
 		Color:      input.Color,
 		Text:       input.Text,
 		Rects:      rects,
+		CFI:        input.CFI,
 	}
 }
 

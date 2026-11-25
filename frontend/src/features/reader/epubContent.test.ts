@@ -4,11 +4,15 @@ import {
   flattenToc,
   guardEpubContent,
   loadEpubFontScale,
+  loadEpubLayout,
   loadEpubPosition,
   saveEpubFontScale,
+  saveEpubLayout,
   saveEpubPosition,
+  sortEpubHighlights,
   stripActiveContent,
 } from "./epubContent";
+import type { BookHighlight } from "../../shared/api/backend";
 
 const section = `<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>s</title>
@@ -106,5 +110,38 @@ describe("storage", () => {
     expect(loadEpubFontScale()).toBe(130);
     saveEpubFontScale(999);
     expect(loadEpubFontScale()).toBe(100);
+  });
+});
+
+function makeHighlight(id: number, pageNumber: number, cfi: string): BookHighlight {
+  return {
+    id,
+    pageNumber,
+    cfi,
+    color: "yellow",
+    text: "t",
+    rects: [],
+    createdAt: "",
+  };
+}
+
+describe("sortEpubHighlights", () => {
+  it("orders highlights as they appear in the book", () => {
+    const sorted = sortEpubHighlights([
+      makeHighlight(1, 2, "epubcfi(/6/4!/4/2,/1:0,/1:3)"),
+      makeHighlight(2, 1, "epubcfi(/6/2!/4/10,/1:0,/1:3)"),
+      makeHighlight(3, 1, "epubcfi(/6/2!/4/4,/1:5,/1:9)"),
+    ]);
+    expect(sorted.map((highlight) => highlight.id)).toEqual([3, 2, 1]);
+  });
+});
+
+describe("layout", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("defaults to spreads and keeps a single page choice", () => {
+    expect(loadEpubLayout()).toBe("spread");
+    saveEpubLayout("single");
+    expect(loadEpubLayout()).toBe("single");
   });
 });

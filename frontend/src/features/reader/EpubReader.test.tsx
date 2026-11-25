@@ -3,6 +3,10 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
+  addHighlight: vi.fn(),
+  changeHighlightColor: vi.fn(),
+  listHighlights: vi.fn(),
+  removeHighlight: vi.fn(),
   searchBook: vi.fn(),
   setWindowControlsVisible: vi.fn(),
 }));
@@ -13,6 +17,10 @@ const foliate = vi.hoisted(() => ({
 }));
 
 vi.mock("../../shared/api/backend", () => ({
+  addHighlight: backend.addHighlight,
+  changeHighlightColor: backend.changeHighlightColor,
+  listHighlights: backend.listHighlights,
+  removeHighlight: backend.removeHighlight,
   searchBook: backend.searchBook,
   setWindowControlsVisible: backend.setWindowControlsVisible,
 }));
@@ -20,7 +28,7 @@ vi.mock("./foliate", () => ({ createFoliateView: foliate.createFoliateView }));
 
 import { EpubReader } from "./EpubReader";
 import { I18nProvider } from "../../shared/i18n/i18n";
-import type { BookFile } from "../../shared/api/backend";
+import type { BookFile, BookHighlight } from "../../shared/api/backend";
 
 /** Stands in for foliate-js's <foliate-view>, recording what the reader asks of it. */
 class FakeView extends HTMLElement {
@@ -44,6 +52,24 @@ class FakeView extends HTMLElement {
   next = vi.fn(async () => {});
   prev = vi.fn(async () => {});
   clearSearch = vi.fn();
+  getCFI = vi.fn((_index: number, _range: Range) => "epubcfi(/6/2!/4/2,/1:0,/1:4)");
+  getTOCItemOf = vi.fn(async (_target: string) => ({ label: "Chapter One" }));
+  // Draws like foliate-js does: it asks the reader how to draw each annotation.
+  addAnnotation = vi.fn(async (annotation: { value: string }) => {
+    this.dispatchEvent(
+      new CustomEvent("draw-annotation", {
+        detail: {
+          annotation,
+          draw: (_drawer: unknown, options: { color: string }) =>
+            this.drawn.set(annotation.value, options.color),
+        },
+      }),
+    );
+  });
+  deleteAnnotation = vi.fn(async (annotation: { value: string }) => {
+    this.drawn.delete(annotation.value);
+  });
+  drawn = new Map<string, string>();
   search = vi.fn(async function* () {
     yield { cfi: "epubcfi(/6/4!/4/2)", excerpt: {} };
     yield "done" as const;
@@ -113,8 +139,12 @@ describe("EpubReader", () => {
     foliate.createFoliateView.mockReset().mockImplementation(async () => {
       const view = new FakeView();
       foliate.views.push(view);
-      return view;
+      return { view, drawHighlight: vi.fn() };
     });
+    backend.listHighlights.mockReset().mockResolvedValue([]);
+    backend.addHighlight.mockReset();
+    backend.changeHighlightColor.mockReset();
+    backend.removeHighlight.mockReset().mockResolvedValue(undefined);
     backend.searchBook.mockReset();
     backend.setWindowControlsVisible.mockReset().mockResolvedValue(undefined);
   });
@@ -188,7 +218,32 @@ describe("EpubReader", () => {
     act(() => {
       doc.querySelector("#text")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(reader.classList.contains("is-chrome-visible")).toBe(false);
+    await waitFor(() => expect(reader.classList.contains("is-chrome-visible")).toBe(false));
+  });
+
+  it("closes a highlight's colors instead of the bars when the click lands on a highlight", async () => {
+    const saved = highlight({ id: 4, cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)" });
+    backend.listHighlights.mockResolvedValue([saved]);
+    const { view } = await openReader();
+    view.relocate(0, 0.1);
+    const reader = screen.getByRole("region", { name: "EPUBリーダー" });
+    const doc = view.loadSection();
+    await waitFor(() => expect(view.drawn.has(saved.cfi)).toBe(true));
+
+    // foliate-js reports the highlight after the page's own click handler runs.
+    act(() => {
+      doc.querySelector("#text")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      view.dispatchEvent(
+        new CustomEvent("show-annotation", {
+          detail: { value: saved.cfi, index: 0, range: selectInFrame(doc) },
+        }),
+      );
+    });
+    expect(await screen.findByRole("toolbar", { name: "ハイライト" })).toBeTruthy();
+    await new Promise((resolve) => {
+      setTimeout(resolve, 10);
+    });
+    expect(reader.classList.contains("is-chrome-visible")).toBe(true);
   });
 
   it("keeps links out of the book closed", async () => {
@@ -258,10 +313,125 @@ describe("EpubReader", () => {
       const view = new FakeView();
       view.open.mockRejectedValue(new Error("broken"));
       foliate.views.push(view);
-      return view;
+      return { view, drawHighlight: vi.fn() };
     });
     vi.spyOn(console, "warn").mockImplementation(() => {});
     render(<EpubReader book={makeBook()} onPageChange={vi.fn()} />);
     expect((await screen.findByRole("alert")).textContent).toBe("EPUBを開けませんでした。");
   });
+
+  it("switches between single pages and spreads, and keeps the choice", async () => {
+    const { view } = await openReader();
+    view.relocate(0, 0.1);
+    expect(view.renderer.getAttribute("max-column-count")).toBe("2");
+
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
+    fireEvent.click(screen.getByRole("button", { name: "片開き" }));
+    expect(view.renderer.getAttribute("max-column-count")).toBe("1");
+    expect(window.localStorage.getItem("glint.epub.layout")).toBe("single");
+    expect(screen.getByRole("button", { name: "片開き" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("draws saved highlights in their colors and lists them", async () => {
+    backend.listHighlights.mockResolvedValue([
+      highlight({ id: 2, pageNumber: 2, color: "green", cfi: "epubcfi(/6/4!/4/2,/1:0,/1:3)" }),
+      highlight({ id: 1, pageNumber: 1, color: "pink", cfi: "epubcfi(/6/2!/4/2,/1:0,/1:3)" }),
+    ]);
+    const { view } = await openReader();
+    view.relocate(0, 0.1);
+
+    await waitFor(() => expect(view.drawn.size).toBe(2));
+    expect(view.drawn.get("epubcfi(/6/2!/4/2,/1:0,/1:3)")).toBe("#ff5ca0");
+
+    fireEvent.click(screen.getByRole("button", { name: "ハイライトを開く" }));
+    const links = await screen.findAllByRole("button", { name: /Chapter Oneのハイライトへ移動/ });
+    expect(links.map((link) => link.textContent)).toEqual(["Chapter Onefirst", "Chapter Onefirst"]);
+    fireEvent.click(links[0] as HTMLElement);
+    expect(view.goTo).toHaveBeenCalledWith("epubcfi(/6/2!/4/2,/1:0,/1:3)");
+  });
+
+  it("highlights the selected text in the chosen color", async () => {
+    const saved = highlight({ id: 9, color: "yellow", cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)" });
+    backend.addHighlight.mockResolvedValue(saved);
+    const { view } = await openReader();
+    view.relocate(0, 0.1, "Chapter One");
+    const doc = view.loadSection();
+    selectInFrame(doc);
+
+    act(() => {
+      doc.dispatchEvent(new MouseEvent("mouseup"));
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "黄色でハイライト" }));
+
+    await waitFor(() =>
+      expect(backend.addHighlight).toHaveBeenCalledWith("epub-1", {
+        pageNumber: 1,
+        pageCount: 3,
+        color: "yellow",
+        text: "Text",
+        rects: [],
+        cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)",
+      }),
+    );
+    await waitFor(() => expect(view.drawn.get(saved.cfi)).toBe("#ffd000"));
+    expect(screen.queryByRole("toolbar", { name: "選択した文章をハイライト" })).toBeNull();
+  });
+
+  it("recolors and removes a highlight clicked on the page", async () => {
+    const saved = highlight({ id: 3, color: "yellow", cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)" });
+    backend.listHighlights.mockResolvedValue([saved]);
+    backend.changeHighlightColor.mockResolvedValue({ ...saved, color: "purple" });
+    const { view } = await openReader();
+    view.relocate(0, 0.1);
+    const doc = view.loadSection();
+    await waitFor(() => expect(view.drawn.get(saved.cfi)).toBe("#ffd000"));
+
+    act(() => {
+      view.dispatchEvent(
+        new CustomEvent("show-annotation", {
+          detail: { value: saved.cfi, index: 0, range: selectInFrame(doc) },
+        }),
+      );
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "紫に変更" }));
+    await waitFor(() => expect(view.drawn.get(saved.cfi)).toBe("#9664ff"));
+    expect(backend.changeHighlightColor).toHaveBeenCalledWith("epub-1", 3, "purple");
+
+    fireEvent.click(screen.getByRole("button", { name: "ハイライトを削除" }));
+    await waitFor(() => expect(view.drawn.has(saved.cfi)).toBe(false));
+    expect(backend.removeHighlight).toHaveBeenCalledWith("epub-1", 3);
+  });
 });
+
+function highlight(overrides: Partial<BookHighlight>): BookHighlight {
+  return {
+    id: 1,
+    pageNumber: 1,
+    color: "yellow",
+    text: "first",
+    rects: [],
+    cfi: "epubcfi(/6/2!/4/2,/1:0,/1:5)",
+    createdAt: "2026-11-25T00:00:00Z",
+    ...overrides,
+  };
+}
+
+/** Selects the section's text as if it sat in a frame of the reader. */
+function selectInFrame(doc: Document): Range {
+  const frame = document.createElement("iframe");
+  Object.defineProperty(doc, "defaultView", { configurable: true, value: { frameElement: frame } });
+  const range = doc.createRange();
+  range.selectNodeContents(doc.querySelector("#text") as Node);
+  range.getBoundingClientRect = () => new DOMRect(40, 200, 80, 20);
+  const selection = {
+    isCollapsed: false,
+    rangeCount: 1,
+    getRangeAt: () => range,
+    toString: () => "Text",
+    removeAllRanges: vi.fn(),
+  };
+  doc.getSelection = () => selection as unknown as Selection;
+  return range;
+}

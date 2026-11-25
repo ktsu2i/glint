@@ -42,6 +42,7 @@ type BookHighlight struct {
 	Text       string
 	Rects      string
 	CreatedAt  string
+	Cfi        string
 }
 
 type BookReadingState struct {

@@ -281,7 +281,16 @@ func (s *Service) ListHighlights(ctx context.Context, bookID string) ([]library.
 	return s.library.ListHighlights(ctx, bookID)
 }
 
+// AddHighlight saves a highlight placed the way the book's format needs:
+// rectangles on a PDF page, or a CFI in an EPUB.
 func (s *Service) AddHighlight(ctx context.Context, bookID string, input library.NewHighlight) (library.BookHighlight, error) {
+	book, err := s.library.Get(ctx, bookID)
+	if err != nil {
+		return library.BookHighlight{}, err
+	}
+	if (book.Format == BookFormatEPUB) != (input.CFI != "") {
+		return library.BookHighlight{}, library.ErrInvalidHighlight
+	}
 	return s.library.SaveHighlight(ctx, bookID, input, time.Now())
 }
 

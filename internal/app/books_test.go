@@ -1,6 +1,7 @@
 package app
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -230,7 +231,7 @@ func TestBookErrorsAreLocalized(t *testing.T) {
 	_, err = h.service.SearchBook(book.ID, "   ")
 	assert.EqualError(t, err, "Search terms must be between 1 and 200 characters.")
 	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 2, Color: "yellow", Text: "text"})
-	assert.EqualError(t, err, "The highlight could not be saved. Select up to 10,000 characters on one page.")
+	assert.EqualError(t, err, "The highlight could not be saved. Select up to 10,000 characters.")
 
 	h.useJapanese()
 	_, err = h.service.SearchLibrary("   ")
@@ -301,5 +302,50 @@ func TestHighlightsRoundTripAsDTOs(t *testing.T) {
 
 	h.useJapanese()
 	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 5, Color: "pink", Text: "x"})
-	assert.EqualError(t, err, "ハイライトを保存できませんでした。1ページ内で10,000文字以内を選択してください。")
+	assert.EqualError(t, err, "ハイライトを保存できませんでした。10,000文字以内で選択してください。")
+}
+
+func TestEPUBHighlightsRoundTripAsDTOs(t *testing.T) {
+	h := newHarness(t)
+	h.dialogs.path = writeTestEPUB(t, h.root)
+	book, err := h.service.OpenBookFile()
+	require.NoError(t, err)
+	require.Equal(t, "epub", book.Format)
+
+	const cfi = "epubcfi(/6/2!/4/10,/1:0,/1:9)"
+	saved, err := h.service.AddHighlight(book.ID, HighlightInput{
+		PageNumber: 1, PageCount: 1, Color: "yellow", Text: "Paragraph", Rects: []HighlightRect{}, CFI: cfi,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, cfi, saved.CFI)
+	assert.Empty(t, saved.Rects)
+
+	listed, err := h.service.ListHighlights(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []BookHighlight{saved}, listed)
+}
+
+func writeTestEPUB(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "Reflowable.epub")
+	output, err := os.Create(path)
+	require.NoError(t, err)
+	writer := zip.NewWriter(output)
+	for name, content := range map[string]string{
+		"mimetype": "application/epub+zip",
+		"META-INF/container.xml": `<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
+			`<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`,
+		"OEBPS/content.opf": `<package xmlns="http://www.idpf.org/2007/opf"><metadata/>` +
+			`<manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest>` +
+			`<spine><itemref idref="c1"/></spine></package>`,
+		"OEBPS/c1.xhtml": `<html><body><h1>One</h1><p>Paragraph text.</p></body></html>`,
+	} {
+		entry, err := writer.Create(name)
+		require.NoError(t, err)
+		_, err = entry.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+	require.NoError(t, output.Close())
+	return path
 }

@@ -219,7 +219,8 @@ describe("backend facade", () => {
     });
     await removeHighlight("book-1", 3);
 
-    expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", input);
+    // A PDF highlight goes out with an empty CFI.
+    expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", { ...input, cfi: "" });
     expect(bindings.changeHighlightColor).toHaveBeenCalledWith("book-1", 3, "purple");
     expect(bindings.removeHighlight).toHaveBeenCalledWith("book-1", 3);
   });

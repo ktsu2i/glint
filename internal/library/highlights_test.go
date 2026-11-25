@@ -80,6 +80,11 @@ func TestStoreValidatesHighlights(t *testing.T) {
 		"zero width":       func(h *NewHighlight) { h.Rects[0].Width = 0 },
 		"outside the page": func(h *NewHighlight) { h.Rects[0].X = 0.9 },
 		"not a number":     func(h *NewHighlight) { h.Rects[0].Y = math.NaN() },
+		"cfi and rects":    func(h *NewHighlight) { h.CFI = "epubcfi(/6/4!/4/2)" },
+		"not a cfi":        func(h *NewHighlight) { h.Rects, h.CFI = nil, "/6/4!/4/2" },
+		"cfi too long": func(h *NewHighlight) {
+			h.Rects, h.CFI = nil, "epubcfi("+strings.Repeat("/2", MaxHighlightCFIBytes)+")"
+		},
 	}
 	for name, mutate := range invalid {
 		t.Run(name, func(t *testing.T) {
@@ -184,4 +189,28 @@ func TestStoreChangesHighlightColor(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHighlightNotFound, "a highlight is changed only through its own book")
 	_, err = store.UpdateHighlightColor(t.Context(), "missing", saved.ID, "green")
 	assert.ErrorIs(t, err, ErrBookNotFound)
+}
+
+func TestStorePersistsEPUBHighlightsByCFI(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	store, err := Open(path)
+	require.NoError(t, err)
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.epub", "hash-1", "epub", 10, now)
+	require.NoError(t, err)
+
+	saved, err := store.SaveHighlight(t.Context(), book.ID, NewHighlight{
+		PageNumber: 2, PageCount: 4, Color: "purple", Text: "reflowed text",
+		CFI: "epubcfi(/6/4!/4/2,/1:0,/1:13)",
+	}, now)
+	require.NoError(t, err)
+	assert.Empty(t, saved.Rects)
+	require.NoError(t, store.Close())
+
+	store, err = Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	highlights, err := store.ListHighlights(t.Context(), book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []BookHighlight{saved}, highlights)
 }
