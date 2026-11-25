@@ -1305,14 +1305,10 @@ input:focus-visible,
   background: var(--glass-active);
 }
 
-.tool-button.reader-bookmark-toggle.is-active {
+.tool-button.reader-bookmark-toggle.is-active,
+.tool-button.is-reading {
   background: transparent;
   color: var(--accent);
-}
-
-.tool-button.is-reading {
-  background: var(--accent);
-  color: var(--accent-ink);
 }
 
 .tool-button:disabled {
