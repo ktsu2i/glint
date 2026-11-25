@@ -1,19 +1,31 @@
 import type { ReactElement } from "react";
 import { MagnifyingGlassIcon, PlusIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
+import type { LibrarySortOrder } from "./librarySort";
+import { LibrarySortMenu } from "./LibrarySortMenu";
 
 type LibraryTopBarProps = {
   title: string;
   opening: boolean;
   search: ReactElement | null;
+  sortOrder: LibrarySortOrder;
   onImport: () => void;
   onSearch: () => void;
+  onSortOrderChange: (order: LibrarySortOrder) => void;
 };
 
 // LibraryTopBar is the floating glass bar of the library. The shelf speaks for
 // itself, so the title is only for assistive technology. While searching, the
-// search button gives way to the search field.
-export function LibraryTopBar({ title, opening, search, onImport, onSearch }: LibraryTopBarProps) {
+// search and sort buttons give way to the search field.
+export function LibraryTopBar({
+  title,
+  opening,
+  search,
+  sortOrder,
+  onImport,
+  onSearch,
+  onSortOrderChange,
+}: LibraryTopBarProps) {
   const { t } = useTranslation();
   return (
     <header className="library-topbar glass">
@@ -23,6 +35,7 @@ export function LibraryTopBar({ title, opening, search, onImport, onSearch }: Li
       {search ?? (
         <>
           <span className="library-topbar-spacer" />
+          <LibrarySortMenu order={sortOrder} onOrderChange={onSortOrderChange} />
           <button
             type="button"
             className="glass-button"

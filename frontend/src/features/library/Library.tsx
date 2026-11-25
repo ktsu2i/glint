@@ -11,18 +11,12 @@ import {
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { BookFormat, BookSummary } from "../../shared/api/backend";
+import { readingProgress } from "./librarySort";
 
 const MAX_DISPLAY_NAME_LENGTH = 200;
 
 function formatBadgeLabel(format: BookFormat | undefined): string {
   return format === "epub" ? "EPUB" : "PDF";
-}
-
-function readingProgress(book: BookSummary): number {
-  if (book.pageCount < 1) {
-    return 0;
-  }
-  return Math.min(100, Math.max(0, (book.lastPage / book.pageCount) * 100));
 }
 
 // The hero offers to continue the available book the user opened most recently.
