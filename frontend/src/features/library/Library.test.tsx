@@ -49,7 +49,7 @@ describe("Library", () => {
     render(<Library {...defaultProps} onImport={onImport} />);
 
     expect(screen.getByText("最初の一冊を、本棚へ。")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "PDFを選ぶ" }));
+    fireEvent.click(screen.getByRole("button", { name: "本を選ぶ" }));
     expect(onImport).toHaveBeenCalledOnce();
   });
 

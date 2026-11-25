@@ -184,6 +184,9 @@ importers:
       '@wailsio/runtime':
         specifier: 3.1.0
         version: 3.1.0
+      foliate-js:
+        specifier: github:johnfactotum/foliate-js#78914aef4466eb960965702401634c2cb348e9b1
+        version: https://codeload.github.com/johnfactotum/foliate-js/tar.gz/78914aef4466eb960965702401634c2cb348e9b1
       i18next:
         specifier: 27.2.3
         version: 27.2.3(typescript@7.0.2)
@@ -1343,6 +1346,10 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  foliate-js@https://codeload.github.com/johnfactotum/foliate-js/tar.gz/78914aef4466eb960965702401634c2cb348e9b1:
+    resolution: {gitHosted: true, integrity: sha512-YmnYMiOUgcsd+5deF7DKOUvkBBhONGKor4JP7JFCZ9QiMs10ap4xg7XbIGHkCiZNLsASlpNGgavHuYePQH1Gzg==, tarball: https://codeload.github.com/johnfactotum/foliate-js/tar.gz/78914aef4466eb960965702401634c2cb348e9b1}
+    version: 0.0.0
 
   formatly@0.11.4:
     resolution: {integrity: sha512-TeCC10lP8KCgoX+Fe5lryILIT0/Dy+nP0OSVnsuB5CwXoLuOdqxCYlPFF1inR8S/zTy1ec7TjhS2TeRKWzzImA==}
@@ -2637,6 +2644,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  foliate-js@https://codeload.github.com/johnfactotum/foliate-js/tar.gz/78914aef4466eb960965702401634c2cb348e9b1: {}
 
   formatly@0.11.4:
     dependencies:

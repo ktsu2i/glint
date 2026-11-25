@@ -49,7 +49,7 @@ export function LibraryTopBar({
       )}
       <button type="button" className="solid-button" onClick={onImport} disabled={opening}>
         <PlusIcon size={13} weight="bold" aria-hidden="true" />
-        {opening ? t("app.choosingPdf") : t("app.addPdf")}
+        {opening ? t("app.choosingBook") : t("app.addBook")}
       </button>
     </header>
   );

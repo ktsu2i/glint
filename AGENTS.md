@@ -14,20 +14,21 @@ Glint は技術書を読むための macOS desktop app です。最終的には�
 
 - PDF / EPUB の import、表紙付きの本棚、名前の変更、削除、ファイルの再選択
 - PDF reader（単ページ / 見開き、左綴じ / 右綴じ、拡大・縮小、目次、page slider、しおり、読み上げ）
+- EPUB reader（foliate-js によるページ送り、見開き、目次、本の中の検索、文字サイズ）
 - 本の中の検索と、本棚全体の横断検索
 - 外観（light / dark / system）と UI 言語（英語 / 日本語）の設定
 - Sparkle による自動アップデート
 
 まだないもの:
 
-- EPUB の閲覧画面（現在は placeholder）
+- EPUB のしおり、ハイライト、読み上げ
 - local repository の接続と index
 - AI / LLM 機能。#23 で chat sidebar、LLM gateway、provider 設定を意図的にすべて削除しました。復活させる指示がない限り、chat UI や LLM 連携を作らないでください。
 
 ## ロードマップ
 
 1. 既存の reader / library の基盤を整える（index 単位の一般化、検索の FTS5 化など）。
-2. EPUB reader を作る。
+2. EPUB reader を作る（基本の閲覧は実装済み。しおり・ハイライトは未対応）。
 3. local repository を 1つ接続し、repo files / symbols を index する。
 4. `この章を自分のrepoで見る` を押すと、LLM なしで関連する repo files / symbols を、選ばれた理由とともに表示する。
 5. 4 が LLM なしで成立した後に、book / repo citation 付きの説明生成を LLM の層として追加する。
@@ -53,7 +54,7 @@ frontend/src/shared        Wails binding のラッパー、i18n、共通 compone
 frontend/bindings           Wails が生成する binding（手で編集・commit しない）
 ```
 
-PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。
+PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。EPUB の表示は frontend の foliate-js（commit を固定した git 依存）で行い、EPUB ファイルを `/book/<token>` から取得して `blob:` URL の iframe に描画します。
 
 ## アーキテクチャ
 
@@ -152,6 +153,7 @@ repo の index のように時間のかかる処理は、次のように作り�
 - PDF 表示 / 抽出: PDF.js
 - Store: SQLite（`glebarez/go-sqlite` = pure Go の modernc SQLite、`database/sql`）。query は sqlc で生成する（`sqlc.yaml`、`go tool sqlc`）。schema 変更は `migrations/` に新しい連番ファイルを追加する。sqlc で表せない動的な query（条件の数が変わる検索など）だけ `database/sql` で手書きする。
 - sqlc の SQLite parser の制約: FTS5 の `MATCH` は table 名ではなく列名に対して書き（`book_segments_fts.text MATCH ?`）、並び順は `bm25()` ではなく `rank` 列を使う。入れ子の subquery ではすべての table に alias を付ける。
+- EPUB 表示: foliate-js。iframe は WebKit の都合で `allow-scripts` が必要なため、EPUB の script は本番ビルドの CSP（`frontend/vite.config.ts`、`script-src 'self'`）と、読み込み時の除去（`epubContent.ts` の `guardEpubContent`）で止めている。CSP を緩めないこと。dev server では CSP が効かない。
 - 検索: 現在は SQLite の LIKE。FTS5（trigram tokenizer）が使えるので、全文検索を強化する場合も別の検索エンジンは入れず SQLite で行う。
 - Code parsing（repo 接続時）: Tree-sitter
 

@@ -98,6 +98,11 @@ export function Library({
     if (!book.lastOpenedAt) {
       return t("library.neverOpened");
     }
+    if (book.format === "epub") {
+      return book.pageCount < 1
+        ? t("library.startReading")
+        : t("library.percentRead", { percent: Math.round(readingProgress(book)) });
+    }
     if (book.pageCount < 1) {
       return book.lastPage > 1
         ? t("library.pagesUntil", { page: book.lastPage })
@@ -135,7 +140,7 @@ export function Library({
             disabled={opening}
           >
             <PlusIcon size={14} weight="bold" />
-            {t("library.choosePdf")}
+            {t("library.chooseBook")}
           </button>
         </div>
       ) : (

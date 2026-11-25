@@ -2108,6 +2108,33 @@ button.page-count:disabled {
   outline-offset: 1px;
 }
 
+/*
+ * foliate-js lays an EPUB out in pages. The whole window is the sheet of
+ * paper, as on an e-reader; the bars float over its margins.
+ */
+.epub-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--white);
+  transition: opacity 160ms ease;
+}
+
+.epub-stage.is-loading {
+  opacity: 0;
+}
+
+.epub-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.epub-page-count {
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The page sits in the middle of the ambient backdrop. */
 .pdf-stage {
   position: relative;
