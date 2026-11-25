@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.4.0](https://github.com/ktsu2i/glint/compare/v0.3.0...v0.4.0) - 2026-11-25
+
+### New Features
+- Redesign the reader and library with glass surfaces by @ktsu2i in https://github.com/ktsu2i/glint/pull/42
+### Other Changes
+- Strip the library down to its covers by @ktsu2i in https://github.com/ktsu2i/glint/pull/44
+- feat(reader): hide the traffic lights with the reader toolbars by @ktsu2i in https://github.com/ktsu2i/glint/pull/45
+- feat(library): find books by title in the library search by @ktsu2i in https://github.com/ktsu2i/glint/pull/46
+- feat(reader): show the page layout icon on the view menu button by @ktsu2i in https://github.com/ktsu2i/glint/pull/47
+- feat(library): sort the shelf by @ktsu2i in https://github.com/ktsu2i/glint/pull/48
+- fix(reader): keep the read-aloud icon visible while reading by @ktsu2i in https://github.com/ktsu2i/glint/pull/49
+
 ## [v0.3.0](https://github.com/ktsu2i/glint/compare/v0.2.2...v0.3.0) - 2026-11-24
 
 ### New Features
