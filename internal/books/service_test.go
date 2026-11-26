@@ -293,18 +293,18 @@ func TestPersistsPageBookmarks(t *testing.T) {
 	opened := h.importBook(h.writePDF("Bookmarks.pdf", "%PDF-1.7\nfixture"))
 	id := opened.Book.ID
 
-	saved, err := h.service.AddBookmark(t.Context(), id, 5, 12)
+	saved, err := h.service.AddBookmark(t.Context(), id, library.NewBookmark{PageNumber: 5, PageCount: 12})
 	require.NoError(t, err)
 	assert.Equal(t, 5, saved.PageNumber)
 	assert.NotEmpty(t, saved.CreatedAt)
-	_, err = h.service.AddBookmark(t.Context(), id, 13, 12)
+	_, err = h.service.AddBookmark(t.Context(), id, library.NewBookmark{PageNumber: 13, PageCount: 12})
 	assert.ErrorIs(t, err, library.ErrInvalidBookmark)
 
 	bookmarks, err := h.service.ListBookmarks(t.Context(), id)
 	require.NoError(t, err)
 	require.Len(t, bookmarks, 1)
 	assert.Equal(t, 5, bookmarks[0].PageNumber)
-	require.NoError(t, h.service.RemoveBookmark(t.Context(), id, 5))
+	require.NoError(t, h.service.RemoveBookmark(t.Context(), id, 5, ""))
 	bookmarks, err = h.service.ListBookmarks(t.Context(), id)
 	require.NoError(t, err)
 	assert.Empty(t, bookmarks)
@@ -383,7 +383,7 @@ func TestOpenKeepsBookmarksWhenContentChanges(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Revised.pdf", "%PDF-1.7\nfirst edition")
 	opened := h.importBook(path)
-	_, err := h.service.AddBookmark(t.Context(), opened.Book.ID, 3, 10)
+	_, err := h.service.AddBookmark(t.Context(), opened.Book.ID, library.NewBookmark{PageNumber: 3, PageCount: 10})
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(path, []byte("%PDF-1.7\nsecond edition, revised"), 0o600))
@@ -488,4 +488,39 @@ func TestAddHighlightPlacesItByTheBookFormat(t *testing.T) {
 	listed, err := h.service.ListHighlights(t.Context(), epub.Book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []library.BookHighlight{saved}, listed)
+}
+
+func TestAddBookmarkPlacesItByTheBookFormat(t *testing.T) {
+	h := newHarness(t)
+	pdf := h.importBook(h.writePDF("Guide.pdf", "%PDF-1.7\nfixture"))
+	epub := h.importBook(newSampleEPUB(t))
+	const first = "epubcfi(/6/4!/4/2/1:0)"
+	const second = "epubcfi(/6/4!/4/8/1:12)"
+
+	_, err := h.service.AddBookmark(t.Context(), pdf.Book.ID, library.NewBookmark{
+		PageNumber: 1, PageCount: 3, CFI: first, Progress: 0.2,
+	})
+	require.ErrorIs(t, err, library.ErrInvalidBookmark, "a PDF bookmark marks a page, not a CFI")
+	_, err = h.service.AddBookmark(t.Context(), epub.Book.ID, library.NewBookmark{PageNumber: 2, PageCount: 3})
+	require.ErrorIs(t, err, library.ErrInvalidBookmark, "an EPUB bookmark needs a CFI")
+
+	saved, err := h.service.AddBookmark(t.Context(), epub.Book.ID, library.NewBookmark{
+		PageNumber: 2, PageCount: 3, CFI: first, Progress: 0.25,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, first, saved.CFI)
+	assert.InDelta(t, 0.25, saved.Progress, 1e-9)
+	_, err = h.service.AddBookmark(t.Context(), epub.Book.ID, library.NewBookmark{
+		PageNumber: 2, PageCount: 3, CFI: second, Progress: 0.3,
+	})
+	require.NoError(t, err)
+
+	bookmarks, err := h.service.ListBookmarks(t.Context(), epub.Book.ID)
+	require.NoError(t, err)
+	require.Len(t, bookmarks, 2, "a section can hold several bookmarks")
+	require.NoError(t, h.service.RemoveBookmark(t.Context(), epub.Book.ID, 2, first))
+	bookmarks, err = h.service.ListBookmarks(t.Context(), epub.Book.ID)
+	require.NoError(t, err)
+	require.Len(t, bookmarks, 1)
+	assert.Equal(t, second, bookmarks[0].CFI)
 }

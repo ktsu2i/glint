@@ -47,8 +47,17 @@ type BookSearchResult struct {
 }
 
 type BookBookmark struct {
-	PageNumber int    `json:"pageNumber"`
-	CreatedAt  string `json:"createdAt"`
+	PageNumber int     `json:"pageNumber"`
+	CFI        string  `json:"cfi"`
+	Progress   float64 `json:"progress"`
+	CreatedAt  string  `json:"createdAt"`
+}
+
+type BookmarkInput struct {
+	PageNumber int     `json:"pageNumber"`
+	PageCount  int     `json:"pageCount"`
+	CFI        string  `json:"cfi"`
+	Progress   float64 `json:"progress"`
 }
 
 type HighlightRect struct {
@@ -99,7 +108,16 @@ type LibrarySearchHit struct {
 }
 
 func toBookBookmark(bookmark library.BookBookmark) BookBookmark {
-	return BookBookmark{PageNumber: bookmark.PageNumber, CreatedAt: bookmark.CreatedAt}
+	return BookBookmark{
+		PageNumber: bookmark.PageNumber,
+		CFI:        bookmark.CFI,
+		Progress:   bookmark.Progress,
+		CreatedAt:  bookmark.CreatedAt,
+	}
+}
+
+func (input BookmarkInput) toNewBookmark() library.NewBookmark {
+	return library.NewBookmark(input)
 }
 
 func toBookHighlight(highlight library.BookHighlight) BookHighlight {

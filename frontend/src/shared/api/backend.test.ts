@@ -135,7 +135,7 @@ describe("backend facade", () => {
       pages: [{ pageNumber: 7, excerpt: "library hit", matchCount: 2 }],
     };
     bindings.searchLibrary.mockResolvedValue([libraryHit]);
-    const bookmark = { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" };
+    const bookmark = { pageNumber: 4, cfi: "", progress: 0, createdAt: "2026-06-23T00:00:00Z" };
     bindings.listBookmarks.mockResolvedValue([bookmark]);
     bindings.addBookmark.mockResolvedValue(bookmark);
 
@@ -170,6 +170,8 @@ describe("backend facade", () => {
     await expect(listBookmarks("book-1")).resolves.toEqual([bookmark]);
     await expect(addBookmark("book-1", 4, 10)).resolves.toEqual(bookmark);
     await removeBookmark("book-1", 4);
+    await addBookmark("book-2", 3, 9, { cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.4 });
+    await removeBookmark("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
     await saveBookCover("book-1", "data:image/png;base64,cover");
     await markBookCoverFailed("book-1");
 
@@ -189,8 +191,20 @@ describe("backend facade", () => {
     expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
     expect(bindings.searchLibrary).toHaveBeenCalledWith("page");
     expect(bindings.listBookmarks).toHaveBeenCalledWith("book-1");
-    expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", 4, 10);
-    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-1", 4);
+    expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", {
+      pageNumber: 4,
+      pageCount: 10,
+      cfi: "",
+      progress: 0,
+    });
+    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-1", 4, "");
+    expect(bindings.addBookmark).toHaveBeenCalledWith("book-2", {
+      pageNumber: 3,
+      pageCount: 9,
+      cfi: "epubcfi(/6/6!/4/2/1:0)",
+      progress: 0.4,
+    });
+    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
     expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
     expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
     expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");

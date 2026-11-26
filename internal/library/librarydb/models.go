@@ -31,6 +31,8 @@ type Book struct {
 type BookBookmark struct {
 	BookID     string
 	PageNumber int64
+	Cfi        string
+	Progress   float64
 	CreatedAt  string
 }
 

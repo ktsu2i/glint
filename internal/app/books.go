@@ -159,12 +159,12 @@ func (s *BooksService) ListBookmarks(bookID string) ([]BookBookmark, error) {
 	return output, nil
 }
 
-func (s *BooksService) AddBookmark(bookID string, pageNumber, pageCount int) (BookBookmark, error) {
-	bookmark, err := s.books.AddBookmark(s.context(), bookID, pageNumber, pageCount)
+func (s *BooksService) AddBookmark(bookID string, input BookmarkInput) (BookBookmark, error) {
+	bookmark, err := s.books.AddBookmark(s.context(), bookID, input.toNewBookmark())
 	if errors.Is(err, library.ErrInvalidBookmark) {
 		return BookBookmark{}, s.text.error(s.context(),
-			"The bookmark page is outside this document.",
-			"しおりのページがこのPDFの範囲外です。",
+			"The bookmark is outside this book.",
+			"しおりの位置がこの本の範囲外です。",
 		)
 	}
 	if err != nil {
@@ -173,8 +173,8 @@ func (s *BooksService) AddBookmark(bookID string, pageNumber, pageCount int) (Bo
 	return toBookBookmark(bookmark), nil
 }
 
-func (s *BooksService) RemoveBookmark(bookID string, pageNumber int) error {
-	if err := s.books.RemoveBookmark(s.context(), bookID, pageNumber); err != nil {
+func (s *BooksService) RemoveBookmark(bookID string, pageNumber int, cfi string) error {
+	if err := s.books.RemoveBookmark(s.context(), bookID, pageNumber, cfi); err != nil {
 		return s.bookError(err)
 	}
 	return nil

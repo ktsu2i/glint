@@ -269,12 +269,21 @@ func (s *Service) ListBookmarks(ctx context.Context, bookID string) ([]library.B
 	return s.library.ListBookmarks(ctx, bookID)
 }
 
-func (s *Service) AddBookmark(ctx context.Context, bookID string, pageNumber, pageCount int) (library.BookBookmark, error) {
-	return s.library.SaveBookmark(ctx, bookID, pageNumber, pageCount, time.Now())
+// AddBookmark saves a bookmark placed the way the book's format needs: a PDF
+// page, or a CFI in an EPUB.
+func (s *Service) AddBookmark(ctx context.Context, bookID string, input library.NewBookmark) (library.BookBookmark, error) {
+	book, err := s.library.Get(ctx, bookID)
+	if err != nil {
+		return library.BookBookmark{}, err
+	}
+	if (book.Format == BookFormatEPUB) != (input.CFI != "") {
+		return library.BookBookmark{}, library.ErrInvalidBookmark
+	}
+	return s.library.SaveBookmark(ctx, bookID, input, time.Now())
 }
 
-func (s *Service) RemoveBookmark(ctx context.Context, bookID string, pageNumber int) error {
-	return s.library.DeleteBookmark(ctx, bookID, pageNumber)
+func (s *Service) RemoveBookmark(ctx context.Context, bookID string, pageNumber int, cfi string) error {
+	return s.library.DeleteBookmark(ctx, bookID, pageNumber, cfi)
 }
 
 func (s *Service) ListHighlights(ctx context.Context, bookID string) ([]library.BookHighlight, error) {

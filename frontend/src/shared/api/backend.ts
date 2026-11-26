@@ -74,9 +74,22 @@ export type BookSearchResult = {
   matchCount: number;
 };
 
+/**
+ * A bookmark marks a PDF page, or a place in an EPUB by its CFI. For an EPUB,
+ * pageNumber is the section, counted from 1, and progress is where the place
+ * sits in the book, from 0 to 1. A PDF bookmark has an empty CFI and progress 0.
+ */
 export type BookBookmark = {
   pageNumber: number;
+  cfi: string;
+  progress: number;
   createdAt: string;
+};
+
+/** Where an EPUB bookmark sits; a PDF bookmark has none. */
+export type BookmarkPlace = {
+  cfi: string;
+  progress: number;
 };
 
 export type HighlightColor = "yellow" | "green" | "pink" | "purple";
@@ -185,12 +198,18 @@ export async function addBookmark(
   bookId: string,
   pageNumber: number,
   pageCount: number,
+  place?: BookmarkPlace,
 ): Promise<BookBookmark> {
-  return AddBookmark(bookId, pageNumber, pageCount);
+  return AddBookmark(bookId, {
+    pageNumber,
+    pageCount,
+    cfi: place?.cfi ?? "",
+    progress: place?.progress ?? 0,
+  });
 }
 
-export async function removeBookmark(bookId: string, pageNumber: number): Promise<void> {
-  await RemoveBookmark(bookId, pageNumber);
+export async function removeBookmark(bookId: string, pageNumber: number, cfi = ""): Promise<void> {
+  await RemoveBookmark(bookId, pageNumber, cfi);
 }
 
 export async function listHighlights(bookId: string): Promise<BookHighlight[]> {
