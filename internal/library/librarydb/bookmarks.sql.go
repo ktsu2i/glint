@@ -11,68 +11,87 @@ import (
 
 const deleteBookmark = `-- name: DeleteBookmark :exec
 DELETE FROM book_bookmarks
- WHERE book_id = ?1 AND page_number = ?2
+ WHERE book_id = ?1 AND page_number = ?2 AND cfi = ?3
 `
 
 type DeleteBookmarkParams struct {
 	BookID     string
 	PageNumber int64
+	Cfi        string
 }
 
 func (q *Queries) DeleteBookmark(ctx context.Context, arg DeleteBookmarkParams) error {
-	_, err := q.db.ExecContext(ctx, deleteBookmark, arg.BookID, arg.PageNumber)
+	_, err := q.db.ExecContext(ctx, deleteBookmark, arg.BookID, arg.PageNumber, arg.Cfi)
 	return err
 }
 
 const getBookmark = `-- name: GetBookmark :one
-SELECT page_number, created_at
+SELECT page_number, cfi, progress, created_at
   FROM book_bookmarks
- WHERE book_id = ?1 AND page_number = ?2
+ WHERE book_id = ?1 AND page_number = ?2 AND cfi = ?3
 `
 
 type GetBookmarkParams struct {
 	BookID     string
 	PageNumber int64
+	Cfi        string
 }
 
 type GetBookmarkRow struct {
 	PageNumber int64
+	Cfi        string
+	Progress   float64
 	CreatedAt  string
 }
 
 func (q *Queries) GetBookmark(ctx context.Context, arg GetBookmarkParams) (GetBookmarkRow, error) {
-	row := q.db.QueryRowContext(ctx, getBookmark, arg.BookID, arg.PageNumber)
+	row := q.db.QueryRowContext(ctx, getBookmark, arg.BookID, arg.PageNumber, arg.Cfi)
 	var i GetBookmarkRow
-	err := row.Scan(&i.PageNumber, &i.CreatedAt)
+	err := row.Scan(
+		&i.PageNumber,
+		&i.Cfi,
+		&i.Progress,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
 const insertBookmark = `-- name: InsertBookmark :exec
-INSERT INTO book_bookmarks (book_id, page_number, created_at)
-VALUES (?1, ?2, ?3)
+INSERT INTO book_bookmarks (book_id, page_number, cfi, progress, created_at)
+VALUES (?1, ?2, ?3, ?4, ?5)
 ON CONFLICT DO NOTHING
 `
 
 type InsertBookmarkParams struct {
 	BookID     string
 	PageNumber int64
+	Cfi        string
+	Progress   float64
 	CreatedAt  string
 }
 
 func (q *Queries) InsertBookmark(ctx context.Context, arg InsertBookmarkParams) error {
-	_, err := q.db.ExecContext(ctx, insertBookmark, arg.BookID, arg.PageNumber, arg.CreatedAt)
+	_, err := q.db.ExecContext(ctx, insertBookmark,
+		arg.BookID,
+		arg.PageNumber,
+		arg.Cfi,
+		arg.Progress,
+		arg.CreatedAt,
+	)
 	return err
 }
 
 const listBookmarks = `-- name: ListBookmarks :many
-SELECT page_number, created_at
+SELECT page_number, cfi, progress, created_at
   FROM book_bookmarks
  WHERE book_id = ?1
- ORDER BY page_number ASC
+ ORDER BY page_number ASC, progress ASC, created_at ASC
 `
 
 type ListBookmarksRow struct {
 	PageNumber int64
+	Cfi        string
+	Progress   float64
 	CreatedAt  string
 }
 
@@ -85,7 +104,12 @@ func (q *Queries) ListBookmarks(ctx context.Context, bookID string) ([]ListBookm
 	items := []ListBookmarksRow{}
 	for rows.Next() {
 		var i ListBookmarksRow
-		if err := rows.Scan(&i.PageNumber, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.PageNumber,
+			&i.Cfi,
+			&i.Progress,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

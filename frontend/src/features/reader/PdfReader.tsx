@@ -52,6 +52,12 @@ import {
   type OutlineNode,
   type PdfTextLayer,
 } from "./loadPdf";
+import {
+  detectUtteranceLang,
+  isSpeechSupported,
+  pickVoiceForLang,
+  useSpeechVoices,
+} from "./speech";
 
 const loadTimeoutMilliseconds = 60_000;
 const minScale = 0.4;
@@ -168,9 +174,9 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     pageNumber: number;
     text: string;
   }>({ pageNumber: 0, text: "" });
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const isReadingAloudRef = useRef(false);
-  const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const speechSupported = isSpeechSupported();
+  const voices = useSpeechVoices(speechSupported);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchRequestRef = useRef(0);
 
@@ -797,19 +803,6 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     }
     return () => {
       window.speechSynthesis.cancel();
-    };
-  }, [speechSupported]);
-
-  useEffect(() => {
-    if (!speechSupported) {
-      return;
-    }
-    const synth = window.speechSynthesis;
-    const load = () => setVoices(synth.getVoices());
-    load();
-    synth.addEventListener("voiceschanged", load);
-    return () => {
-      synth.removeEventListener("voiceschanged", load);
     };
   }, [speechSupported]);
 
@@ -1822,30 +1815,6 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
       </footer>
     </section>
   );
-}
-
-function detectUtteranceLang(text: string, fallbackUiLang: string): string {
-  if (/[぀-ゟ゠-ヿ一-鿿]/.test(text)) {
-    return "ja-JP";
-  }
-  return fallbackUiLang === "ja" ? "ja-JP" : "en-US";
-}
-
-function pickVoiceForLang(
-  voices: SpeechSynthesisVoice[],
-  lang: string,
-): SpeechSynthesisVoice | null {
-  if (voices.length === 0) {
-    return null;
-  }
-  const target = lang.toLowerCase();
-  const prefix = target.slice(0, 2);
-  const exact = voices.find((voice) => voice.lang.toLowerCase() === target);
-  if (exact) {
-    return exact;
-  }
-  const sameLanguage = voices.find((voice) => voice.lang.toLowerCase().startsWith(prefix));
-  return sameLanguage ?? null;
 }
 
 type OutlineListProps = {

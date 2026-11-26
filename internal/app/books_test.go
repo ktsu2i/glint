@@ -226,8 +226,8 @@ func TestBookErrorsAreLocalized(t *testing.T) {
 
 	_, err := h.service.RenameBook(book.ID, "   ")
 	assert.EqualError(t, err, "Book names must be between 1 and 200 characters.")
-	_, err = h.service.AddBookmark(book.ID, 13, 12)
-	assert.EqualError(t, err, "The bookmark page is outside this document.")
+	_, err = h.service.AddBookmark(book.ID, BookmarkInput{PageNumber: 13, PageCount: 12})
+	assert.EqualError(t, err, "The bookmark is outside this book.")
 	_, err = h.service.SearchBook(book.ID, "   ")
 	assert.EqualError(t, err, "Search terms must be between 1 and 200 characters.")
 	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 2, Color: "yellow", Text: "text"})

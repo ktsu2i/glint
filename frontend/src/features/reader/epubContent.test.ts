@@ -3,16 +3,20 @@ import {
   epubStyles,
   flattenToc,
   guardEpubContent,
+  isCFIOnPage,
   loadEpubFontScale,
   loadEpubLayout,
   loadEpubPosition,
+  pageStartCFI,
+  rangeSpeechText,
   saveEpubFontScale,
   saveEpubLayout,
   saveEpubPosition,
+  sortEpubBookmarks,
   sortEpubHighlights,
   stripActiveContent,
 } from "./epubContent";
-import type { BookHighlight } from "../../shared/api/backend";
+import type { BookBookmark, BookHighlight } from "../../shared/api/backend";
 
 const section = `<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>s</title>
@@ -143,5 +147,65 @@ describe("layout", () => {
     expect(loadEpubLayout()).toBe("spread");
     saveEpubLayout("single");
     expect(loadEpubLayout()).toBe("single");
+  });
+});
+
+function makeBookmark(pageNumber: number, cfi: string): BookBookmark {
+  return { pageNumber, cfi, progress: 0, createdAt: "" };
+}
+
+describe("bookmarks", () => {
+  const page = "epubcfi(/6/4!/4,/2/1:0,/10/1:5)";
+
+  it("marks a page by where it starts", () => {
+    expect(pageStartCFI(page)).toBe("epubcfi(/6/4!/4/2/1:0)");
+  });
+
+  it("finds the bookmarks that fall on a page", () => {
+    expect(isCFIOnPage("epubcfi(/6/4!/4/2/1:0)", page)).toBe(true);
+    expect(isCFIOnPage("epubcfi(/6/4!/4/6/1:3)", page)).toBe(true);
+    // The next page starts where this one ends.
+    expect(isCFIOnPage("epubcfi(/6/4!/4/10/1:5)", page)).toBe(false);
+    expect(isCFIOnPage("epubcfi(/6/2!/4/6/1:3)", page)).toBe(false);
+    expect(isCFIOnPage("epubcfi(/6/6!/4/2/1:0)", page)).toBe(false);
+    expect(isCFIOnPage("epubcfi(/6/4!/4/2)", "epubcfi(/6/4!/4/2)")).toBe(true);
+    expect(isCFIOnPage("not a cfi", page)).toBe(false);
+  });
+
+  it("orders bookmarks as they appear in the book", () => {
+    const sorted = sortEpubBookmarks([
+      makeBookmark(2, "epubcfi(/6/4!/4/2/1:0)"),
+      makeBookmark(1, "epubcfi(/6/2!/4/10/1:0)"),
+      makeBookmark(1, "epubcfi(/6/2!/4/4/1:0)"),
+    ]);
+    expect(sorted.map((bookmark) => bookmark.cfi)).toEqual([
+      "epubcfi(/6/2!/4/4/1:0)",
+      "epubcfi(/6/2!/4/10/1:0)",
+      "epubcfi(/6/4!/4/2/1:0)",
+    ]);
+  });
+});
+
+describe("rangeSpeechText", () => {
+  it("reads what the page shows, a block to a line, without ruby readings", () => {
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML =
+      "<h1>Chapter   One</h1><p id='first'>The opening line\n  runs on.</p>" +
+      "<p><ruby>漢字<rt>かんじ</rt></ruby>を読む</p><p id='last'>Cut here</p><script>x()</script>";
+    const range = doc.createRange();
+    range.setStart((doc.querySelector("#first") as Element).firstChild as Node, 4);
+    range.setEnd((doc.querySelector("#last") as Element).firstChild as Node, 3);
+
+    expect(rangeSpeechText(range)).toBe("opening line runs on.\n漢字を読む\nCut");
+  });
+
+  it("reads a range inside one text node", () => {
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML = "<p>Only part of this</p>";
+    const text = (doc.querySelector("p") as Element).firstChild as Node;
+    const range = doc.createRange();
+    range.setStart(text, 5);
+    range.setEnd(text, 9);
+    expect(rangeSpeechText(range)).toBe("part");
   });
 });

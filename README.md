@@ -43,7 +43,8 @@ Your books and your reading positions stay on your machine.
 - Make the text larger or smaller, and switch between single pages and spreads, from the `Aa` menu. The text follows light or dark mode.
 - Select text to highlight it in yellow, green, pink, or purple, look back over every highlight in the highlights panel, and click a highlight to change its color or remove it, as with PDFs.
 - Reopen an EPUB on the page where you stopped.
-- Bookmarks and reading aloud are available for PDFs only for now.
+- Bookmark the page you are on; bookmarks are listed by chapter and marked on the progress slider.
+- Have the page read aloud, with automatic advance to the next page.
 
 ## Getting started
 

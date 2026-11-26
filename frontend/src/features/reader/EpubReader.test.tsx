@@ -3,9 +3,12 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const backend = vi.hoisted(() => ({
+  addBookmark: vi.fn(),
   addHighlight: vi.fn(),
   changeHighlightColor: vi.fn(),
+  listBookmarks: vi.fn(),
   listHighlights: vi.fn(),
+  removeBookmark: vi.fn(),
   removeHighlight: vi.fn(),
   searchBook: vi.fn(),
   setWindowControlsVisible: vi.fn(),
@@ -17,9 +20,12 @@ const foliate = vi.hoisted(() => ({
 }));
 
 vi.mock("../../shared/api/backend", () => ({
+  addBookmark: backend.addBookmark,
   addHighlight: backend.addHighlight,
   changeHighlightColor: backend.changeHighlightColor,
+  listBookmarks: backend.listBookmarks,
   listHighlights: backend.listHighlights,
+  removeBookmark: backend.removeBookmark,
   removeHighlight: backend.removeHighlight,
   searchBook: backend.searchBook,
   setWindowControlsVisible: backend.setWindowControlsVisible,
@@ -28,11 +34,11 @@ vi.mock("./foliate", () => ({ createFoliateView: foliate.createFoliateView }));
 
 import { EpubReader } from "./EpubReader";
 import { I18nProvider } from "../../shared/i18n/i18n";
-import type { BookFile, BookHighlight } from "../../shared/api/backend";
+import type { BookBookmark, BookFile, BookHighlight } from "../../shared/api/backend";
 
 /** Stands in for foliate-js's <foliate-view>, recording what the reader asks of it. */
 class FakeView extends HTMLElement {
-  renderer = Object.assign(document.createElement("div"), { setStyles: vi.fn() });
+  renderer = Object.assign(document.createElement("div"), { setStyles: vi.fn(), atEnd: false });
   book = {
     dir: "ltr",
     sections: [{}, {}, {}],
@@ -75,7 +81,12 @@ class FakeView extends HTMLElement {
     yield "done" as const;
   });
 
-  relocate(section: number, fraction: number, label = "Chapter One") {
+  relocate(
+    section: number,
+    fraction: number,
+    label = "Chapter One",
+    page: { cfi?: string; range?: Range } = {},
+  ) {
     act(() => {
       this.dispatchEvent(
         new CustomEvent("relocate", {
@@ -83,7 +94,8 @@ class FakeView extends HTMLElement {
             fraction,
             section: { current: section, total: 3 },
             tocItem: { label, href: "c1.xhtml" },
-            cfi: `epubcfi(/6/${(section + 1) * 2}!/4/2)`,
+            cfi: page.cfi ?? `epubcfi(/6/${(section + 1) * 2}!/4/2)`,
+            range: page.range,
           },
         }),
       );
@@ -142,6 +154,9 @@ describe("EpubReader", () => {
       return { view, drawHighlight: vi.fn() };
     });
     backend.listHighlights.mockReset().mockResolvedValue([]);
+    backend.listBookmarks.mockReset().mockResolvedValue([]);
+    backend.addBookmark.mockReset();
+    backend.removeBookmark.mockReset().mockResolvedValue(undefined);
     backend.addHighlight.mockReset();
     backend.changeHighlightColor.mockReset();
     backend.removeHighlight.mockReset().mockResolvedValue(undefined);
@@ -403,7 +418,143 @@ describe("EpubReader", () => {
     await waitFor(() => expect(view.drawn.has(saved.cfi)).toBe(false));
     expect(backend.removeHighlight).toHaveBeenCalledWith("epub-1", 3);
   });
+
+  it("bookmarks the page and lists the bookmark", async () => {
+    const pageCFI = "epubcfi(/6/4!/4,/2/1:0,/10/1:5)";
+    backend.addBookmark.mockImplementation(
+      async (_bookId: string, pageNumber: number, _count: number, place: BookBookmark) =>
+        bookmark({ pageNumber, cfi: place.cfi, progress: place.progress }),
+    );
+    const { view } = await openReader();
+    view.relocate(1, 0.42, "Chapter Two", { cfi: pageCFI });
+
+    fireEvent.click(screen.getByRole("button", { name: "このページをしおりに保存" }));
+    await waitFor(() =>
+      expect(backend.addBookmark).toHaveBeenCalledWith("epub-1", 2, 3, {
+        cfi: "epubcfi(/6/4!/4/2/1:0)",
+        progress: 0.42,
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "このページのしおりを削除" })).toBeTruthy();
+    const marker = screen.getByRole("button", { name: "セクション 2 · 42%のしおりへ移動" });
+    expect(marker.getAttribute("aria-current")).toBe("page");
+
+    // The page after it carries no bookmark.
+    view.relocate(1, 0.45, "Chapter Two", { cfi: "epubcfi(/6/4!/4,/10/1:5,/14/1:0)" });
+    expect(screen.getByRole("button", { name: "このページをしおりに保存" })).toBeTruthy();
+
+    view.relocate(1, 0.42, "Chapter Two", { cfi: pageCFI });
+    fireEvent.click(screen.getByRole("button", { name: "このページのしおりを削除" }));
+    await waitFor(() =>
+      expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", 2, "epubcfi(/6/4!/4/2/1:0)"),
+    );
+    expect(await screen.findByRole("button", { name: "このページをしおりに保存" })).toBeTruthy();
+  });
+
+  it("lists saved bookmarks and goes to them", async () => {
+    backend.listBookmarks.mockResolvedValue([
+      bookmark({ pageNumber: 1, cfi: "epubcfi(/6/2!/4/8/1:0)", progress: 0.1 }),
+      bookmark({ pageNumber: 3, cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.8 }),
+    ]);
+    const { view } = await openReader();
+    view.relocate(0, 0.05);
+
+    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
+    const links = await screen.findAllByRole("button", { name: /Chapter Oneのしおりへ移動/ });
+    expect(links.map((link) => link.textContent)).toEqual(["Chapter One10%", "Chapter One80%"]);
+    fireEvent.click(links[1] as HTMLElement);
+    expect(view.goTo).toHaveBeenCalledWith("epubcfi(/6/6!/4/2/1:0)");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Chapter Oneのしおりを削除" })[0]!);
+    await waitFor(() =>
+      expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", 1, "epubcfi(/6/2!/4/8/1:0)"),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /Chapter Oneのしおりへ移動/ })).toHaveLength(1),
+    );
+  });
+
+  it("reads each page aloud and turns to the next one", async () => {
+    const speech = stubSpeech();
+    const { view } = await openReader();
+    const doc = view.loadSection();
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    view.relocate(0, 0.1, "Chapter One", { range });
+
+    fireEvent.click(screen.getByRole("button", { name: "読み上げを開始" }));
+    await waitFor(() => expect(speech.spoken).toHaveLength(1));
+    expect(speech.spoken[0]).toMatchObject({ text: "Text\nNext", lang: "ja-JP" });
+
+    act(() => speech.spoken[0]!.finish());
+    expect(view.next).toHaveBeenCalledTimes(1);
+
+    // The last page ends the reading.
+    view.renderer.atEnd = true;
+    view.relocate(2, 1, "Chapter Two", { cfi: "epubcfi(/6/6!/4/2)", range });
+    await waitFor(() => expect(speech.spoken).toHaveLength(2));
+    act(() => speech.spoken[1]!.finish());
+    expect(view.next).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("button", { name: "読み上げを開始" })).toBeTruthy();
+  });
+
+  it("stops reading without turning the page", async () => {
+    const speech = stubSpeech();
+    const { view } = await openReader();
+    const doc = view.loadSection();
+    const range = doc.createRange();
+    range.selectNodeContents(doc.body);
+    view.relocate(0, 0.1, "Chapter One", { range });
+
+    fireEvent.click(screen.getByRole("button", { name: "読み上げを開始" }));
+    await waitFor(() => expect(speech.spoken).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "読み上げを停止" }));
+    expect(speech.cancel).toHaveBeenCalled();
+    act(() => speech.spoken[0]!.finish());
+    expect(view.next).not.toHaveBeenCalled();
+  });
 });
+
+function bookmark(overrides: Partial<BookBookmark>): BookBookmark {
+  return {
+    pageNumber: 1,
+    cfi: "epubcfi(/6/2!/4/2/1:0)",
+    progress: 0,
+    createdAt: "2026-11-26T00:00:00Z",
+    ...overrides,
+  };
+}
+
+type FakeUtterance = { text: string; lang: string; finish: () => void };
+
+/** Stands in for the system's speech, recording each utterance it is given. */
+function stubSpeech() {
+  const spoken: FakeUtterance[] = [];
+  const cancel = vi.fn();
+  vi.stubGlobal("speechSynthesis", {
+    speak: (utterance: FakeUtterance) => spoken.push(utterance),
+    cancel,
+    getVoices: () => [],
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      lang = "";
+      voice: unknown = null;
+      listeners = new Map<string, () => void>();
+      constructor(readonly text: string) {}
+      addEventListener(type: string, listener: () => void) {
+        this.listeners.set(type, listener);
+      }
+      finish() {
+        this.listeners.get("end")?.();
+      }
+    },
+  );
+  return { spoken, cancel };
+}
 
 function highlight(overrides: Partial<BookHighlight>): BookHighlight {
   return {

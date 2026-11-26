@@ -14,21 +14,20 @@ Glint は技術書を読むための macOS desktop app です。最終的には�
 
 - PDF / EPUB の import、表紙付きの本棚、名前の変更、削除、ファイルの再選択
 - PDF reader（単ページ / 見開き、左綴じ / 右綴じ、拡大・縮小、目次、page slider、しおり、読み上げ）
-- EPUB reader（foliate-js によるページ送り、片開き / 見開き、目次、本の中の検索、文字サイズ、ハイライト）
+- EPUB reader（foliate-js によるページ送り、片開き / 見開き、目次、本の中の検索、文字サイズ、ハイライト、しおり、読み上げ）
 - 本の中の検索と、本棚全体の横断検索
 - 外観（light / dark / system）と UI 言語（英語 / 日本語）の設定
 - Sparkle による自動アップデート
 
 まだないもの:
 
-- EPUB のしおり、読み上げ
 - local repository の接続と index
 - AI / LLM 機能。#23 で chat sidebar、LLM gateway、provider 設定を意図的にすべて削除しました。復活させる指示がない限り、chat UI や LLM 連携を作らないでください。
 
 ## ロードマップ
 
 1. 既存の reader / library の基盤を整える（index 単位の一般化、検索の FTS5 化など）。
-2. EPUB reader を作る（閲覧とハイライトは実装済み。しおり・読み上げは未対応）。
+2. EPUB reader を作る（閲覧、ハイライト、しおり、読み上げは実装済み）。
 3. local repository を 1つ接続し、repo files / symbols を index する。
 4. `この章を自分のrepoで見る` を押すと、LLM なしで関連する repo files / symbols を、選ばれた理由とともに表示する。
 5. 4 が LLM なしで成立した後に、book / repo citation 付きの説明生成を LLM の層として追加する。
@@ -54,7 +53,7 @@ frontend/src/shared        Wails binding のラッパー、i18n、共通 compone
 frontend/bindings           Wails が生成する binding（手で編集・commit しない）
 ```
 
-PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。EPUB の表示は frontend の foliate-js（commit を固定した git 依存）で行い、EPUB ファイルを `/book/<token>` から取得して `blob:` URL の iframe に描画します。ハイライトは `book_highlights` に、PDF はページ上の矩形（`rects`）、EPUB は CFI（`cfi`）のどちらか一方で位置を保存します。
+PDF のテキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。EPUB の解析、テキスト抽出、表紙抽出は Go で行います。EPUB の表示は frontend の foliate-js（commit を固定した git 依存）で行い、EPUB ファイルを `/book/<token>` から取得して `blob:` URL の iframe に描画します。ハイライトは `book_highlights` に、PDF はページ上の矩形（`rects`）、EPUB は CFI（`cfi`）のどちらか一方で位置を保存します。しおりは `book_bookmarks` に、PDF はページ番号だけで、EPUB はページの先頭の CFI と本全体での位置（`progress`）で保存します。
 
 ## アーキテクチャ
 

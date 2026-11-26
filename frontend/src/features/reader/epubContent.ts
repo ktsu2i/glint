@@ -1,6 +1,6 @@
-import { compare as compareCFI } from "foliate-js/epubcfi.js";
+import { collapse as collapseCFI, compare as compareCFI } from "foliate-js/epubcfi.js";
 import type { FoliateTocItem } from "foliate-js/view.js";
-import type { BookHighlight, HighlightColor } from "../../shared/api/backend";
+import type { BookBookmark, BookHighlight, HighlightColor } from "../../shared/api/backend";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;
@@ -221,6 +221,94 @@ export function sortEpubHighlights(highlights: BookHighlight[]): BookHighlight[]
       return a.id - b.id;
     }
   });
+}
+
+/** Orders bookmarks as they appear in the book. */
+export function sortEpubBookmarks(bookmarks: BookBookmark[]): BookBookmark[] {
+  return bookmarks.toSorted((a, b) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber;
+    }
+    try {
+      return compareCFI(a.cfi, b.cfi);
+    } catch {
+      return a.progress - b.progress;
+    }
+  });
+}
+
+/** The place a page starts, from the CFI of the range the page shows. */
+export function pageStartCFI(pageCFI: string): string {
+  try {
+    return collapseCFI(pageCFI);
+  } catch {
+    return pageCFI;
+  }
+}
+
+/**
+ * Whether a place falls on the page that shows the given range. The page ends
+ * where the next one starts, so that place belongs to the next page.
+ */
+export function isCFIOnPage(cfi: string, pageCFI: string): boolean {
+  try {
+    const start = collapseCFI(pageCFI);
+    const end = collapseCFI(pageCFI, true);
+    if (compareCFI(start, end) === 0) {
+      return compareCFI(cfi, start) === 0;
+    }
+    return compareCFI(start, cfi) <= 0 && compareCFI(cfi, end) < 0;
+  } catch {
+    return false;
+  }
+}
+
+const speechBlockSelector =
+  "p, div, li, dt, dd, h1, h2, h3, h4, h5, h6, blockquote, pre, figcaption, td, th, section, article, aside, header, footer";
+// Ruby annotations repeat the reading of the text they sit on.
+const speechSkipSelector = "rt, rp, script, style";
+
+function isDocument(node: Node): node is Document {
+  return node.nodeType === 9;
+}
+
+/**
+ * The text a range shows, for reading aloud. Blocks are kept on lines of
+ * their own, so a heading does not run into the paragraph after it.
+ */
+export function rangeSpeechText(range: Range): string {
+  const root = range.commonAncestorContainer;
+  const doc = root.ownerDocument ?? (isDocument(root) ? root : null);
+  if (!doc) {
+    return "";
+  }
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  let lastBlock: Element | null = null;
+  for (let node = root.nodeType === 3 ? root : walker.nextNode(); node; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (!parent || parent.closest(speechSkipSelector) || !range.intersectsNode(node)) {
+      continue;
+    }
+    const data = node.nodeValue ?? "";
+    const end = node === range.endContainer ? range.endOffset : data.length;
+    const start = node === range.startContainer ? range.startOffset : 0;
+    const block = parent.closest(speechBlockSelector);
+    if (lastBlock !== null && block !== lastBlock) {
+      parts.push("\n");
+    }
+    lastBlock = block;
+    // Line breaks in the markup are spaces on the page.
+    parts.push(data.slice(start, end).replaceAll(/\s+/g, " "));
+    if (root.nodeType === 3) {
+      break;
+    }
+  }
+  return parts
+    .join("")
+    .replaceAll(/[^\S\n]+/g, " ")
+    .replaceAll(/ *\n\s*/g, "\n")
+    .trim();
 }
 
 export type EpubLayout = "single" | "spread";

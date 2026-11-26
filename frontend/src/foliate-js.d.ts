@@ -24,6 +24,8 @@ declare module "foliate-js/view.js" {
     section?: { current: number; total: number };
     tocItem?: FoliateTocItem | null;
     cfi: string;
+    /** The text the page shows. */
+    range?: Range;
   };
 
   export type FoliateLoadDetail = {
@@ -43,6 +45,8 @@ declare module "foliate-js/view.js" {
 
   export type FoliatePaginator = HTMLElement & {
     setStyles(styles: string): void;
+    /** Whether the last page of the book is showing. */
+    readonly atEnd?: boolean;
   };
 
   export type FoliateAnnotation = { value: string };
@@ -111,4 +115,6 @@ declare module "foliate-js/overlayer.js" {
 declare module "foliate-js/epubcfi.js" {
   /** Orders two CFIs by their position in the book. */
   export function compare(a: string, b: string): number;
+  /** The start of a range CFI, or its end with toEnd. */
+  export function collapse(cfi: string, toEnd?: boolean): string;
 }

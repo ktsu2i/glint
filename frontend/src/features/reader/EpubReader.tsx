@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  BookmarkSimpleIcon,
+  BookmarksSimpleIcon,
   BookOpenIcon,
   CaretLeftIcon,
   CaretRightIcon,
@@ -9,6 +11,7 @@ import {
   MagnifyingGlassIcon,
   MinusIcon,
   PlusIcon,
+  SpeakerHighIcon,
   TextAaIcon,
   TrashIcon,
   XIcon,
@@ -16,12 +19,16 @@ import {
 import { useTranslation } from "react-i18next";
 import type { FoliateRelocateDetail, FoliateShowAnnotationDetail, View } from "foliate-js/view.js";
 import {
+  addBookmark,
   addHighlight,
   changeHighlightColor,
+  listBookmarks,
   listHighlights,
+  removeBookmark,
   removeHighlight,
   searchBook,
   setWindowControlsVisible,
+  type BookBookmark,
   type BookFile,
   type BookHighlight,
   type BookSearchResult,
@@ -37,12 +44,16 @@ import {
   epubStyles,
   flattenToc,
   guardEpubContent,
+  isCFIOnPage,
   loadEpubFontScale,
   loadEpubLayout,
   loadEpubPosition,
+  pageStartCFI,
+  rangeSpeechText,
   saveEpubFontScale,
   saveEpubLayout,
   saveEpubPosition,
+  sortEpubBookmarks,
   sortEpubHighlights,
   type EpubLayout,
   type EpubTheme,
@@ -50,8 +61,14 @@ import {
 } from "./epubContent";
 import { createFoliateView } from "./foliate";
 import { highlightColors } from "./highlights";
+import {
+  detectUtteranceLang,
+  isSpeechSupported,
+  pickVoiceForLang,
+  useSpeechVoices,
+} from "./speech";
 
-type ReaderPanel = "toc" | "search" | "highlights" | null;
+type ReaderPanel = "toc" | "search" | "bookmarks" | "highlights" | null;
 
 /** Where a floating toolbar points, in the reader's coordinates, with the reader's width. */
 type FloatingAnchor = { x: number; top: number; bottom: number; width: number };
@@ -66,6 +83,8 @@ type PendingSelection = FloatingAnchor & {
 type ActiveHighlight = FloatingAnchor & { id: number };
 
 type ReaderLocation = {
+  /** The range CFI of what the page shows. */
+  cfi: string;
   fraction: number;
   section: number;
   sectionCount: number;
@@ -83,6 +102,10 @@ type ReaderHandlers = {
 };
 
 type TurnDirection = "left" | "right" | "next" | "prev";
+
+function progressPercent(bookmark: BookBookmark): number {
+  return Math.round(bookmark.progress * 100);
+}
 
 // A trackpad swipe or a wheel turn longer than this turns one page.
 const wheelTurnThreshold = 60;
@@ -172,7 +195,7 @@ type EpubReaderProps = {
 };
 
 export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: EpubReaderProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const theme = useDocumentTheme();
   const [view, setView] = useState<View | null>(null);
   const [error, setError] = useState("");
@@ -194,9 +217,16 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const [highlightsLoaded, setHighlightsLoaded] = useState(false);
   const [highlightBusy, setHighlightBusy] = useState(false);
   const [highlightError, setHighlightError] = useState("");
-  const [highlightLabels, setHighlightLabels] = useState<Record<string, string>>({});
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
+  const [placeLabels, setPlaceLabels] = useState<Record<string, string>>({});
+  const [bookmarks, setBookmarks] = useState<BookBookmark[]>([]);
+  const [bookmarksLoaded, setBookmarksLoaded] = useState(false);
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
+  const [bookmarkError, setBookmarkError] = useState("");
+  const [isReadingAloud, setIsReadingAloud] = useState(false);
+  const speechSupported = isSpeechSupported();
+  const voices = useSpeechVoices(speechSupported);
 
   const readerRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -212,6 +242,8 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   // Listeners on the stage and inside each section are attached once, so they
   // call through this ref, which always holds the current handlers.
   const handlersRef = useRef<ReaderHandlers | null>(null);
+  // The text on the page, read aloud from here.
+  const pageRangeRef = useRef<Range | null>(null);
 
   useEffect(() => {
     pageChangeCallbackRef.current = onPageChange;
@@ -233,7 +265,9 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       const sectionCount = detail.section?.total ?? 0;
       setPendingSelection(null);
       setActiveHighlight(null);
+      pageRangeRef.current = detail.range ?? null;
       setLocation((previous) => ({
+        cfi: detail.cfi,
         // The first report of a section can come before its pages are counted.
         fraction: Number.isFinite(detail.fraction) ? detail.fraction : (previous?.fraction ?? 0),
         section,
@@ -369,6 +403,30 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
     };
   }, [book.id]);
 
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const saved = sortEpubBookmarks(await listBookmarks(book.id));
+        if (active) {
+          setBookmarks(saved);
+          setBookmarksLoaded(true);
+        }
+      } catch (reason: unknown) {
+        if (active) {
+          setBookmarksLoaded(true);
+          setBookmarkError(
+            reason instanceof Error ? reason.message : translateRef.current("error.loadBookmarks"),
+          );
+        }
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [book.id]);
+
   // Highlights that arrive after the first section was drawn are added to it now.
   useEffect(() => {
     if (!view || !highlightsLoaded) {
@@ -381,29 +439,89 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
     }
   }, [view, highlightsLoaded]);
 
-  // The list names each highlight after the table of contents entry it falls under.
+  // The lists name each highlight and bookmark after the table of contents
+  // entry it falls under.
   useEffect(() => {
-    if (openPanel !== "highlights" || !view) {
+    if ((openPanel !== "highlights" && openPanel !== "bookmarks") || !view) {
       return;
     }
     let active = true;
-    const missing = highlights.filter((highlight) => !(highlight.cfi in highlightLabels));
+    const places = openPanel === "highlights" ? highlights : bookmarks;
+    const missing = [...new Set(places.map((place) => place.cfi))].filter(
+      (cfi) => !(cfi in placeLabels),
+    );
     const label = async () => {
       const found: Record<string, string> = {};
-      for (const highlight of missing) {
+      for (const cfi of missing) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- 1件ずつ section を読み込むので順番に行う。
-        const item = await view.getTOCItemOf(highlight.cfi).catch(() => null);
-        found[highlight.cfi] = (item?.label ?? "").trim();
+        const item = await view.getTOCItemOf(cfi).catch(() => null);
+        found[cfi] = (item?.label ?? "").trim();
       }
       if (active && missing.length > 0) {
-        setHighlightLabels((current) => ({ ...current, ...found }));
+        setPlaceLabels((current) => ({ ...current, ...found }));
       }
     };
     void label();
     return () => {
       active = false;
     };
-  }, [openPanel, view, highlights, highlightLabels]);
+  }, [openPanel, view, highlights, bookmarks, placeLabels]);
+
+  // Reads the page aloud, then turns to the next one and reads on.
+  const pageCFI = location?.cfi ?? "";
+  useEffect(() => {
+    if (!speechSupported || !isReadingAloud || !view || !pageCFI) {
+      return;
+    }
+    let cancelled = false;
+    const synth = window.speechSynthesis;
+    const readOn = () => {
+      if (cancelled) {
+        return;
+      }
+      if (view.renderer?.atEnd === true) {
+        setIsReadingAloud(false);
+        return;
+      }
+      view.next().catch(() => setIsReadingAloud(false));
+    };
+    const range = pageRangeRef.current;
+    const text = range ? rangeSpeechText(range) : "";
+    if (!text) {
+      // A page with only pictures has nothing to read.
+      readOn();
+      return () => {
+        cancelled = true;
+      };
+    }
+    const lang = detectUtteranceLang(text, i18n.language);
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    const voice = pickVoiceForLang(voices, lang);
+    if (voice) {
+      utterance.voice = voice;
+    }
+    utterance.addEventListener("end", readOn);
+    utterance.addEventListener("error", () => {
+      if (!cancelled) {
+        setIsReadingAloud(false);
+      }
+    });
+    synth.cancel();
+    synth.speak(utterance);
+    return () => {
+      // Cancelling ends the utterance, which must not turn the page.
+      cancelled = true;
+      synth.cancel();
+    };
+  }, [i18n.language, isReadingAloud, pageCFI, speechSupported, view, voices]);
+
+  useEffect(() => {
+    if (!speechSupported) {
+      return;
+    }
+    return () => window.speechSynthesis.cancel();
+  }, [speechSupported]);
 
   const toggleChrome = useCallback(() => {
     if (openPanel || isViewMenuOpen) {
@@ -704,6 +822,72 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
     }
   }
 
+  const pageBookmarks = pageCFI
+    ? bookmarks.filter((bookmark) => isCFIOnPage(bookmark.cfi, pageCFI))
+    : [];
+  const pageBookmarked = pageBookmarks.length > 0;
+
+  async function togglePageBookmark() {
+    if (!location || bookmarkBusy) {
+      return;
+    }
+    setBookmarkBusy(true);
+    setBookmarkError("");
+    try {
+      if (pageBookmarked) {
+        await Promise.all(
+          pageBookmarks.map((bookmark) =>
+            removeBookmark(book.id, bookmark.pageNumber, bookmark.cfi),
+          ),
+        );
+        setBookmarks((current) => current.filter((bookmark) => !pageBookmarks.includes(bookmark)));
+      } else {
+        const saved = await addBookmark(
+          book.id,
+          location.section,
+          Math.max(location.section, location.sectionCount),
+          {
+            cfi: pageStartCFI(location.cfi),
+            progress: Math.min(1, Math.max(0, location.fraction)),
+          },
+        );
+        setBookmarks((current) =>
+          sortEpubBookmarks([...current.filter((bookmark) => bookmark.cfi !== saved.cfi), saved]),
+        );
+      }
+    } catch (reason: unknown) {
+      setBookmarkError(reason instanceof Error ? reason.message : t("error.saveBookmark"));
+    } finally {
+      setBookmarkBusy(false);
+    }
+  }
+
+  async function deleteBookmark(bookmark: BookBookmark) {
+    if (bookmarkBusy) {
+      return;
+    }
+    setBookmarkBusy(true);
+    setBookmarkError("");
+    try {
+      await removeBookmark(book.id, bookmark.pageNumber, bookmark.cfi);
+      setBookmarks((current) => current.filter((entry) => entry !== bookmark));
+    } catch (reason: unknown) {
+      setBookmarkError(reason instanceof Error ? reason.message : t("error.saveBookmark"));
+    } finally {
+      setBookmarkBusy(false);
+    }
+  }
+
+  function toggleReadAloud() {
+    if (!speechSupported) {
+      return;
+    }
+    if (isReadingAloud) {
+      window.speechSynthesis.cancel();
+    }
+    setIsReadingAloud(!isReadingAloud);
+  }
+
   function changeLayout(next: EpubLayout) {
     setLayout(next);
     saveEpubLayout(next);
@@ -730,12 +914,14 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       ? t("reader.toc")
       : openPanel === "highlights"
         ? t("reader.highlights")
-        : t("reader.textSearch");
+        : openPanel === "bookmarks"
+          ? t("reader.bookmarks")
+          : t("reader.textSearch");
   const selectedHighlight = activeHighlight
     ? highlights.find((entry) => entry.id === activeHighlight.id)
     : undefined;
-  const highlightPlace = (highlight: BookHighlight) =>
-    highlightLabels[highlight.cfi] || t("reader.sectionNumber", { number: highlight.pageNumber });
+  const placeName = (place: { cfi: string; pageNumber: number }) =>
+    placeLabels[place.cfi] || t("reader.sectionNumber", { number: place.pageNumber });
   const isRtl = view?.book?.dir === "rtl";
   const sectionLabel = location?.tocLabel ?? "";
 
@@ -797,6 +983,16 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
           </ToolButton>
           <ToolButton
             label={
+              openPanel === "bookmarks" ? t("reader.closeBookmarks") : t("reader.openBookmarks")
+            }
+            className={openPanel === "bookmarks" ? "is-active" : ""}
+            onClick={() => setOpenPanel((panel) => (panel === "bookmarks" ? null : "bookmarks"))}
+            disabled={!isReady}
+          >
+            <BookmarksSimpleIcon size={17} weight="regular" />
+          </ToolButton>
+          <ToolButton
+            label={
               openPanel === "highlights" ? t("reader.closeHighlights") : t("reader.openHighlights")
             }
             className={openPanel === "highlights" ? "is-active" : ""}
@@ -811,6 +1007,30 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
           {sectionLabel && <span>{sectionLabel}</span>}
         </div>
         <div className="reader-topbar-end">
+          <ToolButton
+            label={
+              speechSupported
+                ? isReadingAloud
+                  ? t("reader.stopReadAloud")
+                  : t("reader.startReadAloud")
+                : t("reader.readAloudUnsupported")
+            }
+            className={isReadingAloud ? "is-active is-reading" : ""}
+            disabled={!isReady || !speechSupported}
+            onClick={toggleReadAloud}
+          >
+            <SpeakerHighIcon size={17} weight={isReadingAloud ? "fill" : "regular"} />
+          </ToolButton>
+          <ToolButton
+            label={pageBookmarked ? t("reader.removeBookmarkHere") : t("reader.saveBookmarkHere")}
+            className={
+              pageBookmarked ? "is-active reader-bookmark-toggle" : "reader-bookmark-toggle"
+            }
+            disabled={!isReady || bookmarkBusy}
+            onClick={() => void togglePageBookmark()}
+          >
+            <BookmarkSimpleIcon size={17} weight={pageBookmarked ? "fill" : "regular"} />
+          </ToolButton>
           <ToolButton
             label={t("reader.view")}
             className={isViewMenuOpen ? "is-active" : ""}
@@ -887,9 +1107,9 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
         </div>
       )}
 
-      {highlightError && (
+      {(bookmarkError || highlightError) && (
         <div className="reader-bookmark-error" role="alert">
-          {highlightError}
+          {bookmarkError || highlightError}
         </div>
       )}
 
@@ -962,6 +1182,9 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
             {openPanel === "highlights" && highlights.length > 0 && (
               <strong className="reader-sheet-count">{highlights.length}</strong>
             )}
+            {openPanel === "bookmarks" && bookmarks.length > 0 && (
+              <strong className="reader-sheet-count">{bookmarks.length}</strong>
+            )}
             <button
               type="button"
               className="glass-button reader-sheet-close"
@@ -995,6 +1218,48 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
               )}
             </div>
           )}
+          {openPanel === "bookmarks" && (
+            <div className="reader-sheet-scroll">
+              {bookmarksLoaded && bookmarks.length === 0 ? (
+                <p className={`reader-sheet-message${bookmarkError ? " is-error" : ""}`}>
+                  {bookmarkError || t("reader.noEpubBookmarks")}
+                </p>
+              ) : bookmarksLoaded ? (
+                <ol className="reader-bookmark-list">
+                  {bookmarks.map((bookmark) => (
+                    <li
+                      key={bookmark.cfi}
+                      className={pageBookmarks.includes(bookmark) ? "is-active" : ""}
+                    >
+                      <button
+                        type="button"
+                        className="reader-bookmark-link"
+                        aria-label={t("reader.goToBookmarkIn", { place: placeName(bookmark) })}
+                        onClick={() => void view?.goTo(bookmark.cfi)}
+                      >
+                        <BookmarkSimpleIcon size={15} weight="fill" aria-hidden="true" />
+                        <span>
+                          <strong>{placeName(bookmark)}</strong>
+                          <small>{progressPercent(bookmark)}%</small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="reader-bookmark-remove"
+                        aria-label={t("reader.removeBookmarkIn", { place: placeName(bookmark) })}
+                        disabled={bookmarkBusy}
+                        onClick={() => void deleteBookmark(bookmark)}
+                      >
+                        <XIcon size={12} weight="bold" aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="reader-sheet-message">{t("reader.loadingBookmarks")}</p>
+              )}
+            </div>
+          )}
           {openPanel === "highlights" && (
             <div className="reader-sheet-scroll">
               {highlightsLoaded && highlights.length === 0 ? (
@@ -1012,18 +1277,18 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
                         type="button"
                         className="reader-highlight-link"
                         aria-label={t("reader.goToHighlightIn", {
-                          place: highlightPlace(highlight),
+                          place: placeName(highlight),
                         })}
                         onClick={() => void view?.goTo(highlight.cfi)}
                       >
-                        <small>{highlightPlace(highlight)}</small>
+                        <small>{placeName(highlight)}</small>
                         <span>{highlight.text}</span>
                       </button>
                       <button
                         type="button"
                         className="reader-bookmark-remove"
                         aria-label={t("reader.removeHighlightIn", {
-                          place: highlightPlace(highlight),
+                          place: placeName(highlight),
                         })}
                         disabled={highlightBusy}
                         onClick={() => void deleteHighlight(highlight.id)}
@@ -1161,6 +1426,27 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
                 void view?.goToFraction(Number(event.target.value) / sliderSteps)
               }
             />
+            <div className="reader-slider-bookmarks">
+              {isReady &&
+                bookmarks.map((bookmark) => {
+                  const isCurrent = pageBookmarks.includes(bookmark);
+                  const place = `${placeName(bookmark)} · ${progressPercent(bookmark)}%`;
+                  return (
+                    <button
+                      key={bookmark.cfi}
+                      type="button"
+                      className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
+                      style={{ "--bookmark-position": `${bookmark.progress * 100}%` }}
+                      aria-label={t("reader.goToBookmarkIn", { place })}
+                      aria-current={isCurrent ? "page" : undefined}
+                      data-tooltip={place}
+                      onClick={() => void view?.goTo(bookmark.cfi)}
+                    >
+                      <span className="reader-slider-bookmark-dot" aria-hidden="true" />
+                    </button>
+                  );
+                })}
+            </div>
           </div>
         </div>
       </footer>
