@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.5.0](https://github.com/ktsu2i/glint/compare/v0.4.0...v0.5.0) - 2026-11-26
+
+### New Features
+- feat(reader): highlight selected text and review highlights in a panel by @ktsu2i in https://github.com/ktsu2i/glint/pull/50
+- feat: remember the main window's size, position and state by @ktsu2i in https://github.com/ktsu2i/glint/pull/52
+- feat: read EPUB books with foliate-js by @ktsu2i in https://github.com/ktsu2i/glint/pull/54
+- feat: switch EPUB spreads and highlight EPUB text by @ktsu2i in https://github.com/ktsu2i/glint/pull/55
+- feat: bookmark EPUB pages and read them aloud by @ktsu2i in https://github.com/ktsu2i/glint/pull/57
+### Other Changes
+- fix: keep the full-screen title bar as thin as a plain title bar by @ktsu2i in https://github.com/ktsu2i/glint/pull/53
+- docs: restructure AGENTS.md around commands and boundaries by @ktsu2i in https://github.com/ktsu2i/glint/pull/58
+
 ## [v0.4.0](https://github.com/ktsu2i/glint/compare/v0.3.0...v0.4.0) - 2026-11-25
 
 ### New Features
