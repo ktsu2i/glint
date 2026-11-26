@@ -1,27 +1,27 @@
 # AGENTS.md
 
-Glint で作業するエージェント向けのガイドです。人向けの説明（機能一覧、インストール、リリース手順）は `README.ja.md` にあり、ここでは重ねて書きません。
+A guide for agents working on Glint. Human-facing docs (feature list, installation, release process) live in `README.md` / `README.ja.md` and are not repeated here.
 
-## プロジェクト概要
+## Project overview
 
-Glint は技術書（PDF / EPUB）を読むための macOS desktop app です。中心はチャットではなく読書で、最終的には読んでいる章・節・コードブロックをユーザーのローカルリポジトリに接続し、本とコードの両方に根拠を示しながら理解を助けること（book-to-repo mapping）を目指しています。
+Glint is a macOS desktop app for reading technical books (PDF / EPUB). Reading, not chat, is the core. The long-term goal is book-to-repo mapping: connecting the chapter, section, or code block being read to the user's local repository, and helping them understand it with evidence from both the book and the code.
 
-- 実装済み: PDF / EPUB の reader と本棚、本の中と本棚全体の全文検索、ハイライト、しおり、読み上げ、外観と UI 言語の設定、Sparkle による自動アップデート。詳細は README を参照してください。
-- 未実装: local repository の接続と index、book-to-repo mapping。
-- AI / LLM 機能は #23 で chat sidebar、LLM gateway、provider 設定ごと意図的に削除しました。指示がない限り、chat UI や LLM 連携を作らないでください。
+- Implemented: PDF / EPUB readers and the library, full-text search within a book and across the library, highlights, bookmarks, read aloud, appearance and UI language settings, and auto-update via Sparkle. See the README for details.
+- Not implemented yet: connecting and indexing a local repository, book-to-repo mapping.
+- AI / LLM features were intentionally removed in #23, along with the chat sidebar, LLM gateway, and provider settings. Do not build chat UI or LLM integrations unless explicitly asked.
 
-## コマンド
+## Commands
 
 ```bash
 # Go
 go test ./...
 golangci-lint run ./...
 golangci-lint fmt ./...
-go tool sqlc generate                     # queries / migrations を変更したとき
-go tool sqlc diff                         # 生成コードが最新か確認
-go tool wails3 generate bindings -ts -i   # Go service の公開 method を変更したとき
+go tool sqlc generate                     # after changing queries / migrations
+go tool sqlc diff                         # check that generated code is up to date
+go tool wails3 generate bindings -ts -i   # after changing exported methods of a Go service
 
-# frontend（pnpm のみ。npm は意図的に失敗する）
+# Frontend (pnpm only; npm fails on purpose)
 cd frontend
 pnpm install --frozen-lockfile
 pnpm test
@@ -30,177 +30,177 @@ pnpm lint:fix
 pnpm format
 pnpm run build
 
-# アプリ
-go tool wails3 dev     # live reload 付きで起動
-go tool wails3 build   # build/bin/Glint.app を作る
+# App
+go tool wails3 dev     # run with live reload
+go tool wails3 build   # build build/bin/Glint.app
 ```
 
-- `frontend/bindings` は生成物で commit しません。新しい checkout では、frontend の test / check の前に bindings を生成してください。
-- CI（Linux、`CGO_ENABLED=0`）は `-tags server` を付けて Go の test、lint、bindings 生成を行います。macOS の手元では tag は不要です。
+- `frontend/bindings` is generated and not committed. In a fresh checkout, generate bindings before running frontend tests or checks.
+- CI (Linux, `CGO_ENABLED=0`) runs Go tests, lint, and bindings generation with `-tags server`. The tag is not needed locally on macOS.
 
-### 作業を終える前に
+### Before you finish
 
-変更した範囲に応じて、CI と同じ検査を通してください。
+Run the same checks as CI for whatever you changed.
 
-- Go を変更した: `go test ./...`、`golangci-lint run ./...`、`golangci-lint fmt ./...`
-- query / migration を変更した: `go tool sqlc generate` のうえで `go tool sqlc diff`
-- Go service の公開 method を変更した: bindings を再生成してから frontend の検査
-- frontend を変更した: `pnpm check`、`pnpm test`、`pnpm run build`
-- `.github/workflows` を変更した: `actionlint`、`jactionlint`、`ghalint run`、`zizmor .`（版は `aqua.yaml` で固定）
+- Go code: `go test ./...`, `golangci-lint run ./...`, `golangci-lint fmt ./...`
+- Queries / migrations: `go tool sqlc generate`, then `go tool sqlc diff`
+- Exported methods of a Go service: regenerate bindings, then run the frontend checks
+- Frontend: `pnpm check`, `pnpm test`, `pnpm run build`
+- `.github/workflows`: `actionlint`, `jactionlint`, `ghalint run`, `zizmor .` (versions pinned in `aqua.yaml`)
 
-## 作業方針
+## Working conventions
 
-- ユーザーとは日本語でやり取りしてください。技術用語、API 名、型名、ファイル名、識別子は英語のままで構いません。
-- 明示的な変更依頼がある場合は、提案で止まらず実装まで進めてください。
-- 依頼された範囲に絞り、不要な抽象化や大きなリファクタリングは避けてください。
-- コードや設定ファイルは既存の style に合わせてください。
-- Markdown ドキュメントは日本語で書きます。README を変更するときは `README.md`（英語）と `README.ja.md`（日本語）の両方を更新してください。
+- Communicate with the user in Japanese. Technical terms, API names, type names, file names, and identifiers can stay in English.
+- When the user explicitly asks for a change, implement it instead of stopping at a proposal.
+- Stay within the requested scope. Avoid unnecessary abstractions and large refactors.
+- Match the existing style of code and config files.
+- Write Markdown docs in Japanese, except this file. When changing the README, update both `README.md` (English) and `README.ja.md` (Japanese).
 
-### Git / PR
+### Git / PRs
 
-- branch は `feat/...`、`fix/...`、`docs/...`、`chore/...` の形で切り、`main` に直接 commit しません。
-- コミットメッセージは Conventional Commits（`feat:`、`fix:`、`docs:`、`refactor:`、`chore:` など）で、英語で書きます。
-- PR のタイトルと本文も英語で書きます。リリースは tagpr が管理するので、version や `CHANGELOG.md` を手で変更しないでください。
+- Work on branches named `feat/...`, `fix/...`, `docs/...`, `chore/...`. Do not commit directly to `main`.
+- Write commit messages in English using Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, etc.).
+- Write PR titles and descriptions in English. Releases are managed by tagpr, so do not edit the version or `CHANGELOG.md` by hand.
 
-### 境界
+### Boundaries
 
-- **必ず行う:** 変更範囲に応じた上記の検査、新しい usecase と store への test、schema 変更時の新しい連番 migration。
-- **事前に確認する:** 新しい依存の追加、既存 table の作り直しを伴う schema 変更、CSP やセキュリティ設定の変更、CI / release workflow の変更。
-- **しない:** 生成物（`internal/library/librarydb`、`frontend/bindings`）の手編集、既存 migration の編集、`docs/`（gitignore 済みのローカル専用。設計メモとして参照するのは可）の commit、秘密情報の commit、ユーザーが作った可能性のある変更を勝手に戻すこと。
+- **Always:** run the checks above for what you changed, add tests for new usecases and store code, add a new numbered migration for schema changes.
+- **Ask first:** adding dependencies, schema changes that rebuild existing tables, changing the CSP or other security settings, changing CI / release workflows.
+- **Never:** hand-edit generated code (`internal/library/librarydb`, `frontend/bindings`), edit existing migrations, commit `docs/` (gitignored and local-only; reading it as design notes is fine), commit secrets, or revert changes the user may have made.
 
-## リポジトリ構成
+## Repository layout
 
 ```text
-main.go                    Wails app の起動、依存の組み立て、service の bind
-internal/app               Wails に bind する service（BooksService、SettingsService）、DTO、native dialog、エラーの i18n
-internal/books             本の usecase（import、open、relink、検索、表紙、ハイライト、しおり）と PDF / EPUB の解析
-internal/library           SQLite store（books、読書位置、book segments と全文検索、ハイライト、しおり、app settings）
-internal/library/queries   sqlc の query（`*.sql`）
-internal/library/librarydb sqlc が生成する Go コード（手で編集しない）
-internal/settings          外観と言語の設定
-internal/assetserver       ローカルの本・表紙を token 付き URL で配信する
-internal/sqlite            embed した SQL migration の適用
-internal/update            Sparkle（`darwin` かつ `sparkle` build tag のときだけ有効）
-migrations/                連番の SQL migration
-frontend/src/features      library / reader / settings の UI
-frontend/src/shared        Wails binding のラッパー（`api`）、i18n、共通 component
-frontend/bindings          Wails が生成する binding（手で編集・commit しない）
-frontend/testdata          commit 可能な生成 PDF fixture
+main.go                    Starts the Wails app, wires dependencies, binds services
+internal/app               Services bound to Wails (BooksService, SettingsService), DTOs, native dialogs, error i18n
+internal/books             Book usecases (import, open, relink, search, covers, highlights, bookmarks) and PDF / EPUB parsing
+internal/library           SQLite store (books, reading position, book segments and full-text search, highlights, bookmarks, app settings)
+internal/library/queries   sqlc queries (`*.sql`)
+internal/library/librarydb Go code generated by sqlc (do not edit by hand)
+internal/settings          Appearance and language settings
+internal/assetserver       Serves local books and covers through tokenized URLs
+internal/sqlite            Applies embedded SQL migrations
+internal/update            Sparkle (only enabled on `darwin` with the `sparkle` build tag)
+migrations/                Numbered SQL migrations
+frontend/src/features      library / reader / settings UI
+frontend/src/shared        Wails binding wrappers (`api`), i18n, shared components
+frontend/bindings          Bindings generated by Wails (do not edit or commit)
+frontend/testdata          Committable generated PDF fixture
 ```
 
-### 本のデータの流れ
+### How book data flows
 
-- PDF: テキスト抽出と表紙生成は frontend の PDF.js で行い、Wails 経由で backend に保存します。
-- EPUB: 解析、テキスト抽出、表紙抽出は Go で行います。表示は frontend の foliate-js（commit を固定した git 依存）で行い、EPUB ファイルを `/book/<token>` から取得して `blob:` URL の iframe に描画します。
-- 検索用のテキストは `book_segments`（PDF はページ、EPUB は section 単位）に保存し、FTS5（trigram）の `book_segments_fts` で検索します。
-- ハイライトは `book_highlights` に、PDF はページ上の矩形（`rects`）、EPUB は CFI（`cfi`）のどちらか一方で位置を保存します。
-- しおりは `book_bookmarks` に、PDF はページ番号、EPUB はページ先頭の CFI と本全体での位置（`progress`）で保存します。
+- PDF: text extraction and cover generation run in the frontend with PDF.js, and the results are saved to the backend through Wails.
+- EPUB: parsing, text extraction, and cover extraction run in Go. Rendering uses foliate-js in the frontend (a git dependency pinned to a commit), which fetches the EPUB from `/book/<token>` and renders it in a `blob:` URL iframe.
+- Searchable text is stored in `book_segments` (pages for PDF, sections for EPUB) and searched through the FTS5 (trigram) table `book_segments_fts`.
+- Highlights are stored in `book_highlights`, located either by on-page rectangles (`rects`) for PDF or by CFI (`cfi`) for EPUB, never both.
+- Bookmarks are stored in `book_bookmarks`: page number for PDF; CFI of the page start plus position within the whole book (`progress`) for EPUB.
 
-## アーキテクチャ
+## Architecture
 
-Go の backend は機能単位の package で縦に分け、Wails との境界だけを `internal/app` に置きます。Web の layered architecture に当てはめると、`internal/app` が handler、機能 package が usecase と model、`internal/library` が repository に当たります。
+The Go backend is split vertically into feature packages, with the Wails boundary isolated in `internal/app`. In layered-architecture terms, `internal/app` is the handler, feature packages are usecases and models, and `internal/library` is the repository.
 
-### 依存の向き
+### Dependency direction
 
 ```text
-main.go ─→ internal/app ─→ 機能 package（books、settings、将来の repoindex / mapping）─→ internal/library
+main.go ─→ internal/app ─→ feature packages (books, settings, future repoindex / mapping) ─→ internal/library
                 │                                                                          └→ internal/sqlite
-                └→ internal/assetserver（platform adapter）
+                └→ internal/assetserver (platform adapter)
 ```
 
-- 逆向きの import は禁止です。機能 package から `internal/app` を、`internal/library` から機能 package を import しないでください。
-- 機能 package 同士の依存は最小限にし、循環させないでください。
-- Wails v3 の `application` / `events` を import してよいのは `main.go` と `internal/app` だけです。`main.go` はアプリ・window・service の組み立てと lifecycle 管理を行います。
+- Reverse imports are forbidden. Feature packages must not import `internal/app`, and `internal/library` must not import feature packages.
+- Keep dependencies between feature packages minimal and never circular.
+- Only `main.go` and `internal/app` may import Wails v3 `application` / `events`. `main.go` assembles the app, windows, and services, and manages their lifecycle.
 
-### `internal/app`（Wails の bind 層）
+### `internal/app` (Wails binding layer)
 
-bind した struct の exported method は、すべて TypeScript の binding として frontend に公開されます。
+Every exported method of a bound struct is exposed to the frontend as a TypeScript binding.
 
-- **行うこと:** native dialog（ファイル選択、確認）、エラーをユーザーの言語に訳すこと、DTO への変換、asset server への URL 登録、Wails の events の送信。
-- **行わないこと:** 業務ロジック、SQL、ファイルの解析。処理は機能 package の usecase に任せます。
-- 返り値は `internal/app` に定義した DTO（json tag 付き）にし、domain の型（`library.Book` など）を直接返しません。
-- frontend に公開しない method は unexported にします。Wails の context は共通の `base` が `ServiceStartup`（v3 が bindings から除外する lifecycle hook）で受け取ります。それ以外の内部処理を exported method にしないでください。
-- dialog を開く method は、起動前に呼ばれたら `errNotReady` を返します。
-- エラーの翻訳は `errors.Is` で sentinel error を判定し、英語と日本語の両方を書きます（`localizer`）。翻訳しないエラーはそのまま返します。
-- frontend から受け取った値は信用せず、usecase 側で検証します。data URL のような転送用の形式は `internal/app` で decode してから usecase に渡します。
+- **Does:** native dialogs (file pickers, confirmations), translating errors into the user's language, converting to DTOs, registering URLs with the asset server, emitting Wails events.
+- **Does not:** business logic, SQL, file parsing. Delegate those to feature package usecases.
+- Return DTOs defined in `internal/app` (with json tags), never domain types such as `library.Book`.
+- Keep methods not meant for the frontend unexported. The Wails context is received by the shared `base` in `ServiceStartup` (a lifecycle hook that v3 excludes from bindings). Do not export any other internal method.
+- Methods that open dialogs return `errNotReady` when called before startup.
+- Translate errors by matching sentinel errors with `errors.Is`, and write both English and Japanese (`localizer`). Return untranslated errors as-is.
+- Do not trust values from the frontend; validate them in the usecase. Decode transport formats such as data URLs in `internal/app` before passing them to the usecase.
 
-### 機能 package（usecase と domain）
+### Feature packages (usecases and domain)
 
-`internal/books`、`internal/settings`、将来の repo index や mapping が当たります。
+`internal/books`, `internal/settings`, and the future repo index and mapping packages.
 
-- Wails、`internal/app`、`internal/assetserver` に依存しません。
-- method は `ctx context.Context` を第 1 引数に取り、context を struct に保持しません。
-- 入力は path や ID などの値で受け取ります。dialog やユーザーへの確認は `internal/app` で済ませ、結果だけを受け取ります。
-- 返り値は domain の型です。ユーザーが対処できる失敗は package の sentinel error（`var ErrXxx = errors.New(...)`）で返し、`fmt.Errorf("...: %w", err)` で包んでも `errors.Is` で判定できるようにします。
-- UI に表示する文言（日本語 / 英語）を持ちません。
+- Do not depend on Wails, `internal/app`, or `internal/assetserver`.
+- Take `ctx context.Context` as the first argument. Do not store a context in a struct.
+- Accept plain values such as paths and IDs. Dialogs and user confirmations happen in `internal/app`; usecases only receive the result.
+- Return domain types. Report failures the user can act on with package-level sentinel errors (`var ErrXxx = errors.New(...)`), so they still match with `errors.Is` after wrapping with `fmt.Errorf("...: %w", err)`.
+- Hold no user-facing strings (Japanese or English).
 
-### `internal/library`（store）
+### `internal/library` (store)
 
-- SQLite への読み書きだけを行います。query は sqlc で生成し、条件の数が変わる検索のような動的な query だけ `database/sql` で手書きします（例: `segments.go` の `matchingSegments`）。
-- 入力の形式的な検証（長さ、範囲）は store でも行い、sentinel error を返します。
+- Only reads and writes SQLite. Queries are generated by sqlc; hand-write only dynamic queries with `database/sql`, such as a search whose number of conditions varies (e.g. `matchingSegments` in `segments.go`).
+- Also validate input format (length, range) in the store and return sentinel errors.
 
-### interface
+### Interfaces
 
-- interface は使う側の package に、必要になったときだけ定義します。repository ごとに interface を用意しないでください。
-- 定義するのは、test で fake に差し替えたいもの（native dialog、外部プロセス、時計など）や、実装を切り替える必要があるものに限ります。例: `internal/app` の `dialogs`、`internal/settings` の `SettingStore`。
-- LLM provider、embedding provider、vector store を導入する場合は、retrieval logic から interface 越しに使い、具体的な実装に直接結合しないでください。
+- Define interfaces in the consuming package, and only when needed. Do not create an interface per repository.
+- Limit them to things you want to fake in tests (native dialogs, external processes, clocks, etc.) or implementations that need to be swappable. Examples: `dialogs` in `internal/app`, `SettingStore` in `internal/settings`.
+- If LLM providers, embedding providers, or vector stores are introduced, use them from retrieval logic through interfaces, never coupled to a concrete implementation.
 
-### 時間のかかる処理
+### Long-running work
 
-repo の index のように時間のかかる処理は、次のように作ります。
+Build long-running work such as repo indexing as follows:
 
-- usecase は `ctx` を受け取り、cancel されたら途中で止まるようにします。
-- 起動と終了は service の `ServiceStartup` / `ServiceShutdown` と `main.go` の `OnShutdown` から管理し、終了時に止めます。
-- 進捗や完了は `internal/app` から Wails の events で frontend に push します。frontend に polling させないでください。
+- The usecase takes `ctx` and stops midway when it is cancelled.
+- Start and stop it from the service's `ServiceStartup` / `ServiceShutdown` and `OnShutdown` in `main.go`, and stop it on exit.
+- Push progress and completion from `internal/app` to the frontend with Wails events. Do not make the frontend poll.
 
-### 新しい機能を追加するとき
+### Adding a new feature
 
-例として repo 接続を追加する場合は、次の順に作ります。
+For example, to add repo connection, build it in this order:
 
-1. `internal/<feature>` に usecase、domain の型、sentinel error を書き、test する。
-2. 永続化が必要なら `migrations/` に新しい連番の migration を追加し、`internal/library/queries` に query を書いて `go tool sqlc generate` する。
-3. `internal/app` に bind する service と DTO を追加し、dialog、翻訳、DTO 変換を書く。service に `base` を埋め込む。
-4. `main.go` で組み立て、`application.NewService` と `RegisterService` で登録する。
-5. `go tool wails3 generate bindings -ts -i` で bindings を再生成し、`frontend/src/shared/api` の wrapper から呼ぶ。
+1. Write the usecase, domain types, and sentinel errors in `internal/<feature>`, with tests.
+2. If persistence is needed, add a new numbered migration in `migrations/`, write queries in `internal/library/queries`, and run `go tool sqlc generate`.
+3. Add the bound service and DTOs in `internal/app`, with dialogs, translations, and DTO conversion. Embed `base` in the service.
+4. Wire it in `main.go` and register it with `application.NewService` and `RegisterService`.
+5. Regenerate bindings with `go tool wails3 generate bindings -ts -i` and call them through a wrapper in `frontend/src/shared/api`.
 
-## 技術スタックと注意点
+## Tech stack and gotchas
 
-- Desktop shell: Wails v3（macOS 13 以降）。Wails CLI と sqlc は `go.mod` の tool 依存で、`go tool` から実行します。
-- Frontend: React 19 + TypeScript + Vite、pnpm。lint は oxlint、format は oxfmt、未使用コードの検出は knip。
-- Backend: Go。lint と format は golangci-lint（`.golangci.yml`）。
-- Store: SQLite（`glebarez/go-sqlite` = pure Go の modernc SQLite、`database/sql`）。schema 変更は `migrations/` に新しい連番ファイルを追加します。
-- 検索: SQLite の FTS5（trigram tokenizer）。全文検索を強化する場合も、別の検索エンジンは入れず SQLite で行います。
-- Code parsing（repo 接続時）: Tree-sitter。
-- **sqlc の SQLite parser の制約:** FTS5 の `MATCH` は table 名ではなく列名に対して書き（`book_segments_fts.text MATCH ?`）、並び順は `bm25()` ではなく `rank` 列を使います。入れ子の subquery ではすべての table に alias を付けます。
-- **EPUB の CSP:** foliate-js の iframe は WebKit の都合で `allow-scripts` が必要です。そのため EPUB 内の script は、本番ビルドの CSP（`frontend/vite.config.ts` の `script-src 'self'`）と、読み込み時の除去（`epubContent.ts` の `guardEpubContent`）で止めています。CSP を緩めないでください。dev server では CSP が効かないので、dev で動いても安全とは限りません。
+- Desktop shell: Wails v3 (macOS 13+). The Wails CLI and sqlc are `go.mod` tool dependencies, run with `go tool`.
+- Frontend: React 19 + TypeScript + Vite, pnpm. Lint with oxlint, format with oxfmt, detect unused code with knip.
+- Backend: Go. Lint and format with golangci-lint (`.golangci.yml`).
+- Store: SQLite (`glebarez/go-sqlite`, the pure Go modernc SQLite, via `database/sql`). Schema changes go in a new numbered file in `migrations/`.
+- Search: SQLite FTS5 (trigram tokenizer). To improve full-text search, stay in SQLite; do not add a separate search engine.
+- Code parsing (for repo connection): Tree-sitter.
+- **sqlc SQLite parser limits:** write FTS5 `MATCH` against a column, not the table name (`book_segments_fts.text MATCH ?`), order by the `rank` column instead of `bm25()`, and alias every table in nested subqueries.
+- **EPUB CSP:** the foliate-js iframe needs `allow-scripts` because of WebKit. Scripts inside EPUBs are therefore blocked by the production CSP (`script-src 'self'` in `frontend/vite.config.ts`) and stripped on load (`guardEpubContent` in `epubContent.ts`). Do not loosen the CSP. The dev server does not apply the CSP, so working in dev does not mean it is safe.
 
-## テスト
+## Testing
 
-- Go の test は testify と `t.Context()` を使います（golangci-lint の `forbidigo` / `usetesting` で強制）。
-- 機能 package: usecase を実物の SQLite（`t.TempDir()`）と生成した fixture で test し、domain の型と sentinel error（`assert.ErrorIs`）を確認します。
-- `internal/app`: fake の dialog を使い、DTO への変換、asset URL の配信、エラーの翻訳、dialog のキャンセルや失敗の扱いを確認します。
-- frontend: Vitest と Testing Library。test は対象ファイルの隣に `*.test.ts(x)` として置きます。
-- copyrighted な本や private repo に依存する test は書かず、commit 可能な生成 PDF（`frontend/testdata`、`pnpm fixture:pdf`）と toy repo fixture を使います。
-- repo 接続を実装する際は、file discovery と除外ルール、Tree-sitter による symbol 抽出、retrieval の結果の融合を重点的に test してください。
+- Go tests use testify and `t.Context()` (enforced by golangci-lint `forbidigo` / `usetesting`).
+- Feature packages: test usecases against a real SQLite database (`t.TempDir()`) and generated fixtures, and assert domain types and sentinel errors (`assert.ErrorIs`).
+- `internal/app`: use fake dialogs and check DTO conversion, asset URL serving, error translation, and handling of dialog cancellation and failure.
+- Frontend: Vitest and Testing Library. Put tests next to the file under test as `*.test.ts(x)`.
+- Do not write tests that depend on copyrighted books or private repos. Use the committable generated PDF (`frontend/testdata`, `pnpm fixture:pdf`) and toy repo fixtures.
+- When implementing repo connection, focus tests on file discovery and exclusion rules, Tree-sitter symbol extraction, and fusion of retrieval results.
 
-## プロダクト原則
+## Product principles
 
-- 読書優先: reader が主画面であり、他の機能は読書を補助する。
-- ローカル優先: 本、index、読書状態、将来の repo index と mapping record はローカルに保存する。外部への通信はアップデート確認だけにする。
-- 根拠優先: book-to-repo mapping の結果には、book location と repo path / symbol を必ず付ける。
-- 説明可能な検索: なぜそのファイルや symbol が選ばれたかを表示する。
-- LLM は後から足す層: retrieval は LLM なしで成立させる。LLM provider、embedding provider、vector store を UI や retrieval logic に直接結合しない。
+- Reading first: the reader is the main screen; everything else supports reading.
+- Local first: books, indexes, reading state, and future repo indexes and mapping records are stored locally. The only network traffic is the update check.
+- Evidence first: every book-to-repo mapping result includes a book location and a repo path / symbol.
+- Explainable retrieval: show why each file or symbol was chosen.
+- LLM as a later layer: retrieval must work without an LLM. Do not couple LLM providers, embedding providers, or vector stores directly to the UI or retrieval logic.
 
-## ロードマップ
+## Roadmap
 
-1. ~~reader / library の基盤を整える（index 単位の `book_segments` への一般化、検索の FTS5 化）~~ 完了
-2. ~~EPUB reader（閲覧、ハイライト、しおり、読み上げ）~~ 完了
-3. local repository を 1つ接続し、repo files / symbols を index する。
-4. `この章を自分のrepoで見る` を押すと、LLM なしで関連する repo files / symbols を、選ばれた理由とともに表示する。
-5. 4 が LLM なしで成立した後に、book / repo citation 付きの説明生成を LLM の層として追加する。
+1. ~~Solidify the reader / library foundation (generalize the index unit to `book_segments`, move search to FTS5)~~ Done
+2. ~~EPUB reader (viewing, highlights, bookmarks, read aloud)~~ Done
+3. Connect one local repository and index its files / symbols.
+4. Pressing "See this chapter in my repo" shows related repo files / symbols with the reasons they were chosen, without an LLM.
+5. Once step 4 works without an LLM, add explanation generation with book / repo citations as an LLM layer.
 
-## セキュリティ / プライバシー
+## Security / privacy
 
-- 本の内容はユーザーが提供した著作物として扱い、長い逐語引用を生成しないでください。
-- repo を index する際は、`.env`、private key、credential file、dependency cache などを対象から除外してください。
-- LLM を再導入する場合は、外部に送る内容をユーザーに明示し、送信前に redaction を行い、API key は OS の credential store に保存してください。
+- Treat book content as copyrighted material provided by the user. Do not generate long verbatim quotes.
+- When indexing a repo, exclude `.env`, private keys, credential files, dependency caches, and similar files.
+- If LLM features are reintroduced, show the user what will be sent externally, redact before sending, and store API keys in the OS credential store.
