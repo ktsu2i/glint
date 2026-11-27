@@ -71,7 +71,7 @@ vi.mock("../features/library/indexer", () => ({
 vi.mock("../features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
 }));
-vi.mock("../features/reader/PdfReader", () => ({
+vi.mock("../features/reader/pdf/PdfReader", () => ({
   PdfReader: ({
     book,
     initialPage,

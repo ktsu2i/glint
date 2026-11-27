@@ -1,17 +1,18 @@
 import { TrashIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { HighlightColor } from "../api";
-import { highlightColors } from "../highlights";
 
-/** Where a floating toolbar points, in the reader's coordinates. */
-type FloatingAnchor = { x: number; top: number; bottom: number };
+const highlightColors: HighlightColor[] = ["yellow", "green", "pink", "purple"];
+
+/** Where a floating toolbar points, in the reader's coordinates, with the reader's width. */
+export type FloatingAnchor = { x: number; top: number; bottom: number; width: number };
 
 /**
  * Places a floating toolbar above the anchor, or below it near the top of the
- * window, and keeps it inside a reader of the given width.
+ * window, and keeps it inside the reader.
  */
-export function floatingStyle(anchor: FloatingAnchor, readerWidth: number) {
-  const x = readerWidth > 0 ? Math.min(readerWidth - 110, Math.max(110, anchor.x)) : anchor.x;
+export function floatingStyle(anchor: FloatingAnchor) {
+  const x = anchor.width > 0 ? Math.min(anchor.width - 110, Math.max(110, anchor.x)) : anchor.x;
   return anchor.top < 110
     ? { left: `${x}px`, top: `${anchor.bottom + 10}px` }
     : { left: `${x}px`, top: `${anchor.top - 10}px`, transform: "translate(-50%, -100%)" };

@@ -21,7 +21,7 @@ const foliate = vi.hoisted(() => ({
   views: [] as unknown[],
 }));
 
-vi.mock("./api", () => ({
+vi.mock("../api", () => ({
   addBookmark: backend.addBookmark,
   addHighlight: backend.addHighlight,
   changeHighlightColor: backend.changeHighlightColor,
@@ -37,9 +37,9 @@ vi.mock("./api", () => ({
 vi.mock("./foliate", () => ({ createFoliateView: foliate.createFoliateView }));
 
 import { EpubReader } from "./EpubReader";
-import { I18nProvider } from "../../shared/i18n/i18n";
-import type { BookBookmark, BookHighlight } from "./api";
-import type { BookFile } from "../../shared/api/books";
+import { I18nProvider } from "../../../shared/i18n/i18n";
+import type { BookBookmark, BookHighlight } from "../api";
+import type { BookFile } from "../../../shared/api/books";
 
 /** Stands in for foliate-js's <foliate-view>, recording what the reader asks of it. */
 class FakeView extends HTMLElement {

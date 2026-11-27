@@ -6,8 +6,8 @@ import { useBookIndexing, useCoverGeneration } from "../features/library/useBook
 import { useLibraryActions } from "../features/library/useLibraryActions";
 import { useLibraryBooks } from "../features/library/useLibraryBooks";
 import { useLibrarySearch } from "../features/library/useLibrarySearch";
-import { EpubReader } from "../features/reader/EpubReader";
-import { PdfReader } from "../features/reader/PdfReader";
+import { EpubReader } from "../features/reader/epub/EpubReader";
+import { PdfReader } from "../features/reader/pdf/PdfReader";
 import { useReadingPosition } from "../features/reader/useReadingPosition";
 import type { BookFile, BookSummary } from "../shared/api/books";
 import { I18nProvider } from "../shared/i18n/i18n";

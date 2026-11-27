@@ -168,7 +168,8 @@ src/main.tsx ─→ src/app ─→ src/features/* (library, reader, settings) �
 - Calls and types used by one feature go in its `api.ts`. Types several features share (`BookFile`, `BookSummary`) go in `src/shared/api/books.ts`, and app-wide settings in `src/shared/api/settings.ts`.
 - oxlint `no-restricted-imports` in `.oxlintrc.json` enforces these rules. When adding a feature directory, add it to those patterns.
 - Import modules directly; do not add barrel `index.ts` files.
-- UI the PDF and EPUB readers share (bars, side sheet, lists, highlight toolbars, view menu) lives in `features/reader/common`. Change it there rather than in one reader.
+- The reader is split into `features/reader/pdf`, `features/reader/epub`, and `features/reader/common`. UI and hooks both readers share (bars, side sheet, lists, highlight toolbars, view menu, search, saved bookmarks and highlights, read aloud) live in `common`; change them there rather than in one reader. `pdf` and `epub` must not import each other, and `common` imports neither.
+- Keep components focused on wiring and markup. Put stateful logic (loading, saving, timers, DOM listeners) in `use*` hooks next to the component, and test hooks with generic logic directly.
 - Translations live in `src/shared/i18n/locales` (`en.ts` defines the keys, `ja.ts` must cover all of them).
 
 ### Adding a new feature
