@@ -115,6 +115,124 @@ func TestSearchMatchesJapaneseShortTermsAndCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestSearchTreatsFullWidthAndHalfWidthFormsAlike(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{
+		pageSegment(1, "ＡＰＩ の設計"),
+		pageSegment(2, "ｇｏ で書く"),
+		pageSegment(3, "ｶﾀｶﾅ と ＨＴＴＰ／２"),
+		pageSegment(4, "API と go の話"),
+	}, 4, now)
+	require.NoError(t, err)
+	requireFTSInSync(t, store)
+
+	cases := []struct {
+		query string
+		pages []int
+	}{
+		{query: "API", pages: []int{1, 4}},
+		{query: "ａｐｉ", pages: []int{1, 4}},
+		{query: "go", pages: []int{2, 4}},
+		{query: "ＧＯ", pages: []int{2, 4}},
+		{query: "カタカナ", pages: []int{3}},
+		{query: "http/2", pages: []int{3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			results, err := store.SearchBookSegments(t.Context(), book.ID, tc.query, 20)
+			require.NoError(t, err)
+			var pages []int
+			for _, result := range results {
+				pages = append(pages, result.Ordinal)
+			}
+			assert.ElementsMatch(t, tc.pages, pages)
+		})
+	}
+
+	results, err := store.SearchBookSegments(t.Context(), book.ID, "api", 20)
+	require.NoError(t, err)
+	require.NotEmpty(t, results)
+	assert.Contains(t, results[0].Excerpt, "API")
+}
+
+func TestSearchFoldsNonASCIICaseForShortTerms(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{
+		pageSegment(1, "Äpfel und Öl"),
+		pageSegment(2, "ΣΙΓΜΑ"),
+		pageSegment(3, "plain ascii"),
+	}, 3, now)
+	require.NoError(t, err)
+
+	cases := []struct {
+		query string
+		pages []int
+	}{
+		{query: "ä", pages: []int{1}},
+		{query: "äp", pages: []int{1}},
+		{query: "öL", pages: []int{1}},
+		{query: "äpfel", pages: []int{1}},
+		{query: "σι", pages: []int{2}},
+		{query: "ς", pages: []int{2}},
+		{query: "AS", pages: []int{3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			results, err := store.SearchBookSegments(t.Context(), book.ID, tc.query, 20)
+			require.NoError(t, err)
+			var pages []int
+			for _, result := range results {
+				pages = append(pages, result.Ordinal)
+			}
+			assert.ElementsMatch(t, tc.pages, pages)
+		})
+	}
+}
+
+func TestCaseVariantsExpandOnlyNonASCIIRunes(t *testing.T) {
+	assert.Equal(t, []string{"go"}, caseVariants("go"))
+	assert.ElementsMatch(t, []string{"äb", "Äb"}, caseVariants("äb"))
+	assert.ElementsMatch(t, []string{"σ", "ς", "Σ"}, caseVariants("σ"))
+}
+
+func TestOpenNormalizesSegmentsSavedBeforeNFKC(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.sqlite3")
+	db, closeDB := migrateBefore(t, path, "9999")
+	execSQL(t, db, `INSERT INTO books (id, title, file_name, source_path, file_hash, size_bytes, imported_at, updated_at)
+        VALUES ('book-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 10, 'now', 'now')`)
+	execSQL(t, db, `INSERT INTO book_segments (book_id, ordinal, kind, location, text, updated_at)
+        VALUES ('book-1', 1, 'page', 'page:1', 'ＡＰＩ リファレンス', 'now'),
+               ('book-1', 2, 'page', 'page:2', 'already API', 'now')`)
+	closeDB()
+
+	store, err := Open(path)
+	require.NoError(t, err)
+	requireFTSInSync(t, store)
+	results, err := store.SearchBookSegments(t.Context(), "book-1", "api", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Equal(t, "API リファレンス", results[0].Excerpt)
+	form, err := store.Setting(t.Context(), segmentTextFormSetting)
+	require.NoError(t, err)
+	assert.Equal(t, segmentTextFormNFKC, form)
+	require.NoError(t, store.Close())
+
+	reopened, err := Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reopened.Close() })
+	requireFTSInSync(t, reopened)
+}
+
 func migrateBefore(t *testing.T, path, firstSkipped string) (*sql.DB, func()) {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)

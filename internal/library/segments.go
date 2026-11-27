@@ -8,7 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/kaito/glint/internal/library/librarydb"
 )
@@ -90,6 +93,7 @@ func (store *Store) SaveBookSegments(
 	timestamp := now.UTC().Format(time.RFC3339Nano)
 	params := make([]librarydb.UpsertBookSegmentParams, 0, len(segments))
 	for _, segment := range segments {
+		segment.Text = normalizeSearchText(segment.Text)
 		if !validSegment(segment, total) {
 			return 0, ErrInvalidSegmentBatch
 		}
@@ -103,7 +107,7 @@ func (store *Store) SaveBookSegments(
 			Kind:        segment.Kind,
 			Location:    segment.Location,
 			HeadingPath: strings.TrimSpace(segment.HeadingPath),
-			Text:        strings.TrimSpace(segment.Text),
+			Text:        segment.Text,
 			UpdatedAt:   timestamp,
 		})
 	}
@@ -315,8 +319,17 @@ func (store *Store) matchingSegments(ctx context.Context, bookID string, terms [
 		if utf8.RuneCountInString(term) >= trigramLength {
 			continue
 		}
-		query.WriteString(` AND s.text LIKE ? ESCAPE '\' COLLATE NOCASE`)
-		args = append(args, "%"+escapeLikeTerm(term)+"%")
+		// LIKE only folds ASCII case, so every non-ASCII case form of a short term gets its own pattern.
+		variants := caseVariants(term)
+		query.WriteString(" AND (")
+		for i, variant := range variants {
+			if i > 0 {
+				query.WriteString(" OR ")
+			}
+			query.WriteString(`s.text LIKE ? ESCAPE '\'`)
+			args = append(args, "%"+escapeLikeTerm(variant)+"%")
+		}
+		query.WriteString(")")
 	}
 	if match != "" {
 		query.WriteString(" ORDER BY bm25(book_segments_fts), s.book_id, s.ordinal")
@@ -367,7 +380,7 @@ func rankSegmentMatches(records []segmentMatch, phrase string, terms []string) [
 	ranked := make([]rankedSegmentResult, 0, len(records))
 	for _, record := range records {
 		compact := strings.Join(strings.Fields(record.Text), " ")
-		folded := strings.ToLower(compact)
+		folded := foldCase(compact)
 		firstMatch := -1
 		matchCount := 0
 		allTermsMatch := true
@@ -403,7 +416,7 @@ func rankSegmentMatches(records []segmentMatch, phrase string, terms []string) [
 }
 
 func normalizeBookSearchQuery(query string) (string, []string, error) {
-	phrase := strings.ToLower(strings.Join(strings.Fields(query), " "))
+	phrase := foldCase(strings.Join(strings.Fields(norm.NFKC.String(query)), " "))
 	if phrase == "" || utf8.RuneCountInString(phrase) > maxBookSearchRunes {
 		return "", nil, ErrInvalidBookSearchQuery
 	}
@@ -413,6 +426,102 @@ func normalizeBookSearchQuery(query string) (string, []string, error) {
 	}
 	return phrase, terms, nil
 }
+
+// normalizeSearchText applies NFKC so that full-width and half-width forms such as "ＡＰＩ" and "API" are stored the same way.
+func normalizeSearchText(text string) string {
+	return strings.TrimSpace(norm.NFKC.String(text))
+}
+
+// foldCase maps every rune to one representative of its Unicode case-folding orbit,
+// the same equivalence that caseVariants expands for LIKE.
+func foldCase(text string) string {
+	return strings.Map(foldRune, text)
+}
+
+func foldRune(r rune) rune {
+	if r < utf8.RuneSelf {
+		if 'a' <= r && r <= 'z' {
+			return r - 'a' + 'A'
+		}
+		return r
+	}
+	smallest := r
+	for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+		smallest = min(smallest, f)
+	}
+	return smallest
+}
+
+// caseVariants lists every spelling of term whose runes differ only in case.
+// ASCII runes keep a single form because LIKE already ignores ASCII case.
+// It is only used for terms shorter than trigramLength, so the product stays small.
+func caseVariants(term string) []string {
+	variants := []string{""}
+	for _, r := range term {
+		forms := []rune{r}
+		if r >= utf8.RuneSelf {
+			for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+				forms = append(forms, f)
+			}
+		}
+		next := make([]string, 0, len(variants)*len(forms))
+		for _, prefix := range variants {
+			for _, form := range forms {
+				next = append(next, prefix+string(form))
+			}
+		}
+		variants = next
+	}
+	return variants
+}
+
+// normalizeStoredSegmentTexts applies normalizeSearchText to segments saved before it existed.
+// It runs once per database and records completion in app_settings.
+func (store *Store) normalizeStoredSegmentTexts(ctx context.Context) error {
+	done, err := store.Setting(ctx, segmentTextFormSetting)
+	if err != nil {
+		return err
+	}
+	if done == segmentTextFormNFKC {
+		return nil
+	}
+	var afterID int64
+	for {
+		rows, err := store.queries.ListSegmentTextsAfter(ctx, librarydb.ListSegmentTextsAfterParams{
+			AfterID:   afterID,
+			BatchSize: segmentNormalizationBatch,
+		})
+		if err != nil {
+			return fmt.Errorf("list segment texts: %w", err)
+		}
+		if len(rows) == 0 {
+			break
+		}
+		err = store.inTx(ctx, func(queries *librarydb.Queries) error {
+			for _, row := range rows {
+				normalized := normalizeSearchText(row.Text)
+				if normalized == row.Text {
+					continue
+				}
+				if err := queries.UpdateSegmentText(ctx, librarydb.UpdateSegmentTextParams{Text: normalized, ID: row.ID}); err != nil {
+					return fmt.Errorf("normalize segment text: %w", err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		afterID = rows[len(rows)-1].ID
+	}
+	return store.SaveSetting(ctx, segmentTextFormSetting, segmentTextFormNFKC)
+}
+
+const (
+	segmentTextFormSetting    = "segment_text_form"
+	segmentTextFormNFKC       = "nfkc"
+	segmentNormalizationBatch = 200
+)
 
 func escapeLikeTerm(term string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)

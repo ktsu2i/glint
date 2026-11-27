@@ -27,3 +27,12 @@ SELECT CAST(CASE
                       SELECT 1 FROM book_segments n
                        WHERE n.book_id = s.book_id AND n.ordinal = s.ordinal + 1))
        END AS INTEGER) AS next_ordinal;
+
+-- name: ListSegmentTextsAfter :many
+SELECT id, text FROM book_segments
+ WHERE id > @after_id
+ ORDER BY id
+ LIMIT @batch_size;
+
+-- name: UpdateSegmentText :exec
+UPDATE book_segments SET text = @text WHERE id = @id;
