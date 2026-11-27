@@ -94,7 +94,7 @@ func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, opened.Book.ID)
 	assert.Equal(t, "Persistent Guide", opened.Book.Display())
-	require.NoError(t, service.SaveReadingPosition(t.Context(), opened.Book.ID, 3, 8))
+	require.NoError(t, service.SaveReadingPosition(t.Context(), opened.Book.ID, 3, 8, ""))
 	require.NoError(t, service.SaveCover(t.Context(), opened.Book.ID, pngCover))
 	require.NoError(t, store.Close())
 
@@ -115,6 +115,17 @@ func TestLibraryPersistsBooksCoverAndReadingPosition(t *testing.T) {
 	reopened, err := service.Open(t.Context(), entry.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 3, reopened.Book.LastPage)
+}
+
+func TestServiceKeepsBindingDirection(t *testing.T) {
+	h := newHarness(t)
+	opened := h.importBook(h.writePDF("Manga.pdf", "%PDF-1.7\nfixture"))
+
+	require.NoError(t, h.service.SaveBindingDirection(t.Context(), opened.Book.ID, library.BindingRightToLeft))
+	reopened, err := h.service.Open(t.Context(), opened.Book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, library.BindingRightToLeft, reopened.Book.BindingDirection)
+	assert.ErrorIs(t, h.service.SaveBindingDirection(t.Context(), opened.Book.ID, "up"), library.ErrInvalidBindingDirection)
 }
 
 func TestOpenReportsMissingSource(t *testing.T) {

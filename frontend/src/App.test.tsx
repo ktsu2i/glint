@@ -203,7 +203,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("initial-3")).toBeTruthy());
 
     fireEvent.click(screen.getByRole("button", { name: "set-page" }));
-    expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12);
+    expect(mocks.saveReadingPosition).toHaveBeenCalledWith("book-1", 4, 12, "");
 
     mocks.listBooks.mockResolvedValue([{ ...summary, lastPage: 4 }]);
     mocks.openBook.mockResolvedValue({ ...openedBook, initialPage: 4 });

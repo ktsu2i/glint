@@ -22,6 +22,12 @@ type SaveLanguageSettingsRequest struct {
 	Language string `json:"language"`
 }
 
+// ReaderSettings are how the reader shows books. Every book shares them.
+type ReaderSettings struct {
+	EPUBFontScale int    `json:"epubFontScale"`
+	EPUBLayout    string `json:"epubLayout"`
+}
+
 // Settings changes are pushed to every window, so the main window follows
 // what the settings window saves.
 const (
@@ -114,4 +120,39 @@ func (s *SettingsService) SaveLanguageSettings(request SaveLanguageSettingsReque
 	result := LanguageSettings{Language: string(saved.Language)}
 	s.emit(languageChangedEvent, result)
 	return result, nil
+}
+
+func (s *SettingsService) GetReaderSettings() (ReaderSettings, error) {
+	if !s.ready() {
+		return ReaderSettings{}, errNotReady
+	}
+	saved, err := s.settings.GetReader(s.ctx)
+	if err != nil {
+		return ReaderSettings{}, err
+	}
+	return toReaderSettings(saved), nil
+}
+
+func (s *SettingsService) SaveReaderSettings(request ReaderSettings) (ReaderSettings, error) {
+	if !s.ready() {
+		return ReaderSettings{}, errNotReady
+	}
+	saved, err := s.settings.SaveReader(s.ctx, settings.ReaderSettings{
+		EPUBFontScale: request.EPUBFontScale,
+		EPUBLayout:    settings.EPUBLayout(request.EPUBLayout),
+	})
+	if errors.Is(err, settings.ErrInvalidReaderSettings) {
+		return ReaderSettings{}, s.text.error(s.ctx,
+			"The text size or page layout is invalid.",
+			"文字サイズまたはページレイアウトの指定が不正です。",
+		)
+	}
+	if err != nil {
+		return ReaderSettings{}, err
+	}
+	return toReaderSettings(saved), nil
+}
+
+func toReaderSettings(saved settings.ReaderSettings) ReaderSettings {
+	return ReaderSettings{EPUBFontScale: saved.EPUBFontScale, EPUBLayout: string(saved.EPUBLayout)}
 }

@@ -27,14 +27,17 @@ import {
   removeBookmark,
   removeHighlight,
   changeHighlightColor,
+  saveBindingDirection,
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
+  type BindingDirection,
   type BookFile,
   type BookHighlight,
   type BookSearchResult,
   type HighlightColor,
 } from "../../shared/api/backend";
+import { moveLegacyValue } from "./legacyStorage";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
@@ -80,7 +83,6 @@ function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
-type BindingDirection = "ltr" | "rtl";
 type ReaderPanel = "toc" | "search" | "bookmarks" | "highlights" | null;
 // Floating controls are placed in the reader's coordinates.
 type PendingSelection = { parts: PageSelection[]; x: number; top: number; bottom: number };
@@ -95,21 +97,19 @@ function showWindowControls(visible: boolean) {
   setWindowControlsVisible(visible).catch(() => {});
 }
 
-const bindingDirectionStorageKey = "glint.reader.bindingDirection";
+const legacyBindingDirectionKey = (bookId: string) => `glint.reader.bindingDirection.${bookId}`;
 
-function loadBindingDirection(bookId: string | undefined): BindingDirection {
-  if (!bookId || typeof window === "undefined") {
+function loadBindingDirection(book: BookFile | null): BindingDirection {
+  if (!book) {
     return "ltr";
   }
-  const stored = window.localStorage.getItem(`${bindingDirectionStorageKey}.${bookId}`);
-  return stored === "rtl" ? "rtl" : "ltr";
-}
-
-function persistBindingDirection(bookId: string | undefined, direction: BindingDirection) {
-  if (!bookId || typeof window === "undefined") {
-    return;
+  const legacy = moveLegacyValue(legacyBindingDirectionKey(book.id), (value) =>
+    saveBindingDirection(book.id, value === "rtl" ? "rtl" : "ltr"),
+  );
+  if (legacy !== null) {
+    return legacy === "rtl" ? "rtl" : "ltr";
   }
-  window.localStorage.setItem(`${bindingDirectionStorageKey}.${bookId}`, direction);
+  return book.bindingDirection === "rtl" ? "rtl" : "ltr";
 }
 
 type PdfReaderProps = {
@@ -137,8 +137,10 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const [isEditingPage, setIsEditingPage] = useState(false);
   const pageInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
-  const [bindingDirection, setBindingDirection] = useState<BindingDirection>(() =>
-    loadBindingDirection(book?.id),
+  // The effect that opens the book settles the direction, moving one kept by
+  // an earlier version.
+  const [bindingDirection, setBindingDirection] = useState<BindingDirection>(
+    book?.bindingDirection === "rtl" ? "rtl" : "ltr",
   );
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -298,7 +300,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
-    setBindingDirection(loadBindingDirection(book.id));
+    setBindingDirection(loadBindingDirection(book));
     pageChangeCallbackRef.current(0, 0);
 
     let timeout = 0;
@@ -890,7 +892,11 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
 
   function changeBinding(next: BindingDirection) {
     setBindingDirection(next);
-    persistBindingDirection(book?.id, next);
+    if (book) {
+      saveBindingDirection(book.id, next).catch((reason: unknown) => {
+        console.warn("Saving the binding direction failed", reason);
+      });
+    }
   }
 
   function adjustZoom(delta: number) {

@@ -1,20 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  defaultReaderSettings,
   epubStyles,
   flattenToc,
+  forgetLegacyReaderSettings,
   guardEpubContent,
   isCFIOnPage,
-  loadEpubFontScale,
-  loadEpubLayout,
-  loadEpubPosition,
   pageStartCFI,
   rangeSpeechText,
-  saveEpubFontScale,
-  saveEpubLayout,
-  saveEpubPosition,
+  readLegacyReaderSettings,
   sortEpubBookmarks,
   sortEpubHighlights,
   stripActiveContent,
+  takeLegacyEpubPosition,
 } from "./epubContent";
 import type { BookBookmark, BookHighlight } from "../../shared/api/backend";
 
@@ -97,23 +95,40 @@ describe("flattenToc", () => {
   });
 });
 
-describe("storage", () => {
+describe("legacy storage", () => {
   beforeEach(() => window.localStorage.clear());
 
-  it("keeps the exact position per book", () => {
-    expect(loadEpubPosition("book")).toBeNull();
-    saveEpubPosition("book", { section: 3, cfi: "epubcfi(/6/6!/4/2)" });
-    expect(loadEpubPosition("book")).toEqual({ section: 3, cfi: "epubcfi(/6/6!/4/2)" });
+  it("takes the position an earlier version kept, once", () => {
+    expect(takeLegacyEpubPosition("book")).toBeNull();
+    window.localStorage.setItem(
+      "glint.epub.position.book",
+      JSON.stringify({ section: 3, cfi: "epubcfi(/6/6!/4/2)" }),
+    );
+    expect(takeLegacyEpubPosition("book")).toEqual({ section: 3, cfi: "epubcfi(/6/6!/4/2)" });
+    expect(window.localStorage.getItem("glint.epub.position.book")).toBeNull();
+
     window.localStorage.setItem("glint.epub.position.bad", '{"section":1,"cfi":"x"}');
-    expect(loadEpubPosition("bad")).toBeNull();
+    expect(takeLegacyEpubPosition("bad")).toBeNull();
+    expect(window.localStorage.getItem("glint.epub.position.bad")).toBeNull();
   });
 
-  it("keeps the text size within its range", () => {
-    expect(loadEpubFontScale()).toBe(100);
-    saveEpubFontScale(130);
-    expect(loadEpubFontScale()).toBe(130);
-    saveEpubFontScale(999);
-    expect(loadEpubFontScale()).toBe(100);
+  it("lays the text size and layout an earlier version kept over the saved settings", () => {
+    const saved = { epubFontScale: 120, epubLayout: "spread" as const };
+    expect(readLegacyReaderSettings(saved)).toBeNull();
+
+    window.localStorage.setItem("glint.epub.layout", "single");
+    expect(readLegacyReaderSettings(saved)).toEqual({ epubFontScale: 120, epubLayout: "single" });
+    window.localStorage.setItem("glint.epub.fontScale", "130");
+    expect(readLegacyReaderSettings(defaultReaderSettings)).toEqual({
+      epubFontScale: 130,
+      epubLayout: "single",
+    });
+    // A size out of range keeps the saved one.
+    window.localStorage.setItem("glint.epub.fontScale", "999");
+    expect(readLegacyReaderSettings(saved)?.epubFontScale).toBe(120);
+
+    forgetLegacyReaderSettings();
+    expect(readLegacyReaderSettings(saved)).toBeNull();
   });
 });
 
@@ -137,16 +152,6 @@ describe("sortEpubHighlights", () => {
       makeHighlight(3, 1, "epubcfi(/6/2!/4/4,/1:5,/1:9)"),
     ]);
     expect(sorted.map((highlight) => highlight.id)).toEqual([3, 2, 1]);
-  });
-});
-
-describe("layout", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("defaults to spreads and keeps a single page choice", () => {
-    expect(loadEpubLayout()).toBe("spread");
-    saveEpubLayout("single");
-    expect(loadEpubLayout()).toBe("single");
   });
 });
 

@@ -6,6 +6,8 @@ const backend = vi.hoisted(() => ({
   addBookmark: vi.fn(),
   addHighlight: vi.fn(),
   changeHighlightColor: vi.fn(),
+  getReaderSettings: vi.fn(),
+  saveReaderSettings: vi.fn(),
   listBookmarks: vi.fn(),
   listHighlights: vi.fn(),
   removeBookmark: vi.fn(),
@@ -23,6 +25,8 @@ vi.mock("../../shared/api/backend", () => ({
   addBookmark: backend.addBookmark,
   addHighlight: backend.addHighlight,
   changeHighlightColor: backend.changeHighlightColor,
+  getReaderSettings: backend.getReaderSettings,
+  saveReaderSettings: backend.saveReaderSettings,
   listBookmarks: backend.listBookmarks,
   listHighlights: backend.listHighlights,
   removeBookmark: backend.removeBookmark,
@@ -119,7 +123,7 @@ function render(ui: ReactNode) {
   });
 }
 
-function makeBook(): BookFile {
+function makeBook(overrides: Partial<BookFile> = {}): BookFile {
   return {
     id: "epub-1",
     title: "Reflowable Guide",
@@ -131,13 +135,12 @@ function makeBook(): BookFile {
     indexedPageCount: 3,
     nextSegment: 4,
     coverStatus: "ready",
+    ...overrides,
   };
 }
 
-async function openReader(initialSection = 1, onPageChange = vi.fn()) {
-  render(
-    <EpubReader book={makeBook()} initialSection={initialSection} onPageChange={onPageChange} />,
-  );
+async function openReader(initialSection = 1, onPageChange = vi.fn(), book = makeBook()) {
+  render(<EpubReader book={book} initialSection={initialSection} onPageChange={onPageChange} />);
   await waitFor(() => expect(foliate.views).toHaveLength(1));
   const view = foliate.views[0] as FakeView;
   await waitFor(() => expect(view.init.mock.calls.length + view.goTo.mock.calls.length).toBe(1));
@@ -161,6 +164,10 @@ describe("EpubReader", () => {
     backend.changeHighlightColor.mockReset();
     backend.removeHighlight.mockReset().mockResolvedValue(undefined);
     backend.searchBook.mockReset();
+    backend.getReaderSettings
+      .mockReset()
+      .mockResolvedValue({ epubFontScale: 100, epubLayout: "spread" });
+    backend.saveReaderSettings.mockReset().mockImplementation(async (settings) => settings);
     backend.setWindowControlsVisible.mockReset().mockResolvedValue(undefined);
   });
 
@@ -173,25 +180,29 @@ describe("EpubReader", () => {
     expect(view.init).toHaveBeenCalledWith({ showTextStart: true });
 
     view.relocate(1, 0.42);
-    expect(onPageChange).toHaveBeenLastCalledWith(2, 3);
+    expect(onPageChange).toHaveBeenLastCalledWith(2, 3, "epubcfi(/6/4!/4/2)");
     expect(screen.getByText("Chapter One · 42%")).toBeTruthy();
-    expect(JSON.parse(window.localStorage.getItem("glint.epub.position.epub-1") ?? "")).toEqual({
-      section: 2,
-      cfi: "epubcfi(/6/4!/4/2)",
-    });
+    expect(window.localStorage.length).toBe(0);
 
     // A report before the pages are counted keeps the last progress.
     view.relocate(1, Number.NaN);
     expect(screen.getByText("Chapter One · 42%")).toBeTruthy();
   });
 
-  it("reopens on the saved page when the library agrees on the section", async () => {
+  it("reopens on the page the library kept", async () => {
+    const book = makeBook({ initialPage: 2, initialCfi: "epubcfi(/6/4!/4/10)" });
+    const { view } = await openReader(2, vi.fn(), book);
+    expect(view.init).toHaveBeenCalledWith({ lastLocation: "epubcfi(/6/4!/4/10)" });
+  });
+
+  it("reopens on the page an earlier version kept, and drops it from localStorage", async () => {
     window.localStorage.setItem(
       "glint.epub.position.epub-1",
       JSON.stringify({ section: 2, cfi: "epubcfi(/6/4!/4/10)" }),
     );
     const { view } = await openReader(2);
     expect(view.init).toHaveBeenCalledWith({ lastLocation: "epubcfi(/6/4!/4/10)" });
+    expect(window.localStorage.getItem("glint.epub.position.epub-1")).toBeNull();
   });
 
   it("opens the section a library search points at", async () => {
@@ -320,7 +331,36 @@ describe("EpubReader", () => {
     expect(view.renderer.setStyles).toHaveBeenLastCalledWith(
       expect.stringContaining("font-size: 110%"),
     );
-    expect(window.localStorage.getItem("glint.epub.fontScale")).toBe("110");
+    expect(backend.saveReaderSettings).toHaveBeenLastCalledWith({
+      epubFontScale: 110,
+      epubLayout: "spread",
+    });
+  });
+
+  it("opens with the saved text size and layout", async () => {
+    backend.getReaderSettings.mockResolvedValue({ epubFontScale: 130, epubLayout: "single" });
+    const { view } = await openReader();
+
+    expect(view.renderer.getAttribute("max-column-count")).toBe("1");
+    await waitFor(() =>
+      expect(view.renderer.setStyles).toHaveBeenLastCalledWith(
+        expect.stringContaining("font-size: 130%"),
+      ),
+    );
+    expect(backend.saveReaderSettings).not.toHaveBeenCalled();
+  });
+
+  it("moves the text size and layout an earlier version kept to the library", async () => {
+    window.localStorage.setItem("glint.epub.fontScale", "120");
+    window.localStorage.setItem("glint.epub.layout", "single");
+    const { view } = await openReader();
+
+    expect(view.renderer.getAttribute("max-column-count")).toBe("1");
+    expect(backend.saveReaderSettings).toHaveBeenCalledWith({
+      epubFontScale: 120,
+      epubLayout: "single",
+    });
+    await waitFor(() => expect(window.localStorage.length).toBe(0));
   });
 
   it("explains when the book cannot be opened", async () => {
@@ -343,7 +383,10 @@ describe("EpubReader", () => {
     fireEvent.click(screen.getByRole("button", { name: "表示" }));
     fireEvent.click(screen.getByRole("button", { name: "片開き" }));
     expect(view.renderer.getAttribute("max-column-count")).toBe("1");
-    expect(window.localStorage.getItem("glint.epub.layout")).toBe("single");
+    expect(backend.saveReaderSettings).toHaveBeenLastCalledWith({
+      epubFontScale: 100,
+      epubLayout: "single",
+    });
     expect(screen.getByRole("button", { name: "片開き" }).getAttribute("aria-pressed")).toBe(
       "true",
     );

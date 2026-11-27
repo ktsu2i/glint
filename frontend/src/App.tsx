@@ -252,7 +252,8 @@ function AppContent() {
     setLibraryError("");
     try {
       const opened = await openBook(summary.id);
-      showReader({ ...opened, initialPage: pageNumber });
+      // The saved place belongs to the section the book was left on.
+      showReader({ ...opened, initialPage: pageNumber, initialCfi: "" });
       await refreshLibrary();
     } catch (reason) {
       setLibraryError(reason instanceof Error ? reason.message : t("error.openBook"));
@@ -379,16 +380,16 @@ function AppContent() {
   }
 
   const handlePageChange = useCallback(
-    (pageNumber: number, pageCount: number) => {
+    (pageNumber: number, pageCount: number, cfi = "") => {
       if (!book || pageNumber < 1 || pageCount < 1) {
         return;
       }
-      const positionKey = `${book.id}:${pageNumber}:${pageCount}`;
+      const positionKey = `${book.id}:${pageNumber}:${pageCount}:${cfi}`;
       if (lastSavedPosition.current === positionKey) {
         return;
       }
       lastSavedPosition.current = positionKey;
-      void saveReadingPosition(book.id, pageNumber, pageCount).catch((reason) => {
+      void saveReadingPosition(book.id, pageNumber, pageCount, cfi).catch((reason) => {
         console.warn(reason instanceof Error ? reason.message : t("error.savePosition"));
       });
     },

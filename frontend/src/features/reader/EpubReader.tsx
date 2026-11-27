@@ -22,17 +22,21 @@ import {
   addBookmark,
   addHighlight,
   changeHighlightColor,
+  getReaderSettings,
   listBookmarks,
   listHighlights,
   removeBookmark,
   removeHighlight,
+  saveReaderSettings,
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
   type BookFile,
   type BookHighlight,
   type BookSearchResult,
+  type EpubLayout,
   type HighlightColor,
+  type ReaderSettings,
 } from "../../shared/api/backend";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
@@ -40,22 +44,19 @@ import {
   EPUB_FONT_SCALE_STEP,
   EPUB_MAX_FONT_SCALE,
   EPUB_MIN_FONT_SCALE,
+  defaultReaderSettings,
   epubHighlightFills,
   epubStyles,
   flattenToc,
+  forgetLegacyReaderSettings,
   guardEpubContent,
   isCFIOnPage,
-  loadEpubFontScale,
-  loadEpubLayout,
-  loadEpubPosition,
   pageStartCFI,
   rangeSpeechText,
-  saveEpubFontScale,
-  saveEpubLayout,
-  saveEpubPosition,
+  readLegacyReaderSettings,
   sortEpubBookmarks,
   sortEpubHighlights,
-  type EpubLayout,
+  takeLegacyEpubPosition,
   type EpubTheme,
   type EpubTocLine,
 } from "./epubContent";
@@ -190,18 +191,47 @@ type EpubReaderProps = {
   book: BookFile;
   /** The section to open, counted from 1. */
   initialSection?: number;
-  onPageChange: (section: number, sectionCount: number) => void;
+  /** Reports the section on screen and the CFI of the page in it. */
+  onPageChange: (section: number, sectionCount: number, cfi: string) => void;
   onBack?: () => void;
 };
 
+/**
+ * The text size and layout every EPUB shares. One kept by an earlier version
+ * in localStorage moves to the library here.
+ */
+async function loadReaderSettings(): Promise<ReaderSettings> {
+  let saved = defaultReaderSettings;
+  try {
+    saved = await getReaderSettings();
+  } catch (reason) {
+    console.warn("Loading the reader settings failed", reason);
+  }
+  const legacy = readLegacyReaderSettings(saved);
+  if (!legacy) {
+    return saved;
+  }
+  saveReaderSettings(legacy).then(forgetLegacyReaderSettings, (reason: unknown) => {
+    console.warn("Moving the reader settings failed", reason);
+  });
+  return legacy;
+}
+
+function persistReaderSettings(settings: ReaderSettings) {
+  saveReaderSettings(settings).catch((reason: unknown) => {
+    console.warn("Saving the reader settings failed", reason);
+  });
+}
+
 export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: EpubReaderProps) {
+  const initialCfi = book.initialCfi ?? "";
   const { t, i18n } = useTranslation();
   const theme = useDocumentTheme();
   const [view, setView] = useState<View | null>(null);
   const [error, setError] = useState("");
   const [toc, setToc] = useState<EpubTocLine[]>([]);
   const [location, setLocation] = useState<ReaderLocation | null>(null);
-  const [fontScale, setFontScale] = useState(loadEpubFontScale);
+  const [fontScale, setFontScale] = useState(defaultReaderSettings.epubFontScale);
   const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -212,7 +242,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const [searchResults, setSearchResults] = useState<BookSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [layout, setLayout] = useState<EpubLayout>(loadEpubLayout);
+  const [layout, setLayout] = useState<EpubLayout>(defaultReaderSettings.epubLayout);
   const [highlights, setHighlights] = useState<BookHighlight[]>([]);
   const [highlightsLoaded, setHighlightsLoaded] = useState(false);
   const [highlightBusy, setHighlightBusy] = useState(false);
@@ -276,16 +306,20 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
         tocLabel: (detail.tocItem?.label ?? "").trim(),
       }));
       if (sectionCount > 0) {
-        pageChangeCallbackRef.current(section, sectionCount);
-        saveEpubPosition(bookId, { section, cfi: detail.cfi });
+        pageChangeCallbackRef.current(section, sectionCount, detail.cfi);
       }
     };
 
     const open = async () => {
-      const { view: foliate, drawHighlight } = await createFoliateView();
+      const [{ view: foliate, drawHighlight }, settings] = await Promise.all([
+        createFoliateView(),
+        loadReaderSettings(),
+      ]);
       if (!active) {
         return;
       }
+      setFontScale(settings.epubFontScale);
+      setLayout(settings.epubLayout);
       opened = foliate;
       foliate.className = "epub-view";
       foliate.style.setProperty("--overlayer-highlight-opacity", "0.32");
@@ -336,14 +370,16 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
         renderer.setAttribute("margin", "56px");
         renderer.setAttribute("gap", "6%");
         renderer.setAttribute("max-inline-size", "720px");
-        renderer.setAttribute("max-column-count", loadEpubLayout() === "spread" ? "2" : "1");
+        renderer.setAttribute("max-column-count", settings.epubLayout === "spread" ? "2" : "1");
       }
       setToc(flattenToc(foliate.book?.toc));
       setView(foliate);
 
-      const saved = loadEpubPosition(bookId);
-      if (saved?.section === initialSection) {
-        await foliate.init({ lastLocation: saved.cfi });
+      // The CFI is the place in the section the book was left on.
+      const legacy = takeLegacyEpubPosition(bookId);
+      const savedCFI = initialCfi || (legacy?.section === initialSection ? legacy.cfi : "");
+      if (savedCFI) {
+        await foliate.init({ lastLocation: savedCFI });
       } else if (initialSection > 1) {
         await foliate.goTo(initialSection - 1);
       } else {
@@ -363,7 +399,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       opened?.close();
       opened?.remove();
     };
-  }, [book.id, book.url, initialSection]);
+  }, [book.id, book.url, initialCfi, initialSection]);
 
   useEffect(() => {
     view?.renderer?.setStyles(epubStyles(fontScale, theme));
@@ -890,13 +926,13 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
 
   function changeLayout(next: EpubLayout) {
     setLayout(next);
-    saveEpubLayout(next);
+    persistReaderSettings({ epubFontScale: fontScale, epubLayout: next });
   }
 
   function changeFontScale(next: number) {
     const clamped = Math.min(EPUB_MAX_FONT_SCALE, Math.max(EPUB_MIN_FONT_SCALE, next));
     setFontScale(clamped);
-    saveEpubFontScale(clamped);
+    persistReaderSettings({ epubFontScale: clamped, epubLayout: layout });
   }
 
   const chromeShown = chromeVisible || openPanel !== null || isViewMenuOpen;

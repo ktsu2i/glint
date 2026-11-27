@@ -14,7 +14,10 @@ ON CONFLICT (file_hash) DO UPDATE SET
     updated_at = excluded.updated_at;
 
 -- name: ListBooks :many
-SELECT sqlc.embed(b), CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
+SELECT sqlc.embed(b),
+       CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page,
+       CAST(COALESCE(r.cfi, '') AS TEXT) AS last_cfi,
+       CAST(COALESCE(r.binding_direction, 'ltr') AS TEXT) AS binding_direction
   FROM books b
   LEFT JOIN book_reading_states r ON r.book_id = b.id
  ORDER BY CASE WHEN b.last_opened_at = '' THEN 1 ELSE 0 END,
@@ -22,13 +25,19 @@ SELECT sqlc.embed(b), CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
           b.imported_at DESC;
 
 -- name: GetBook :one
-SELECT sqlc.embed(b), CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
+SELECT sqlc.embed(b),
+       CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page,
+       CAST(COALESCE(r.cfi, '') AS TEXT) AS last_cfi,
+       CAST(COALESCE(r.binding_direction, 'ltr') AS TEXT) AS binding_direction
   FROM books b
   LEFT JOIN book_reading_states r ON r.book_id = b.id
  WHERE b.id = @id;
 
 -- name: GetBookByHash :one
-SELECT sqlc.embed(b), CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
+SELECT sqlc.embed(b),
+       CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page,
+       CAST(COALESCE(r.cfi, '') AS TEXT) AS last_cfi,
+       CAST(COALESCE(r.binding_direction, 'ltr') AS TEXT) AS binding_direction
   FROM books b
   LEFT JOIN book_reading_states r ON r.book_id = b.id
  WHERE b.file_hash = @file_hash;
@@ -46,10 +55,18 @@ UPDATE books
  WHERE id = @id;
 
 -- name: UpsertReadingState :exec
-INSERT INTO book_reading_states (book_id, page_number, updated_at)
-VALUES (@book_id, @page_number, @updated_at)
+INSERT INTO book_reading_states (book_id, page_number, cfi, updated_at)
+VALUES (@book_id, @page_number, @cfi, @updated_at)
 ON CONFLICT (book_id) DO UPDATE SET
     page_number = excluded.page_number,
+    cfi = excluded.cfi,
+    updated_at = excluded.updated_at;
+
+-- name: UpsertBindingDirection :exec
+INSERT INTO book_reading_states (book_id, binding_direction, updated_at)
+VALUES (@book_id, @binding_direction, @updated_at)
+ON CONFLICT (book_id) DO UPDATE SET
+    binding_direction = excluded.binding_direction,
     updated_at = excluded.updated_at;
 
 -- name: SetBookCover :execrows

@@ -45,7 +45,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	assert.Equal(t, 1, book.LastPage)
 	assert.Equal(t, "pending", book.CoverThumbnailStatus)
 	require.NoError(t, store.MarkOpened(t.Context(), book.ID, now.Add(time.Minute)))
-	require.NoError(t, store.SaveReadingPosition(t.Context(), book.ID, 7, 20, now.Add(2*time.Minute)))
+	require.NoError(t, store.SaveReadingPosition(t.Context(), book.ID, 7, 20, "", now.Add(2*time.Minute)))
 	require.NoError(t, store.SaveCover(t.Context(), book.ID, "/tmp/cover.png", now.Add(3*time.Minute)))
 	require.NoError(t, store.Close())
 
@@ -57,6 +57,8 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	require.Len(t, books, 1)
 	persisted := books[0]
 	assert.Equal(t, 7, persisted.LastPage)
+	assert.Empty(t, persisted.LastCFI)
+	assert.Equal(t, BindingLeftToRight, persisted.BindingDirection)
 	assert.Equal(t, 20, persisted.PageCount)
 	assert.Equal(t, "ready", persisted.CoverThumbnailStatus)
 	assert.NotEmpty(t, persisted.LastOpenedAt)
@@ -148,7 +150,7 @@ func TestStoreRemoveDeletesBookAndReadingState(t *testing.T) {
 
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 10, now)
 	require.NoError(t, err)
-	require.NoError(t, store.SaveReadingPosition(t.Context(), book.ID, 4, 10, now))
+	require.NoError(t, store.SaveReadingPosition(t.Context(), book.ID, 4, 10, "", now))
 	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{pageSegment(1, "persisted text")}, 10, now)
 	require.NoError(t, err)
 
@@ -361,7 +363,9 @@ func TestStoreValidatesUpdatesAndMissingBooks(t *testing.T) {
 
 	_, err = store.Get(t.Context(), "missing")
 	assert.ErrorIs(t, err, ErrBookNotFound)
-	assert.Error(t, store.SaveReadingPosition(t.Context(), "missing", 0, 0, time.Now()))
+	assert.ErrorIs(t, store.SaveReadingPosition(t.Context(), "missing", 0, 0, "", time.Now()), ErrInvalidReadingPosition)
+	assert.ErrorIs(t, store.SaveReadingPosition(t.Context(), "missing", 1, 1, "", time.Now()), ErrBookNotFound)
+	assert.ErrorIs(t, store.SaveBindingDirection(t.Context(), "missing", BindingRightToLeft, time.Now()), ErrBookNotFound)
 	assert.ErrorIs(t, store.MarkCoverFailed(t.Context(), "missing", time.Now()), ErrBookNotFound)
 }
 
@@ -427,4 +431,37 @@ func TestStoreNewDefersDatabaseCreationUntilConnect(t *testing.T) {
 	db := store.db
 	require.NoError(t, store.Connect())
 	assert.Same(t, db, store.db)
+}
+
+func TestStoreKeepsEPUBPlaceAndBindingDirection(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Date(2026, time.November, 28, 9, 0, 0, 0, time.UTC)
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.epub", "hash-1", "epub", 120, now)
+	require.NoError(t, err)
+	assert.Equal(t, BindingLeftToRight, book.BindingDirection)
+
+	// The binding direction is kept before the book has a reading position.
+	require.NoError(t, store.SaveBindingDirection(t.Context(), book.ID, BindingRightToLeft, now))
+	book, err = store.Get(t.Context(), book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, book.LastPage)
+	assert.Equal(t, BindingRightToLeft, book.BindingDirection)
+
+	require.NoError(t, store.SaveReadingPosition(t.Context(), book.ID, 3, 9, "epubcfi(/6/6!/4/2/1:10)", now))
+	book, err = store.Get(t.Context(), book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, book.LastPage)
+	assert.Equal(t, "epubcfi(/6/6!/4/2/1:10)", book.LastCFI)
+	assert.Equal(t, BindingRightToLeft, book.BindingDirection, "saving the position keeps the binding direction")
+
+	assert.ErrorIs(t, store.SaveReadingPosition(t.Context(), book.ID, 3, 9, "not a cfi", now), ErrInvalidReadingPosition)
+	assert.ErrorIs(t, store.SaveBindingDirection(t.Context(), book.ID, "ttb", now), ErrInvalidBindingDirection)
+
+	// Removing the book removes its reading state.
+	require.NoError(t, store.Remove(t.Context(), book.ID))
+	var states int
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM book_reading_states").Scan(&states))
+	assert.Zero(t, states)
 }

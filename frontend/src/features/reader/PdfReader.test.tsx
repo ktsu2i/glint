@@ -16,6 +16,7 @@ const backend = vi.hoisted(() => ({
   listHighlights: vi.fn(),
   removeBookmark: vi.fn(),
   removeHighlight: vi.fn(),
+  saveBindingDirection: vi.fn(),
   saveBookSegments: vi.fn(),
   searchBook: vi.fn(),
   setWindowControlsVisible: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("../../shared/api/backend", () => ({
   listHighlights: backend.listHighlights,
   removeBookmark: backend.removeBookmark,
   removeHighlight: backend.removeHighlight,
+  saveBindingDirection: backend.saveBindingDirection,
   saveBookSegments: backend.saveBookSegments,
   searchBook: backend.searchBook,
   setWindowControlsVisible: backend.setWindowControlsVisible,
@@ -206,6 +208,7 @@ beforeEach(() => {
     }),
   );
   backend.setWindowControlsVisible.mockResolvedValue(undefined);
+  backend.saveBindingDirection.mockResolvedValue(undefined);
 });
 
 describe("PdfReader", () => {
@@ -1263,7 +1266,7 @@ describe("PdfReader", () => {
       "true",
     );
     expect(screen.getByText("右から左へ読みます。")).toBeTruthy();
-    expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBe("rtl");
+    expect(backend.saveBindingDirection).toHaveBeenLastCalledWith("book-1", "rtl");
     fireEvent.click(screen.getByRole("button", { name: "両開き" }));
     await waitFor(() =>
       expect(globalThis.document.querySelector(".pdf-spread")?.className).toBe(
@@ -1271,7 +1274,7 @@ describe("PdfReader", () => {
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "左綴じ" }));
-    expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBe("ltr");
+    expect(backend.saveBindingDirection).toHaveBeenLastCalledWith("book-1", "ltr");
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "表示" })).toBeNull();
@@ -1280,6 +1283,34 @@ describe("PdfReader", () => {
     expect(screen.queryByRole("dialog", { name: "表示" })).toBeNull();
     expect(screen.getByRole("region", { name: "PDFリーダー" }).className).toContain(
       "is-chrome-visible",
+    );
+  });
+
+  it("opens with the binding the library kept", async () => {
+    resolveDocument(makeDocument());
+    window.localStorage.clear();
+    render(<PdfReader book={{ ...makeBook(), bindingDirection: "rtl" }} onPageChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
+    expect(screen.getByRole("button", { name: "右綴じ" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(backend.saveBindingDirection).not.toHaveBeenCalled();
+  });
+
+  it("moves the binding an earlier version kept to the library", async () => {
+    resolveDocument(makeDocument());
+    window.localStorage.clear();
+    window.localStorage.setItem("glint.reader.bindingDirection.book-1", "rtl");
+    render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
+    expect(screen.getByRole("button", { name: "右綴じ" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(backend.saveBindingDirection).toHaveBeenCalledWith("book-1", "rtl");
+    await waitFor(() =>
+      expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBeNull(),
     );
   });
 });

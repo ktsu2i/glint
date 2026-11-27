@@ -19,10 +19,13 @@ const bindings = vi.hoisted(() => ({
   saveBookSegments: vi.fn(),
   pendingIndexBooks: vi.fn(),
   saveReadingPosition: vi.fn(),
+  saveBindingDirection: vi.fn(),
   searchBook: vi.fn(),
   searchLibrary: vi.fn(),
   getAppearanceSettings: vi.fn(),
   saveAppearanceSettings: vi.fn(),
+  getReaderSettings: vi.fn(),
+  saveReaderSettings: vi.fn(),
 }));
 
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
@@ -44,6 +47,7 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", ()
   SaveBookSegments: bindings.saveBookSegments,
   PendingIndexBooks: bindings.pendingIndexBooks,
   SaveReadingPosition: bindings.saveReadingPosition,
+  SaveBindingDirection: bindings.saveBindingDirection,
   SearchBook: bindings.searchBook,
   SearchLibrary: bindings.searchLibrary,
 }));
@@ -51,6 +55,8 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", ()
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice", () => ({
   GetAppearanceSettings: bindings.getAppearanceSettings,
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
+  GetReaderSettings: bindings.getReaderSettings,
+  SaveReaderSettings: bindings.saveReaderSettings,
 }));
 
 import {
@@ -58,6 +64,7 @@ import {
   addHighlight,
   changeHighlightColor,
   getAppearanceSettings,
+  getReaderSettings,
   listBooks,
   listBookmarks,
   listHighlights,
@@ -73,6 +80,8 @@ import {
   saveBookSegments,
   pendingIndexBooks,
   saveAppearanceSettings,
+  saveBindingDirection,
+  saveReaderSettings,
   saveReadingPosition,
   searchBook,
   searchLibrary,
@@ -148,6 +157,8 @@ describe("backend facade", () => {
       title: "Renamed",
     });
     await saveReadingPosition("book-1", 3, 10);
+    await saveReadingPosition("book-2", 2, 9, "epubcfi(/6/4!/4/2/1:0)");
+    await saveBindingDirection("book-1", "rtl");
     await expect(
       saveBookSegments(
         "book-1",
@@ -175,7 +186,15 @@ describe("backend facade", () => {
     await saveBookCover("book-1", "data:image/png;base64,cover");
     await markBookCoverFailed("book-1");
 
-    expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10);
+    // A PDF position goes out with an empty CFI.
+    expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10, "");
+    expect(bindings.saveReadingPosition).toHaveBeenCalledWith(
+      "book-2",
+      2,
+      9,
+      "epubcfi(/6/4!/4/2/1:0)",
+    );
+    expect(bindings.saveBindingDirection).toHaveBeenCalledWith("book-1", "rtl");
     expect(bindings.saveBookSegments).toHaveBeenCalledWith(
       "book-1",
       [
@@ -237,5 +256,15 @@ describe("backend facade", () => {
     expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", { ...input, cfi: "" });
     expect(bindings.changeHighlightColor).toHaveBeenCalledWith("book-1", 3, "purple");
     expect(bindings.removeHighlight).toHaveBeenCalledWith("book-1", 3);
+  });
+
+  it("passes the reader settings through", async () => {
+    const reader = { epubFontScale: 120, epubLayout: "single" as const };
+    bindings.getReaderSettings.mockResolvedValue(reader);
+    bindings.saveReaderSettings.mockResolvedValue(reader);
+
+    await expect(getReaderSettings()).resolves.toEqual(reader);
+    await expect(saveReaderSettings(reader)).resolves.toEqual(reader);
+    expect(bindings.saveReaderSettings).toHaveBeenCalledWith(reader);
   });
 });

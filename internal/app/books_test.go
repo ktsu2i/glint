@@ -135,7 +135,7 @@ func TestDialogMethodsRequireStartup(t *testing.T) {
 func TestListBooksServesCoverAndKeepsReadingPosition(t *testing.T) {
 	h := newHarness(t)
 	book := h.importPDF("Guide.pdf")
-	require.NoError(t, h.service.SaveReadingPosition(book.ID, 3, 8))
+	require.NoError(t, h.service.SaveReadingPosition(book.ID, 3, 8, ""))
 	require.NoError(t, h.service.SaveBookCover(book.ID, pngDataURL))
 
 	summaries, err := h.service.ListBooks()
@@ -323,6 +323,29 @@ func TestEPUBHighlightsRoundTripAsDTOs(t *testing.T) {
 	listed, err := h.service.ListHighlights(book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []BookHighlight{saved}, listed)
+}
+
+func TestOpenBookRestoresEPUBPlaceAndBindingDirection(t *testing.T) {
+	h := newHarness(t)
+	h.dialogs.path = writeTestEPUB(t, h.root)
+	book, err := h.service.OpenBookFile()
+	require.NoError(t, err)
+	assert.Empty(t, book.InitialCFI)
+	assert.Equal(t, "ltr", book.BindingDirection)
+
+	const cfi = "epubcfi(/6/2!/4/10/1:4)"
+	require.NoError(t, h.service.SaveReadingPosition(book.ID, 1, 1, cfi))
+	require.NoError(t, h.service.SaveBindingDirection(book.ID, "rtl"))
+
+	opened, err := h.service.OpenBook(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, opened.InitialPage)
+	assert.Equal(t, cfi, opened.InitialCFI)
+	assert.Equal(t, "rtl", opened.BindingDirection)
+
+	assert.EqualError(t, h.service.SaveBindingDirection(book.ID, "up"), "The binding direction must be left or right.")
+	h.useJapanese()
+	assert.EqualError(t, h.service.SaveBindingDirection(book.ID, "up"), "綴じ方向は左綴じか右綴じを指定してください。")
 }
 
 func writeTestEPUB(t *testing.T, dir string) string {

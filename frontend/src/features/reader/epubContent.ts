@@ -1,6 +1,12 @@
 import { collapse as collapseCFI, compare as compareCFI } from "foliate-js/epubcfi.js";
 import type { FoliateTocItem } from "foliate-js/view.js";
-import type { BookBookmark, BookHighlight, HighlightColor } from "../../shared/api/backend";
+import type {
+  BookBookmark,
+  BookHighlight,
+  HighlightColor,
+  ReaderSettings,
+} from "../../shared/api/backend";
+import { forgetLegacyValue, readLegacyValue } from "./legacyStorage";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;
@@ -145,20 +151,20 @@ export function flattenToc(
   return lines;
 }
 
-export type SavedEpubPosition = { section: number; cfi: string };
-
-const positionStorageKey = (bookId: string) => `glint.epub.position.${bookId}`;
+const legacyPositionKey = (bookId: string) => `glint.epub.position.${bookId}`;
 
 /**
- * The library keeps the section; the exact spot in it, as an EPUB CFI, is
- * kept on this device so the book reopens on the same page.
+ * The place in a book an earlier version kept in localStorage, dropped from
+ * there as it is read. The library keeps the place from the next page turn.
  */
-export function loadEpubPosition(bookId: string): SavedEpubPosition | null {
+export function takeLegacyEpubPosition(bookId: string): { section: number; cfi: string } | null {
+  const key = legacyPositionKey(bookId);
+  const raw = readLegacyValue(key);
+  if (raw === null) {
+    return null;
+  }
+  forgetLegacyValue(key);
   try {
-    const raw = window.localStorage.getItem(positionStorageKey(bookId));
-    if (!raw) {
-      return null;
-    }
     const value: unknown = JSON.parse(raw);
     if (typeof value !== "object" || value === null) {
       return null;
@@ -174,28 +180,37 @@ export function loadEpubPosition(bookId: string): SavedEpubPosition | null {
   }
 }
 
-export function saveEpubPosition(bookId: string, position: SavedEpubPosition) {
-  try {
-    window.localStorage.setItem(positionStorageKey(bookId), JSON.stringify(position));
-  } catch {}
+const legacyFontScaleKey = "glint.epub.fontScale";
+const legacyLayoutKey = "glint.epub.layout";
+
+export const defaultReaderSettings: ReaderSettings = { epubFontScale: 100, epubLayout: "spread" };
+
+/**
+ * The text size and layout an earlier version kept in localStorage, laid over
+ * the saved settings, or null when there are none to move.
+ */
+export function readLegacyReaderSettings(saved: ReaderSettings): ReaderSettings | null {
+  const scale = readLegacyValue(legacyFontScaleKey);
+  const layout = readLegacyValue(legacyLayoutKey);
+  if (scale === null && layout === null) {
+    return null;
+  }
+  const value = Number(scale);
+  return {
+    epubFontScale:
+      scale !== null &&
+      Number.isInteger(value) &&
+      value >= EPUB_MIN_FONT_SCALE &&
+      value <= EPUB_MAX_FONT_SCALE
+        ? value
+        : saved.epubFontScale,
+    epubLayout: layout === "single" || layout === "spread" ? layout : saved.epubLayout,
+  };
 }
 
-const fontScaleStorageKey = "glint.epub.fontScale";
-
-export function loadEpubFontScale(): number {
-  try {
-    const value = Number(window.localStorage.getItem(fontScaleStorageKey));
-    if (Number.isFinite(value) && value >= EPUB_MIN_FONT_SCALE && value <= EPUB_MAX_FONT_SCALE) {
-      return value;
-    }
-  } catch {}
-  return 100;
-}
-
-export function saveEpubFontScale(value: number) {
-  try {
-    window.localStorage.setItem(fontScaleStorageKey, String(value));
-  } catch {}
+export function forgetLegacyReaderSettings() {
+  forgetLegacyValue(legacyFontScaleKey);
+  forgetLegacyValue(legacyLayoutKey);
 }
 
 /**
@@ -309,23 +324,4 @@ export function rangeSpeechText(range: Range): string {
     .replaceAll(/[^\S\n]+/g, " ")
     .replaceAll(/ *\n\s*/g, "\n")
     .trim();
-}
-
-export type EpubLayout = "single" | "spread";
-
-const layoutStorageKey = "glint.epub.layout";
-
-/** A spread shows two pages side by side when the window is wide enough for them. */
-export function loadEpubLayout(): EpubLayout {
-  try {
-    return window.localStorage.getItem(layoutStorageKey) === "single" ? "single" : "spread";
-  } catch {
-    return "spread";
-  }
-}
-
-export function saveEpubLayout(layout: EpubLayout) {
-  try {
-    window.localStorage.setItem(layoutStorageKey, layout);
-  } catch {}
 }

@@ -53,6 +53,28 @@ func TestSettingsServiceSavesWithoutAnEmitter(t *testing.T) {
 	assert.Equal(t, "light", appearance.Theme)
 }
 
+func TestSettingsServiceRoundTripsReaderSettings(t *testing.T) {
+	h := newHarness(t)
+	service := NewSettingsService(h.settings, nil)
+	_, err := service.GetReaderSettings()
+	require.ErrorIs(t, err, errNotReady)
+	require.NoError(t, service.ServiceStartup(t.Context(), application.ServiceOptions{}))
+
+	reader, err := service.GetReaderSettings()
+	require.NoError(t, err)
+	assert.Equal(t, ReaderSettings{EPUBFontScale: 100, EPUBLayout: "spread"}, reader)
+
+	saved, err := service.SaveReaderSettings(ReaderSettings{EPUBFontScale: 130, EPUBLayout: "single"})
+	require.NoError(t, err)
+	assert.Equal(t, ReaderSettings{EPUBFontScale: 130, EPUBLayout: "single"}, saved)
+	reader, err = service.GetReaderSettings()
+	require.NoError(t, err)
+	assert.Equal(t, saved, reader)
+
+	_, err = service.SaveReaderSettings(ReaderSettings{EPUBFontScale: 999, EPUBLayout: "single"})
+	assert.EqualError(t, err, "The text size or page layout is invalid.")
+}
+
 type emittedEvent struct {
 	name string
 	data any

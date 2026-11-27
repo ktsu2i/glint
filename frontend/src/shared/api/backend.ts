@@ -16,6 +16,7 @@ import {
   PendingIndexBooks,
   SaveBookSegments,
   SaveBookCover,
+  SaveBindingDirection,
   SaveReadingPosition,
   SearchBook,
   SearchLibrary,
@@ -23,12 +24,17 @@ import {
 import {
   GetAppearanceSettings,
   GetLanguageSettings,
+  GetReaderSettings,
   SaveAppearanceSettings,
   SaveLanguageSettings,
+  SaveReaderSettings,
 } from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
 import { SetWindowControlsVisible } from "../../../bindings/github.com/kaito/glint/internal/app/windowservice";
 
 export type BookFormat = "pdf" | "epub";
+
+/** Which side a PDF is bound on: a right-bound book reads its spreads right to left. */
+export type BindingDirection = "ltr" | "rtl";
 
 export type EpubSpineItem = {
   index: number;
@@ -46,6 +52,9 @@ export type BookFile = {
   format?: BookFormat;
   size: number;
   initialPage: number;
+  /** The place in the initialPage section where an EPUB was left, as an EPUB CFI. */
+  initialCfi?: string;
+  bindingDirection?: BindingDirection;
   indexedPageCount: number;
   nextSegment: number;
   coverStatus: "pending" | "ready" | "failed";
@@ -186,8 +195,16 @@ export async function saveReadingPosition(
   bookId: string,
   pageNumber: number,
   pageCount: number,
+  cfi = "",
 ): Promise<void> {
-  await SaveReadingPosition(bookId, pageNumber, pageCount);
+  await SaveReadingPosition(bookId, pageNumber, pageCount, cfi);
+}
+
+export async function saveBindingDirection(
+  bookId: string,
+  direction: BindingDirection,
+): Promise<void> {
+  await SaveBindingDirection(bookId, direction);
 }
 
 export async function listBookmarks(bookId: string): Promise<BookBookmark[]> {
@@ -280,4 +297,20 @@ export async function saveLanguageSettings(
 
 export async function setWindowControlsVisible(visible: boolean): Promise<void> {
   await SetWindowControlsVisible(visible);
+}
+
+export type EpubLayout = "single" | "spread";
+
+/** How the reader shows books. Every book shares them. */
+export type ReaderSettings = {
+  epubFontScale: number;
+  epubLayout: EpubLayout;
+};
+
+export async function getReaderSettings(): Promise<ReaderSettings> {
+  return (await GetReaderSettings()) as ReaderSettings;
+}
+
+export async function saveReaderSettings(settings: ReaderSettings): Promise<ReaderSettings> {
+  return (await SaveReaderSettings(settings)) as ReaderSettings;
 }
