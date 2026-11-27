@@ -127,6 +127,12 @@ func (store *Store) Connect() error {
 	}
 	store.db = db
 	store.queries = librarydb.New(db)
+	if err := store.normalizeStoredSegmentTexts(context.Background()); err != nil {
+		store.db = nil
+		store.queries = nil
+		_ = db.Close()
+		return err
+	}
 	return nil
 }
 

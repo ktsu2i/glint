@@ -51,6 +51,60 @@ func (q *Queries) FirstMissingOrdinal(ctx context.Context, bookID string) (int64
 	return next_ordinal, err
 }
 
+const listSegmentTextsAfter = `-- name: ListSegmentTextsAfter :many
+SELECT id, text FROM book_segments
+ WHERE id > ?1
+ ORDER BY id
+ LIMIT ?2
+`
+
+type ListSegmentTextsAfterParams struct {
+	AfterID   int64
+	BatchSize int64
+}
+
+type ListSegmentTextsAfterRow struct {
+	ID   int64
+	Text string
+}
+
+func (q *Queries) ListSegmentTextsAfter(ctx context.Context, arg ListSegmentTextsAfterParams) ([]ListSegmentTextsAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSegmentTextsAfter, arg.AfterID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSegmentTextsAfterRow{}
+	for rows.Next() {
+		var i ListSegmentTextsAfterRow
+		if err := rows.Scan(&i.ID, &i.Text); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateSegmentText = `-- name: UpdateSegmentText :exec
+UPDATE book_segments SET text = ?1 WHERE id = ?2
+`
+
+type UpdateSegmentTextParams struct {
+	Text string
+	ID   int64
+}
+
+func (q *Queries) UpdateSegmentText(ctx context.Context, arg UpdateSegmentTextParams) error {
+	_, err := q.db.ExecContext(ctx, updateSegmentText, arg.Text, arg.ID)
+	return err
+}
+
 const upsertBookSegment = `-- name: UpsertBookSegment :exec
 INSERT INTO book_segments (book_id, ordinal, kind, location, heading_path, text, updated_at)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
