@@ -143,8 +143,12 @@ func (s *BooksService) ListBooks() ([]BookSummary, error) {
 	return summaries, nil
 }
 
-func (s *BooksService) SaveReadingPosition(bookID string, pageNumber, pageCount int) error {
-	return s.books.SaveReadingPosition(s.context(), bookID, pageNumber, pageCount)
+func (s *BooksService) SaveReadingPosition(bookID string, pageNumber, pageCount int, cfi string) error {
+	return s.books.SaveReadingPosition(s.context(), bookID, pageNumber, pageCount, cfi)
+}
+
+func (s *BooksService) SaveBindingDirection(bookID, direction string) error {
+	return s.bookError(s.books.SaveBindingDirection(s.context(), bookID, direction))
 }
 
 func (s *BooksService) ListBookmarks(bookID string) ([]BookBookmark, error) {
@@ -312,6 +316,8 @@ func (s *BooksService) bookFile(opened books.OpenedBook) (BookFile, error) {
 		Format:           book.Format,
 		Size:             book.SizeBytes,
 		InitialPage:      max(1, book.LastPage),
+		InitialCFI:       book.LastCFI,
+		BindingDirection: book.BindingDirection,
 		IndexedPageCount: opened.IndexedSegments,
 		NextSegment:      opened.NextSegment,
 		CoverStatus:      coverStatus,
@@ -388,6 +394,11 @@ func (s *BooksService) bookError(err error) error {
 		return s.text.error(ctx,
 			"The highlight no longer exists.",
 			"ハイライトが見つかりません。",
+		)
+	case errors.Is(err, library.ErrInvalidBindingDirection):
+		return s.text.error(ctx,
+			"The binding direction must be left or right.",
+			"綴じ方向は左綴じか右綴じを指定してください。",
 		)
 	case errors.Is(err, library.ErrInvalidSegmentBatch):
 		return s.text.error(ctx, "The book index data is invalid.", "本の索引データが不正です。")

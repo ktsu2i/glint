@@ -261,8 +261,15 @@ func (s *Service) entry(ctx context.Context, book library.Book) (Entry, error) {
 	return Entry{Book: book, Available: fileExists(book.SourcePath)}, nil
 }
 
-func (s *Service) SaveReadingPosition(ctx context.Context, bookID string, pageNumber, pageCount int) error {
-	return s.library.SaveReadingPosition(ctx, bookID, pageNumber, pageCount, time.Now())
+// SaveReadingPosition keeps where a book was left: a PDF page, or an EPUB
+// section with the CFI of the place in it.
+func (s *Service) SaveReadingPosition(ctx context.Context, bookID string, pageNumber, pageCount int, cfi string) error {
+	return s.library.SaveReadingPosition(ctx, bookID, pageNumber, pageCount, cfi, time.Now())
+}
+
+// SaveBindingDirection keeps which side a PDF is bound on.
+func (s *Service) SaveBindingDirection(ctx context.Context, bookID, direction string) error {
+	return s.library.SaveBindingDirection(ctx, bookID, direction, time.Now())
 }
 
 func (s *Service) ListBookmarks(ctx context.Context, bookID string) ([]library.BookBookmark, error) {

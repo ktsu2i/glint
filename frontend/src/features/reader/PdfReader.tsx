@@ -27,9 +27,11 @@ import {
   removeBookmark,
   removeHighlight,
   changeHighlightColor,
+  saveBindingDirection,
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
+  type BindingDirection,
   type BookFile,
   type BookHighlight,
   type BookSearchResult,
@@ -80,7 +82,6 @@ function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry
 
 type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 type ViewMode = "single" | "spread";
-type BindingDirection = "ltr" | "rtl";
 type ReaderPanel = "toc" | "search" | "bookmarks" | "highlights" | null;
 // Floating controls are placed in the reader's coordinates.
 type PendingSelection = { parts: PageSelection[]; x: number; top: number; bottom: number };
@@ -95,21 +96,8 @@ function showWindowControls(visible: boolean) {
   setWindowControlsVisible(visible).catch(() => {});
 }
 
-const bindingDirectionStorageKey = "glint.reader.bindingDirection";
-
-function loadBindingDirection(bookId: string | undefined): BindingDirection {
-  if (!bookId || typeof window === "undefined") {
-    return "ltr";
-  }
-  const stored = window.localStorage.getItem(`${bindingDirectionStorageKey}.${bookId}`);
-  return stored === "rtl" ? "rtl" : "ltr";
-}
-
-function persistBindingDirection(bookId: string | undefined, direction: BindingDirection) {
-  if (!bookId || typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(`${bindingDirectionStorageKey}.${bookId}`, direction);
+function bindingDirectionOf(book: BookFile | null): BindingDirection {
+  return book?.bindingDirection === "rtl" ? "rtl" : "ltr";
 }
 
 type PdfReaderProps = {
@@ -138,7 +126,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const pageInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [bindingDirection, setBindingDirection] = useState<BindingDirection>(() =>
-    loadBindingDirection(book?.id),
+    bindingDirectionOf(book),
   );
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -298,7 +286,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
-    setBindingDirection(loadBindingDirection(book.id));
+    setBindingDirection(bindingDirectionOf(book));
     pageChangeCallbackRef.current(0, 0);
 
     let timeout = 0;
@@ -890,7 +878,11 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
 
   function changeBinding(next: BindingDirection) {
     setBindingDirection(next);
-    persistBindingDirection(book?.id, next);
+    if (book) {
+      saveBindingDirection(book.id, next).catch((reason: unknown) => {
+        console.warn("Saving the binding direction failed", reason);
+      });
+    }
   }
 
   function adjustZoom(delta: number) {

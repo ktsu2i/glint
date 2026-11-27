@@ -44,6 +44,27 @@ type Book struct {
 	ImportedAt           string
 	LastOpenedAt         string
 	LastPage             int
+	// LastCFI is the place in the LastPage section where an EPUB was left.
+	// It is empty for a PDF.
+	LastCFI          string
+	BindingDirection string
+}
+
+// A PDF spread reads left to right, or right to left for a book bound on the right.
+const (
+	BindingLeftToRight = "ltr"
+	BindingRightToLeft = "rtl"
+)
+
+var (
+	ErrInvalidReadingPosition  = errors.New("reading position is outside the document")
+	ErrInvalidBindingDirection = errors.New("binding direction must be ltr or rtl")
+)
+
+type readingState struct {
+	lastPage         int64
+	lastCFI          string
+	bindingDirection string
 }
 
 func (b Book) Display() string {
@@ -53,7 +74,7 @@ func (b Book) Display() string {
 	return b.Title
 }
 
-func bookFromRow(record librarydb.Book, lastPage int64) Book {
+func bookFromRow(record librarydb.Book, state readingState) Book {
 	return Book{
 		ID:                   record.ID,
 		Title:                record.Title,
@@ -69,7 +90,9 @@ func bookFromRow(record librarydb.Book, lastPage int64) Book {
 		CoverThumbnailStatus: record.CoverThumbnailStatus,
 		ImportedAt:           record.ImportedAt,
 		LastOpenedAt:         record.LastOpenedAt,
-		LastPage:             int(lastPage),
+		LastPage:             int(state.lastPage),
+		LastCFI:              state.lastCFI,
+		BindingDirection:     state.bindingDirection,
 	}
 }
 
@@ -190,7 +213,7 @@ func (store *Store) List(ctx context.Context) ([]Book, error) {
 	}
 	books := make([]Book, len(rows))
 	for i, row := range rows {
-		books[i] = bookFromRow(row.Book, row.LastPage)
+		books[i] = bookFromRow(row.Book, readingState{row.LastPage, row.LastCfi, row.BindingDirection})
 	}
 	return books, nil
 }
@@ -200,7 +223,7 @@ func (store *Store) Get(ctx context.Context, id string) (Book, error) {
 	if err != nil {
 		return Book{}, bookQueryError(err)
 	}
-	return bookFromRow(row.Book, row.LastPage), nil
+	return bookFromRow(row.Book, readingState{row.LastPage, row.LastCfi, row.BindingDirection}), nil
 }
 
 func (store *Store) ByHash(ctx context.Context, hash string) (Book, error) {
@@ -208,7 +231,7 @@ func (store *Store) ByHash(ctx context.Context, hash string) (Book, error) {
 	if err != nil {
 		return Book{}, bookQueryError(err)
 	}
-	return bookFromRow(row.Book, row.LastPage), nil
+	return bookFromRow(row.Book, readingState{row.LastPage, row.LastCfi, row.BindingDirection}), nil
 }
 
 func bookQueryError(err error) error {
@@ -226,9 +249,11 @@ func (store *Store) MarkOpened(ctx context.Context, id string, now time.Time) er
 	return requireChanged(affected, err, "mark book opened")
 }
 
-func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumber, pageCount int, now time.Time) error {
-	if pageNumber < 1 || pageCount < 1 || pageNumber > pageCount {
-		return errors.New("reading position is outside the document")
+// SaveReadingPosition keeps the page a book was left on. For an EPUB, the page
+// is the section and cfi the place in it; a PDF passes an empty cfi.
+func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumber, pageCount int, cfi string, now time.Time) error {
+	if pageNumber < 1 || pageCount < 1 || pageNumber > pageCount || (cfi != "" && !validCFI(cfi)) {
+		return ErrInvalidReadingPosition
 	}
 	timestamp := now.UTC().Format(time.RFC3339Nano)
 	return store.inTx(ctx, func(queries *librarydb.Queries) error {
@@ -243,12 +268,31 @@ func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumb
 		if err := queries.UpsertReadingState(ctx, librarydb.UpsertReadingStateParams{
 			BookID:     id,
 			PageNumber: int64(pageNumber),
+			Cfi:        cfi,
 			UpdatedAt:  timestamp,
 		}); err != nil {
 			return fmt.Errorf("save reading position: %w", err)
 		}
 		return nil
 	})
+}
+
+// SaveBindingDirection keeps which side a book is bound on.
+func (store *Store) SaveBindingDirection(ctx context.Context, id, direction string, now time.Time) error {
+	if direction != BindingLeftToRight && direction != BindingRightToLeft {
+		return ErrInvalidBindingDirection
+	}
+	if _, err := store.queries.GetBook(ctx, id); err != nil {
+		return bookQueryError(err)
+	}
+	if err := store.queries.UpsertBindingDirection(ctx, librarydb.UpsertBindingDirectionParams{
+		BookID:           id,
+		BindingDirection: direction,
+		UpdatedAt:        now.UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		return fmt.Errorf("save binding direction: %w", err)
+	}
+	return nil
 }
 
 func (store *Store) SaveCover(ctx context.Context, id, path string, now time.Time) error {

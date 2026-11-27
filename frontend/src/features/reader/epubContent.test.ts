@@ -1,17 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   epubStyles,
   flattenToc,
   guardEpubContent,
   isCFIOnPage,
-  loadEpubFontScale,
-  loadEpubLayout,
-  loadEpubPosition,
   pageStartCFI,
   rangeSpeechText,
-  saveEpubFontScale,
-  saveEpubLayout,
-  saveEpubPosition,
   sortEpubBookmarks,
   sortEpubHighlights,
   stripActiveContent,
@@ -97,26 +91,6 @@ describe("flattenToc", () => {
   });
 });
 
-describe("storage", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("keeps the exact position per book", () => {
-    expect(loadEpubPosition("book")).toBeNull();
-    saveEpubPosition("book", { section: 3, cfi: "epubcfi(/6/6!/4/2)" });
-    expect(loadEpubPosition("book")).toEqual({ section: 3, cfi: "epubcfi(/6/6!/4/2)" });
-    window.localStorage.setItem("glint.epub.position.bad", '{"section":1,"cfi":"x"}');
-    expect(loadEpubPosition("bad")).toBeNull();
-  });
-
-  it("keeps the text size within its range", () => {
-    expect(loadEpubFontScale()).toBe(100);
-    saveEpubFontScale(130);
-    expect(loadEpubFontScale()).toBe(130);
-    saveEpubFontScale(999);
-    expect(loadEpubFontScale()).toBe(100);
-  });
-});
-
 function makeHighlight(id: number, pageNumber: number, cfi: string): BookHighlight {
   return {
     id,
@@ -137,16 +111,6 @@ describe("sortEpubHighlights", () => {
       makeHighlight(3, 1, "epubcfi(/6/2!/4/4,/1:5,/1:9)"),
     ]);
     expect(sorted.map((highlight) => highlight.id)).toEqual([3, 2, 1]);
-  });
-});
-
-describe("layout", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("defaults to spreads and keeps a single page choice", () => {
-    expect(loadEpubLayout()).toBe("spread");
-    saveEpubLayout("single");
-    expect(loadEpubLayout()).toBe("single");
   });
 });
 

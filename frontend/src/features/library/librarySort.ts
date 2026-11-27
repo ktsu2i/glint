@@ -1,11 +1,13 @@
-import { useCallback, useState } from "react";
-import type { BookSummary } from "../../shared/api/backend";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getLibrarySettings,
+  saveLibrarySettings,
+  type BookSummary,
+} from "../../shared/api/backend";
 
 export const librarySortOrders = ["recent", "added", "title", "progress"] as const;
 
 export type LibrarySortOrder = (typeof librarySortOrders)[number];
-
-const sortOrderStorageKey = "glint.library.sortOrder";
 
 export function readingProgress(book: BookSummary): number {
   if (book.pageCount < 1) {
@@ -70,23 +72,44 @@ function isSortOrder(value: unknown): value is LibrarySortOrder {
   return librarySortOrders.some((order) => order === value);
 }
 
-function loadSortOrder(): LibrarySortOrder {
-  if (typeof window === "undefined") {
-    return "recent";
-  }
-  const stored = window.localStorage.getItem(sortOrderStorageKey);
-  return isSortOrder(stored) ? stored : "recent";
+async function loadSortOrder(): Promise<LibrarySortOrder> {
+  const saved = await getLibrarySettings();
+  return isSortOrder(saved.sortOrder) ? saved.sortOrder : "recent";
 }
 
-// useLibrarySortOrder remembers the shelf order on this Mac between launches.
+// useLibrarySortOrder remembers the shelf order in the library between launches.
 export function useLibrarySortOrder(): [LibrarySortOrder, (order: LibrarySortOrder) => void] {
-  const [order, setOrder] = useState<LibrarySortOrder>(loadSortOrder);
+  const [order, setOrder] = useState<LibrarySortOrder>("recent");
+  // A choice made while the saved order loads wins over it.
+  const chosenRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const saved = await loadSortOrder();
+        if (active && !chosenRef.current) {
+          setOrder(saved);
+        }
+      } catch (reason) {
+        console.warn("Loading the library sort order failed", reason);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const changeOrder = useCallback((next: LibrarySortOrder) => {
     if (!isSortOrder(next)) {
       return;
     }
+    chosenRef.current = true;
     setOrder(next);
-    window.localStorage.setItem(sortOrderStorageKey, next);
+    saveLibrarySettings({ sortOrder: next }).catch((reason: unknown) => {
+      console.warn("Saving the library sort order failed", reason);
+    });
   }, []);
   return [order, changeOrder];
 }

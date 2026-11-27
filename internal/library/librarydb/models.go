@@ -48,9 +48,11 @@ type BookHighlight struct {
 }
 
 type BookReadingState struct {
-	BookID     string
-	PageNumber int64
-	UpdatedAt  string
+	BookID           string
+	PageNumber       int64
+	UpdatedAt        string
+	Cfi              string
+	BindingDirection string
 }
 
 type BookSegment struct {

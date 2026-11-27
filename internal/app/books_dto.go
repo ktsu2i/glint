@@ -10,6 +10,8 @@ type BookFile struct {
 	Format           string      `json:"format"`
 	Size             int64       `json:"size"`
 	InitialPage      int         `json:"initialPage"`
+	InitialCFI       string      `json:"initialCfi"`
+	BindingDirection string      `json:"bindingDirection"`
 	IndexedPageCount int         `json:"indexedPageCount"`
 	NextSegment      int         `json:"nextSegment"`
 	CoverStatus      string      `json:"coverStatus"`

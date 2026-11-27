@@ -33,15 +33,20 @@ func (q *Queries) GetAppSetting(ctx context.Context, key string) (string, error)
 }
 
 const getBook = `-- name: GetBook :one
-SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.page_count, b.cover_thumbnail_path, b.cover_thumbnail_status, b.imported_at, b.last_opened_at, b.updated_at, b.display_name, b.format, b.source_mod_time, CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
+SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.page_count, b.cover_thumbnail_path, b.cover_thumbnail_status, b.imported_at, b.last_opened_at, b.updated_at, b.display_name, b.format, b.source_mod_time,
+       CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page,
+       CAST(COALESCE(r.cfi, '') AS TEXT) AS last_cfi,
+       CAST(COALESCE(r.binding_direction, 'ltr') AS TEXT) AS binding_direction
   FROM books b
   LEFT JOIN book_reading_states r ON r.book_id = b.id
  WHERE b.id = ?1
 `
 
 type GetBookRow struct {
-	Book     Book
-	LastPage int64
+	Book             Book
+	LastPage         int64
+	LastCfi          string
+	BindingDirection string
 }
 
 func (q *Queries) GetBook(ctx context.Context, id string) (GetBookRow, error) {
@@ -64,20 +69,27 @@ func (q *Queries) GetBook(ctx context.Context, id string) (GetBookRow, error) {
 		&i.Book.Format,
 		&i.Book.SourceModTime,
 		&i.LastPage,
+		&i.LastCfi,
+		&i.BindingDirection,
 	)
 	return i, err
 }
 
 const getBookByHash = `-- name: GetBookByHash :one
-SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.page_count, b.cover_thumbnail_path, b.cover_thumbnail_status, b.imported_at, b.last_opened_at, b.updated_at, b.display_name, b.format, b.source_mod_time, CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
+SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.page_count, b.cover_thumbnail_path, b.cover_thumbnail_status, b.imported_at, b.last_opened_at, b.updated_at, b.display_name, b.format, b.source_mod_time,
+       CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page,
+       CAST(COALESCE(r.cfi, '') AS TEXT) AS last_cfi,
+       CAST(COALESCE(r.binding_direction, 'ltr') AS TEXT) AS binding_direction
   FROM books b
   LEFT JOIN book_reading_states r ON r.book_id = b.id
  WHERE b.file_hash = ?1
 `
 
 type GetBookByHashRow struct {
-	Book     Book
-	LastPage int64
+	Book             Book
+	LastPage         int64
+	LastCfi          string
+	BindingDirection string
 }
 
 func (q *Queries) GetBookByHash(ctx context.Context, fileHash string) (GetBookByHashRow, error) {
@@ -100,6 +112,8 @@ func (q *Queries) GetBookByHash(ctx context.Context, fileHash string) (GetBookBy
 		&i.Book.Format,
 		&i.Book.SourceModTime,
 		&i.LastPage,
+		&i.LastCfi,
+		&i.BindingDirection,
 	)
 	return i, err
 }
@@ -148,7 +162,10 @@ func (q *Queries) ImportBook(ctx context.Context, arg ImportBookParams) error {
 }
 
 const listBooks = `-- name: ListBooks :many
-SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.page_count, b.cover_thumbnail_path, b.cover_thumbnail_status, b.imported_at, b.last_opened_at, b.updated_at, b.display_name, b.format, b.source_mod_time, CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page
+SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.page_count, b.cover_thumbnail_path, b.cover_thumbnail_status, b.imported_at, b.last_opened_at, b.updated_at, b.display_name, b.format, b.source_mod_time,
+       CAST(COALESCE(r.page_number, 1) AS INTEGER) AS last_page,
+       CAST(COALESCE(r.cfi, '') AS TEXT) AS last_cfi,
+       CAST(COALESCE(r.binding_direction, 'ltr') AS TEXT) AS binding_direction
   FROM books b
   LEFT JOIN book_reading_states r ON r.book_id = b.id
  ORDER BY CASE WHEN b.last_opened_at = '' THEN 1 ELSE 0 END,
@@ -157,8 +174,10 @@ SELECT b.id, b.title, b.file_name, b.source_path, b.file_hash, b.size_bytes, b.p
 `
 
 type ListBooksRow struct {
-	Book     Book
-	LastPage int64
+	Book             Book
+	LastPage         int64
+	LastCfi          string
+	BindingDirection string
 }
 
 func (q *Queries) ListBooks(ctx context.Context) ([]ListBooksRow, error) {
@@ -187,6 +206,8 @@ func (q *Queries) ListBooks(ctx context.Context) ([]ListBooksRow, error) {
 			&i.Book.Format,
 			&i.Book.SourceModTime,
 			&i.LastPage,
+			&i.LastCfi,
+			&i.BindingDirection,
 		); err != nil {
 			return nil, err
 		}
@@ -382,21 +403,47 @@ func (q *Queries) UpsertAppSetting(ctx context.Context, arg UpsertAppSettingPara
 	return err
 }
 
-const upsertReadingState = `-- name: UpsertReadingState :exec
-INSERT INTO book_reading_states (book_id, page_number, updated_at)
+const upsertBindingDirection = `-- name: UpsertBindingDirection :exec
+INSERT INTO book_reading_states (book_id, binding_direction, updated_at)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (book_id) DO UPDATE SET
+    binding_direction = excluded.binding_direction,
+    updated_at = excluded.updated_at
+`
+
+type UpsertBindingDirectionParams struct {
+	BookID           string
+	BindingDirection string
+	UpdatedAt        string
+}
+
+func (q *Queries) UpsertBindingDirection(ctx context.Context, arg UpsertBindingDirectionParams) error {
+	_, err := q.db.ExecContext(ctx, upsertBindingDirection, arg.BookID, arg.BindingDirection, arg.UpdatedAt)
+	return err
+}
+
+const upsertReadingState = `-- name: UpsertReadingState :exec
+INSERT INTO book_reading_states (book_id, page_number, cfi, updated_at)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (book_id) DO UPDATE SET
     page_number = excluded.page_number,
+    cfi = excluded.cfi,
     updated_at = excluded.updated_at
 `
 
 type UpsertReadingStateParams struct {
 	BookID     string
 	PageNumber int64
+	Cfi        string
 	UpdatedAt  string
 }
 
 func (q *Queries) UpsertReadingState(ctx context.Context, arg UpsertReadingStateParams) error {
-	_, err := q.db.ExecContext(ctx, upsertReadingState, arg.BookID, arg.PageNumber, arg.UpdatedAt)
+	_, err := q.db.ExecContext(ctx, upsertReadingState,
+		arg.BookID,
+		arg.PageNumber,
+		arg.Cfi,
+		arg.UpdatedAt,
+	)
 	return err
 }

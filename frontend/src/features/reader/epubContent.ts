@@ -1,6 +1,11 @@
 import { collapse as collapseCFI, compare as compareCFI } from "foliate-js/epubcfi.js";
 import type { FoliateTocItem } from "foliate-js/view.js";
-import type { BookBookmark, BookHighlight, HighlightColor } from "../../shared/api/backend";
+import type {
+  BookBookmark,
+  BookHighlight,
+  HighlightColor,
+  ReaderSettings,
+} from "../../shared/api/backend";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;
@@ -145,58 +150,7 @@ export function flattenToc(
   return lines;
 }
 
-export type SavedEpubPosition = { section: number; cfi: string };
-
-const positionStorageKey = (bookId: string) => `glint.epub.position.${bookId}`;
-
-/**
- * The library keeps the section; the exact spot in it, as an EPUB CFI, is
- * kept on this device so the book reopens on the same page.
- */
-export function loadEpubPosition(bookId: string): SavedEpubPosition | null {
-  try {
-    const raw = window.localStorage.getItem(positionStorageKey(bookId));
-    if (!raw) {
-      return null;
-    }
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== "object" || value === null) {
-      return null;
-    }
-    const section = "section" in value ? value.section : undefined;
-    const cfi = "cfi" in value ? value.cfi : undefined;
-    if (typeof section !== "number" || typeof cfi !== "string" || !cfi.startsWith("epubcfi(")) {
-      return null;
-    }
-    return { section, cfi };
-  } catch {
-    return null;
-  }
-}
-
-export function saveEpubPosition(bookId: string, position: SavedEpubPosition) {
-  try {
-    window.localStorage.setItem(positionStorageKey(bookId), JSON.stringify(position));
-  } catch {}
-}
-
-const fontScaleStorageKey = "glint.epub.fontScale";
-
-export function loadEpubFontScale(): number {
-  try {
-    const value = Number(window.localStorage.getItem(fontScaleStorageKey));
-    if (Number.isFinite(value) && value >= EPUB_MIN_FONT_SCALE && value <= EPUB_MAX_FONT_SCALE) {
-      return value;
-    }
-  } catch {}
-  return 100;
-}
-
-export function saveEpubFontScale(value: number) {
-  try {
-    window.localStorage.setItem(fontScaleStorageKey, String(value));
-  } catch {}
-}
+export const defaultReaderSettings: ReaderSettings = { epubFontScale: 100, epubLayout: "spread" };
 
 /**
  * The fill of each highlight color. foliate-js draws it at the opacity the
@@ -309,23 +263,4 @@ export function rangeSpeechText(range: Range): string {
     .replaceAll(/[^\S\n]+/g, " ")
     .replaceAll(/ *\n\s*/g, "\n")
     .trim();
-}
-
-export type EpubLayout = "single" | "spread";
-
-const layoutStorageKey = "glint.epub.layout";
-
-/** A spread shows two pages side by side when the window is wide enough for them. */
-export function loadEpubLayout(): EpubLayout {
-  try {
-    return window.localStorage.getItem(layoutStorageKey) === "single" ? "single" : "spread";
-  } catch {
-    return "spread";
-  }
-}
-
-export function saveEpubLayout(layout: EpubLayout) {
-  try {
-    window.localStorage.setItem(layoutStorageKey, layout);
-  } catch {}
 }
