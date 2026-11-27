@@ -10,6 +10,7 @@ import {
 import { onAppearanceChanged } from "../../shared/api/events";
 import { I18nProvider, useLanguageSettings } from "../../shared/i18n/i18n";
 import { syncDocumentTheme } from "./theme";
+import "./settings.css";
 
 type SettingsTab = "appearance" | "language";
 

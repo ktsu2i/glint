@@ -1,0 +1,1189 @@
+.reader,
+.reader-empty {
+  min-width: 0;
+  min-height: 0;
+}
+
+.reader {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.reader-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 48px;
+  text-align: center;
+}
+
+.reader-empty-meta {
+  margin: 12px 0 0;
+  color: var(--ambient-muted);
+  font-size: 12px;
+}
+
+.empty-reading-symbol {
+  position: relative;
+  width: 82px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 25px;
+  border: 1px solid #aeb8b7;
+  color: var(--signal-deep);
+  background: rgb(247 247 243 / 48%);
+}
+
+.empty-reading-symbol::before,
+.empty-reading-symbol::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  width: 6px;
+  height: 1px;
+  background: #9ea9a8;
+}
+
+.empty-reading-symbol::before {
+  top: 24px;
+}
+
+.empty-reading-symbol::after {
+  top: 61px;
+}
+
+.empty-reading-symbol span {
+  position: absolute;
+  right: 9px;
+  bottom: -9px;
+  width: 1px;
+  height: 28px;
+  background: var(--signal);
+}
+
+.section-label {
+  margin: 0;
+  color: var(--signal-deep);
+  font-family: var(--utility-font);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.reader-empty h2 {
+  max-width: 520px;
+  margin: 9px 0 13px;
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Yu Mincho", serif;
+  font-size: clamp(27px, 3vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.reader-empty > p:not(.section-label, .reader-empty-meta) {
+  max-width: 510px;
+  margin: 0;
+  color: var(--ambient-muted);
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+/* The draggable strip keeps the window movable while the bars are hidden. */
+.reader-drag-region {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  --wails-draggable: drag;
+}
+
+.reader-status {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  margin: 0;
+  color: var(--ambient-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.reader.is-chrome-visible .reader-status {
+  opacity: 0;
+}
+
+.reader-topbar,
+.reader-bottombar {
+  position: absolute;
+  z-index: 5;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(var(--chrome-offset));
+  /* windowControlsFadeSeconds in internal/app fades the traffic lights to match. */
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.reader-topbar {
+  --chrome-offset: -6px;
+  top: 6px;
+  height: 40px;
+  padding: 0 6px 0 84px;
+  --wails-draggable: drag;
+}
+
+.reader-bottombar {
+  --chrome-offset: 6px;
+  bottom: 8px;
+  height: 50px;
+  padding: 0 12px 0 8px;
+}
+
+.reader.is-chrome-visible .reader-topbar,
+.reader.is-chrome-visible .reader-bottombar,
+.reader-topbar:hover,
+.reader-topbar:focus-within,
+.reader-bottombar:hover,
+.reader-bottombar:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reader-topbar-start,
+.reader-topbar-end {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.reader-topbar-end {
+  justify-content: flex-end;
+}
+
+.reader-back {
+  padding: 0 10px 0 6px;
+  font-weight: 500;
+}
+
+.reader-topbar-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--glass-rule);
+}
+
+.reader-back + .reader-topbar-separator {
+  display: block;
+}
+
+.reader-topbar-start > .reader-topbar-separator:first-child {
+  display: none;
+}
+
+.reader-title {
+  min-width: 0;
+  max-width: 44%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.reader-title strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-title span {
+  color: var(--glass-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-bookmark-error {
+  position: absolute;
+  z-index: 8;
+  top: 54px;
+  left: 50%;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 7px 10px;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--error-surface);
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgb(var(--shadow-rgb) / 12%);
+  transform: translateX(-50%);
+}
+
+/* The view menu holds the page layout, binding, and zoom. */
+.reader-view-menu {
+  position: absolute;
+  z-index: 7;
+  top: 54px;
+  right: 8px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.reader-view-menu section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reader-view-menu h2 {
+  margin: 0;
+  color: var(--glass-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reader-view-menu p {
+  margin: 0;
+  color: var(--glass-muted);
+  font-size: 11.5px;
+}
+
+.reader-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reader-zoom-stepper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--glass-track);
+}
+
+.reader-zoom-stepper .glass-button {
+  width: 40px;
+  height: 36px;
+}
+
+.reader-zoom-stepper span {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.reader-fit-button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--glass-track);
+  color: var(--glass-ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reader-fit-button[aria-pressed="true"] {
+  background: var(--glass-selected);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
+}
+
+/* Side sheet for the table of contents, search, and bookmarks. */
+.reader-sheet {
+  position: absolute;
+  z-index: 6;
+  top: 54px;
+  bottom: 66px;
+  left: 8px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reader-sheet-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 8px 0 16px;
+}
+
+.reader-sheet-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.reader-sheet-count {
+  color: var(--glass-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-sheet-close {
+  color: var(--glass-muted);
+}
+
+.reader-sheet-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0 8px 12px;
+}
+
+.reader-sheet-message {
+  margin: 8px 10px;
+  color: var(--glass-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.reader-sheet-message.is-error {
+  color: var(--danger);
+}
+
+.reader-toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reader-toc-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--glass-ink);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reader-toc-item:hover:not(:disabled) {
+  background: var(--glass-hover);
+}
+
+.reader-toc-item.is-active {
+  background: var(--glass-selected);
+  font-weight: 600;
+}
+
+.reader-toc-item:disabled {
+  color: var(--glass-muted);
+  cursor: default;
+}
+
+.reader-toc-title {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reader-toc-page {
+  flex-shrink: 0;
+  color: var(--glass-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-search-form {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.reader-search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--glass-field);
+  color: var(--glass-muted);
+}
+
+.reader-search-field:focus-within {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.reader-search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--glass-ink);
+  font-size: 13px;
+}
+
+.reader-search-field input::-webkit-search-cancel-button {
+  opacity: 0.55;
+}
+
+.reader-search-count {
+  margin: 2px 10px 8px;
+  color: var(--glass-muted);
+  font-size: 12px;
+}
+
+.reader-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reader-search-results button {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--glass-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.reader-search-results button:hover {
+  background: var(--glass-hover);
+}
+
+.reader-search-results button.is-active {
+  background: var(--glass-selected);
+}
+
+.reader-search-result-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--glass-muted);
+  font-size: 12px;
+}
+
+.reader-search-result-meta strong {
+  color: var(--glass-ink);
+  font-weight: 600;
+}
+
+.reader-search-excerpt {
+  display: block;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.reader-search-excerpt mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--context-marker);
+  color: inherit;
+}
+
+.reader-bookmark-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reader-bookmark-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 10px;
+}
+
+.reader-bookmark-list li:hover {
+  background: var(--glass-hover);
+}
+
+.reader-bookmark-list li.is-active {
+  background: var(--glass-selected);
+}
+
+.reader-bookmark-link,
+.reader-bookmark-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.reader-bookmark-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.reader-bookmark-link > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.reader-bookmark-link > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.reader-bookmark-link strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reader-bookmark-link small {
+  color: var(--glass-muted);
+  font-size: 11.5px;
+}
+
+.reader-bookmark-remove {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  margin-right: 4px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--glass-muted);
+  opacity: 0;
+}
+
+.reader-bookmark-list li:hover .reader-bookmark-remove,
+.reader-bookmark-list li:focus-within .reader-bookmark-remove {
+  opacity: 1;
+}
+
+.reader-bookmark-remove:hover:not(:disabled) {
+  background: var(--error-surface);
+  color: var(--danger);
+}
+
+.reader-bookmark-remove:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+/* Highlights: the list in the side sheet and the floating color picker. */
+.reader-highlight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reader-highlight-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 10px;
+}
+
+.reader-highlight-list li:hover {
+  background: var(--glass-hover);
+}
+
+.reader-highlight-list li.is-active {
+  background: var(--glass-selected);
+}
+
+.reader-highlight-list li:hover .reader-bookmark-remove,
+.reader-highlight-list li:focus-within .reader-bookmark-remove {
+  opacity: 1;
+}
+
+.reader-highlight-list .reader-bookmark-remove {
+  margin-top: 6px;
+}
+
+.reader-highlight-link {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px 9px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+}
+
+.reader-highlight-link::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--highlight-color);
+}
+
+.reader-highlight-link small {
+  color: var(--glass-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-highlight-link span {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow-wrap: anywhere;
+}
+
+.reader-highlight-toolbar {
+  position: absolute;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+}
+
+.reader-highlight-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 50%;
+  background: var(--highlight-color);
+  cursor: pointer;
+  transition: transform 100ms ease;
+}
+
+.reader-highlight-swatch:hover:not(:disabled) {
+  transform: scale(1.12);
+}
+
+/* The current color of a highlight carries a ring. */
+.reader-highlight-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--glass-ink);
+  outline-offset: 2px;
+}
+
+.reader-highlight-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--glass-rule);
+}
+
+.reader-highlight-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.reader-highlight-swatch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.reader-highlight-remove {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--glass-muted);
+  cursor: pointer;
+}
+
+.reader-highlight-remove:hover:not(:disabled) {
+  background: var(--error-surface);
+  color: var(--danger);
+}
+
+.reader-highlight-remove:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Bottom bar: page turning, page number, and the page slider. */
+.page-count {
+  min-width: 82px;
+  height: 30px;
+  margin: 0;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--glass-field);
+  color: var(--glass-ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: text;
+}
+
+button.page-count {
+  cursor: pointer;
+}
+
+button.page-count:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.page-count.is-editing {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.page-count input {
+  width: auto;
+  min-width: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.page-count input:focus {
+  outline: none;
+}
+
+.page-count span {
+  color: var(--glass-muted);
+  font-weight: 400;
+}
+
+.reader-page-slider {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  margin-left: 14px;
+}
+
+.reader-page-rail {
+  --reader-slider-thumb-size: 18px;
+  position: relative;
+  width: 100%;
+  height: 30px;
+}
+
+.reader-page-rail input[type="range"] {
+  --page-progress: 0%;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+      to right,
+      var(--accent) 0 var(--page-progress),
+      var(--glass-track) var(--page-progress) 100%
+    )
+    center / 100% 4px no-repeat;
+  cursor: pointer;
+}
+
+.reader-page-rail input[type="range"]::-webkit-slider-runnable-track {
+  height: 30px;
+  border: 0;
+  background: transparent;
+}
+
+.reader-page-rail input[type="range"]::-webkit-slider-thumb {
+  width: var(--reader-slider-thumb-size);
+  height: var(--reader-slider-thumb-size);
+  margin-top: 6px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 8%),
+    0 2px 6px rgb(0 0 0 / 25%);
+}
+
+.reader-page-rail input[type="range"]::-moz-range-track {
+  height: 4px;
+  border: 0;
+  background: var(--glass-track);
+}
+
+.reader-page-rail input[type="range"]::-moz-range-progress {
+  height: 4px;
+  background: var(--accent);
+}
+
+.reader-page-rail input[type="range"]::-moz-range-thumb {
+  width: var(--reader-slider-thumb-size);
+  height: var(--reader-slider-thumb-size);
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 8%),
+    0 2px 6px rgb(0 0 0 / 25%);
+}
+
+.reader-page-rail input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.reader-page-rail input[type="range"]:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.reader-page-rail.is-rtl input[type="range"] {
+  background: linear-gradient(
+      to left,
+      var(--accent) 0 var(--page-progress),
+      var(--glass-track) var(--page-progress) 100%
+    )
+    center / 100% 4px no-repeat;
+}
+
+.reader-slider-bookmarks {
+  position: absolute;
+  z-index: 2;
+  inset: 0 calc(var(--reader-slider-thumb-size) / 2);
+  pointer-events: none;
+}
+
+.reader-slider-bookmark {
+  --bookmark-position: 0%;
+  position: absolute;
+  top: -2px;
+  left: var(--bookmark-position);
+  width: 16px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+.reader-page-rail.is-rtl .reader-slider-bookmark {
+  left: auto;
+  right: var(--bookmark-position);
+  transform: translateX(50%);
+}
+
+.reader-slider-bookmark-dot {
+  width: 8px;
+  height: 10px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
+  transition: transform 100ms ease;
+}
+
+.reader-slider-bookmark::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 50%;
+  bottom: calc(100% + 6px);
+  width: max-content;
+  max-width: 140px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #2b3237;
+  color: #f4f6f4;
+  font-size: 11px;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(50%) translateY(2px);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+  white-space: nowrap;
+}
+
+.reader-slider-bookmark:hover .reader-slider-bookmark-dot,
+.reader-slider-bookmark:focus-visible .reader-slider-bookmark-dot,
+.reader-slider-bookmark.is-current .reader-slider-bookmark-dot {
+  transform: scale(1.3);
+}
+
+.reader-slider-bookmark:hover::before,
+.reader-slider-bookmark:focus-visible::before {
+  opacity: 1;
+  transform: translateX(50%) translateY(0);
+}
+
+.reader-slider-bookmark:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/*
+ * foliate-js lays an EPUB out in pages. The whole window is the sheet of
+ * paper, as on an e-reader; the bars float over its margins.
+ */
+.epub-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--white);
+  transition: opacity 160ms ease;
+}
+
+.epub-stage.is-loading {
+  opacity: 0;
+}
+
+.epub-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.epub-page-count {
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The page sits in the middle of the ambient backdrop. */
+.pdf-stage {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding: 48px 40px;
+  scrollbar-width: thin;
+}
+
+.pdf-spread {
+  width: max-content;
+  min-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.pdf-spread.is-spread.is-rtl {
+  flex-direction: row-reverse;
+}
+
+.pdf-spread .pdf-page:first-child:not(:last-child) {
+  border-radius: 6px 0 0 6px;
+}
+
+.pdf-spread .pdf-page:last-child:not(:first-child) {
+  border-radius: 0 6px 6px 0;
+  box-shadow:
+    inset 1px 0 0 rgb(0 0 0 / 6%),
+    var(--page-shadow);
+}
+
+.pdf-page {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 6px;
+  line-height: 0;
+  background: white;
+  box-shadow: var(--page-shadow);
+}
+
+.pdf-canvas {
+  display: block;
+}
+
+/*
+ * Highlights are translucent and the whole layer is multiplied onto the canvas,
+ * so the text shows through. Blending each mark would only blend it with the
+ * layer, which is its own stacking context, and cover the text. Blue is left
+ * to the text selection.
+ */
+.is-yellow {
+  --highlight-color: #ffe27a;
+  --highlight-mark: rgb(255 208 0 / 45%);
+}
+
+.is-green {
+  --highlight-color: #b4e8a8;
+  --highlight-mark: rgb(88 200 92 / 38%);
+}
+
+.is-pink {
+  --highlight-color: #ffbfd8;
+  --highlight-mark: rgb(255 92 160 / 32%);
+}
+
+.is-purple {
+  --highlight-color: #d6c4ff;
+  --highlight-mark: rgb(150 100 255 / 30%);
+}
+
+.highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.highlight-mark {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--highlight-mark);
+}
+
+.highlight-mark.is-active {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--highlight-color) 55%, #000);
+}
+
+.text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 2;
+  user-select: text;
+}
+
+.text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.text-layer > :not(.markedContent),
+.text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size, 1));
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(calc(1 / var(--min-font-size, 1)));
+}
+
+.text-layer .markedContent {
+  display: contents;
+}
+
+.text-layer ::selection {
+  background: rgb(0 122 255 / 25%);
+}
+
+.text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.text-layer.selecting .endOfContent {
+  top: 0;
+}
+
+.reader-error {
+  position: absolute;
+  z-index: 2;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 10px;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--error-surface);
+  color: var(--danger);
+  font-size: 11px;
+  box-shadow: 0 4px 12px rgb(32 37 42 / 8%);
+}
+
+:root[data-theme="dark"] .empty-reading-symbol {
+  background: rgb(46 53 56 / 58%);
+}

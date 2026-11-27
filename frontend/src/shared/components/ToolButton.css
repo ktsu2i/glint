@@ -1,0 +1,53 @@
+.tool-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--glass-ink);
+  cursor: pointer;
+  --wails-draggable: no-drag;
+}
+
+.tool-button:hover:not(:disabled) {
+  background: var(--glass-hover);
+}
+
+.tool-button.is-active {
+  background: var(--glass-active);
+}
+
+.tool-button.reader-bookmark-toggle.is-active,
+.tool-button.is-reading {
+  background: transparent;
+  color: var(--accent);
+}
+
+.tool-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.tooltip-popup {
+  z-index: 30;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #2b3237;
+  color: #f4f6f4;
+  font-size: 11px;
+  line-height: 1;
+  box-shadow: 0 5px 14px rgb(24 30 34 / 18%);
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+}
+
+.tooltip-popup[data-starting-style],
+.tooltip-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}

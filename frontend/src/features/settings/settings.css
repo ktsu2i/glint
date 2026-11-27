@@ -1,0 +1,225 @@
+/* Settings window, opened with Command-comma. */
+body:has(.settings-window) {
+  min-width: 0;
+}
+
+.settings-window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+  background:
+    radial-gradient(70% 60% at 10% 0%, var(--ambient-tint) 0%, transparent 70%), var(--ambient-base);
+}
+
+.settings-window-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--glass-rule);
+  --wails-draggable: drag;
+}
+
+.settings-window-header h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.settings-tabs button {
+  width: 76px;
+  height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--glass-muted);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  --wails-draggable: no-drag;
+}
+
+.settings-tabs button:hover {
+  background: var(--glass-hover);
+}
+
+.settings-tabs button[aria-selected="true"] {
+  background: var(--glass-track);
+  color: var(--accent);
+}
+
+.settings-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: auto;
+  padding: 28px 40px;
+}
+
+.settings-panel-heading h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-panel-heading p {
+  margin: 0;
+  color: var(--glass-muted);
+  font-size: 12.5px;
+}
+
+.settings-error,
+.settings-saving {
+  margin: 0;
+  font-size: 12px;
+}
+
+.settings-error {
+  padding: 10px 12px;
+  border-left: 2px solid var(--danger);
+  border-radius: 6px;
+  background: var(--error-surface);
+  color: var(--danger);
+}
+
+.settings-saving {
+  color: var(--glass-muted);
+}
+
+.settings-theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-theme-option,
+.settings-language-option {
+  border: 0;
+  background: transparent;
+  color: var(--glass-ink);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: inset 0 0 0 1px var(--glass-rule);
+}
+
+.settings-theme-option {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 14px;
+}
+
+.settings-theme-option[aria-pressed="true"],
+.settings-language-option[aria-pressed="true"] {
+  background: var(--glass-selected);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.settings-theme-option:disabled,
+.settings-language-option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.settings-theme-preview {
+  width: 100%;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 9px;
+}
+
+.settings-theme-preview > span {
+  width: 38px;
+  height: 52px;
+  border-radius: 2px;
+  background: #fffefb;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 22%);
+}
+
+.settings-theme-option.is-light .settings-theme-preview {
+  background: radial-gradient(80% 90% at 15% 10%, #8fbab6 0%, transparent 70%), #e3e8e5;
+}
+
+.settings-theme-option.is-dark .settings-theme-preview {
+  background:
+    radial-gradient(80% 90% at 15% 10%, rgb(63 120 124 / 60%) 0%, transparent 70%), #111517;
+}
+
+.settings-theme-option.is-system .settings-theme-preview {
+  background: linear-gradient(135deg, #e3e8e5 0 50%, #111517 50% 100%);
+}
+
+.settings-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 4px 4px;
+}
+
+.settings-option-copy strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-option-copy small {
+  color: var(--glass-muted);
+  font-size: 11.5px;
+}
+
+.settings-language-options {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-language-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.settings-language-option .settings-option-copy {
+  padding: 0;
+}
+
+.settings-check {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--glass-muted);
+  color: var(--accent-ink);
+}
+
+.settings-language-option[aria-pressed="true"] .settings-check {
+  background: var(--accent);
+  box-shadow: none;
+}
