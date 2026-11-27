@@ -1,7 +1,7 @@
 import { fireEvent, render as renderBase, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { BookSummary } from "../../shared/api/backend";
+import type { BookSummary } from "../../shared/api/books";
 import { Library } from "./Library";
 import { I18nProvider } from "../../shared/i18n/i18n";
 

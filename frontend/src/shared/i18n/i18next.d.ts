@@ -1,4 +1,4 @@
-import type { en } from "./i18n";
+import type { en } from "./locales/en";
 
 declare module "i18next" {
   type CustomTypeOptions = {

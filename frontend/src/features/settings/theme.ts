@@ -1,4 +1,4 @@
-import type { ThemePreference } from "../../shared/api/backend";
+import type { ThemePreference } from "../../shared/api/settings";
 
 export const SYSTEM_DARK_THEME_QUERY = "(prefers-color-scheme: dark)";
 

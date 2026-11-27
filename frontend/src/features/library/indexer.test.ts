@@ -7,11 +7,11 @@ const loader = vi.hoisted(() => ({
   loadPdfOutline: vi.fn(),
 }));
 
-vi.mock("../../shared/api/backend", () => ({
+vi.mock("./api", () => ({
   saveBookSegments: backend.saveBookSegments,
 }));
 
-vi.mock("../reader/loadPdf", () => ({
+vi.mock("../../shared/pdf/loadPdf", () => ({
   createPdfLoadingTask: loader.createPdfLoadingTask,
   extractPdfPage: loader.extractPdfPage,
   loadPdfOutline: loader.loadPdfOutline,

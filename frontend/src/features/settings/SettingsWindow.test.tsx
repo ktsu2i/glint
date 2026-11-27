@@ -11,7 +11,7 @@ const settingsEvents = vi.hoisted(() => ({
   appearance: [] as Array<(theme: string) => void>,
 }));
 
-vi.mock("../../shared/api/backend", () => backend);
+vi.mock("../../shared/api/settings", () => backend);
 vi.mock("../../shared/api/events", () => ({
   onAppearanceChanged: (callback: (theme: string) => void) => {
     settingsEvents.appearance.push(callback);

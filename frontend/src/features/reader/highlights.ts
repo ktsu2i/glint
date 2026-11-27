@@ -1,4 +1,4 @@
-import type { HighlightColor, HighlightRect } from "../../shared/api/backend";
+import type { HighlightColor, HighlightRect } from "./api";
 
 export const highlightColors: HighlightColor[] = ["yellow", "green", "pink", "purple"];
 

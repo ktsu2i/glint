@@ -6,28 +6,13 @@ const bindings = vi.hoisted(() => ({
   changeHighlightColor: vi.fn(),
   listBookmarks: vi.fn(),
   listHighlights: vi.fn(),
-  listBooks: vi.fn(),
-  markBookCoverFailed: vi.fn(),
-  openBook: vi.fn(),
-  openBookFile: vi.fn(),
-  relinkBook: vi.fn(),
-  removeBook: vi.fn(),
   removeBookmark: vi.fn(),
   removeHighlight: vi.fn(),
-  renameBook: vi.fn(),
-  saveBookCover: vi.fn(),
-  saveBookSegments: vi.fn(),
-  pendingIndexBooks: vi.fn(),
   saveReadingPosition: vi.fn(),
   saveBindingDirection: vi.fn(),
   searchBook: vi.fn(),
-  searchLibrary: vi.fn(),
-  getAppearanceSettings: vi.fn(),
-  saveAppearanceSettings: vi.fn(),
   getReaderSettings: vi.fn(),
   saveReaderSettings: vi.fn(),
-  getLibrarySettings: vi.fn(),
-  saveLibrarySettings: vi.fn(),
 }));
 
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
@@ -36,161 +21,63 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", ()
   ChangeHighlightColor: bindings.changeHighlightColor,
   ListBookmarks: bindings.listBookmarks,
   ListHighlights: bindings.listHighlights,
-  ListBooks: bindings.listBooks,
-  MarkBookCoverFailed: bindings.markBookCoverFailed,
-  OpenBook: bindings.openBook,
-  OpenBookFile: bindings.openBookFile,
-  RelinkBook: bindings.relinkBook,
-  RemoveBook: bindings.removeBook,
   RemoveBookmark: bindings.removeBookmark,
   RemoveHighlight: bindings.removeHighlight,
-  RenameBook: bindings.renameBook,
-  SaveBookCover: bindings.saveBookCover,
-  SaveBookSegments: bindings.saveBookSegments,
-  PendingIndexBooks: bindings.pendingIndexBooks,
   SaveReadingPosition: bindings.saveReadingPosition,
   SaveBindingDirection: bindings.saveBindingDirection,
   SearchBook: bindings.searchBook,
-  SearchLibrary: bindings.searchLibrary,
 }));
 
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice", () => ({
-  GetAppearanceSettings: bindings.getAppearanceSettings,
-  SaveAppearanceSettings: bindings.saveAppearanceSettings,
   GetReaderSettings: bindings.getReaderSettings,
   SaveReaderSettings: bindings.saveReaderSettings,
-  GetLibrarySettings: bindings.getLibrarySettings,
-  SaveLibrarySettings: bindings.saveLibrarySettings,
 }));
 
 import {
   addBookmark,
   addHighlight,
   changeHighlightColor,
-  getAppearanceSettings,
-  getLibrarySettings,
   getReaderSettings,
-  listBooks,
   listBookmarks,
   listHighlights,
-  markBookCoverFailed,
-  openBook,
-  openBookFile,
-  relinkBook,
-  removeBook,
   removeBookmark,
   removeHighlight,
-  renameBook,
-  saveBookCover,
-  saveBookSegments,
-  pendingIndexBooks,
-  saveAppearanceSettings,
   saveBindingDirection,
-  saveLibrarySettings,
   saveReaderSettings,
   saveReadingPosition,
   searchBook,
-  searchLibrary,
-} from "./backend";
+} from "./api";
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("backend facade", () => {
+describe("reader api", () => {
   it("normalizes nullable slices from v3 bindings to empty lists", async () => {
     bindings.listBookmarks.mockResolvedValue(null);
-    bindings.pendingIndexBooks.mockResolvedValue(null);
     bindings.searchBook.mockResolvedValue(null);
 
     await expect(listBookmarks("book-1")).resolves.toEqual([]);
-    await expect(pendingIndexBooks()).resolves.toEqual([]);
     await expect(searchBook("book-1", "missing")).resolves.toEqual([]);
   });
 
-  it("delegates book file selection to Wails bindings", async () => {
-    const book = {
-      id: "book-1",
-      title: "Book",
-      name: "book.pdf",
-      url: "/book/1",
-      size: 42,
-      initialPage: 1,
-      coverStatus: "ready",
-    };
-    bindings.openBookFile.mockResolvedValue(book);
-
-    await expect(openBookFile()).resolves.toEqual(book);
-  });
-
-  it("delegates appearance settings through a typed theme contract", async () => {
-    bindings.getAppearanceSettings.mockResolvedValue({ theme: "dark" });
-    bindings.saveAppearanceSettings.mockResolvedValue({ theme: "system" });
-
-    await expect(getAppearanceSettings()).resolves.toEqual({ theme: "dark" });
-    await expect(saveAppearanceSettings("system")).resolves.toEqual({ theme: "system" });
-    expect(bindings.saveAppearanceSettings).toHaveBeenCalledWith({ theme: "system" });
-  });
-
-  it("delegates library persistence operations", async () => {
-    const summaries = [{ id: "book-1" }];
-    const book = { id: "book-1", url: "/book/1" };
-    bindings.listBooks.mockResolvedValue(summaries);
-    bindings.openBook.mockResolvedValue(book);
-    bindings.relinkBook.mockResolvedValue(book);
-    bindings.removeBook.mockResolvedValue(true);
-    bindings.renameBook.mockResolvedValue({ ...summaries[0], title: "Renamed" });
-    bindings.saveBookSegments.mockResolvedValue(2);
-    const pending = [{ id: "book-1", url: "/book/1", nextSegment: 3, total: 10 }];
-    bindings.pendingIndexBooks.mockResolvedValue(pending);
+  it("delegates reading state, search, and bookmarks", async () => {
     bindings.searchBook.mockResolvedValue([{ pageNumber: 2, excerpt: "match", matchCount: 1 }]);
-    const libraryHit = {
-      book: { id: "book-1", title: "Book", coverUrl: "/cover/1", available: true },
-      totalMatches: 3,
-      pages: [{ pageNumber: 7, excerpt: "library hit", matchCount: 2 }],
-    };
-    bindings.searchLibrary.mockResolvedValue([libraryHit]);
     const bookmark = { pageNumber: 4, cfi: "", progress: 0, createdAt: "2026-06-23T00:00:00Z" };
     bindings.listBookmarks.mockResolvedValue([bookmark]);
     bindings.addBookmark.mockResolvedValue(bookmark);
 
-    await expect(listBooks()).resolves.toEqual(summaries);
-    await expect(openBook("book-1")).resolves.toEqual(book);
-    await expect(relinkBook("book-1")).resolves.toEqual(book);
-    await expect(removeBook("book-1")).resolves.toBe(true);
-    await expect(renameBook("book-1", "Renamed")).resolves.toEqual({
-      ...summaries[0],
-      title: "Renamed",
-    });
     await saveReadingPosition("book-1", 3, 10);
     await saveReadingPosition("book-2", 2, 9, "epubcfi(/6/4!/4/2/1:0)");
     await saveBindingDirection("book-1", "rtl");
-    await expect(
-      saveBookSegments(
-        "book-1",
-        [
-          {
-            ordinal: 1,
-            location: "page:1",
-            headingPath: "1章",
-            text: "page text",
-          },
-        ],
-        10,
-      ),
-    ).resolves.toBe(2);
     await expect(searchBook("book-1", "page")).resolves.toEqual([
       { pageNumber: 2, excerpt: "match", matchCount: 1 },
     ]);
-    await expect(searchLibrary("page")).resolves.toEqual([libraryHit]);
-    await expect(pendingIndexBooks()).resolves.toEqual(pending);
     await expect(listBookmarks("book-1")).resolves.toEqual([bookmark]);
     await expect(addBookmark("book-1", 4, 10)).resolves.toEqual(bookmark);
     await removeBookmark("book-1", 4);
     await addBookmark("book-2", 3, 9, { cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.4 });
     await removeBookmark("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
-    await saveBookCover("book-1", "data:image/png;base64,cover");
-    await markBookCoverFailed("book-1");
 
     // A PDF position goes out with an empty CFI.
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10, "");
@@ -201,20 +88,7 @@ describe("backend facade", () => {
       "epubcfi(/6/4!/4/2/1:0)",
     );
     expect(bindings.saveBindingDirection).toHaveBeenCalledWith("book-1", "rtl");
-    expect(bindings.saveBookSegments).toHaveBeenCalledWith(
-      "book-1",
-      [
-        {
-          ordinal: 1,
-          location: "page:1",
-          headingPath: "1章",
-          text: "page text",
-        },
-      ],
-      10,
-    );
     expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
-    expect(bindings.searchLibrary).toHaveBeenCalledWith("page");
     expect(bindings.listBookmarks).toHaveBeenCalledWith("book-1");
     expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", {
       pageNumber: 4,
@@ -230,9 +104,6 @@ describe("backend facade", () => {
       progress: 0.4,
     });
     expect(bindings.removeBookmark).toHaveBeenCalledWith("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
-    expect(bindings.renameBook).toHaveBeenCalledWith("book-1", "Renamed");
-    expect(bindings.saveBookCover).toHaveBeenCalledWith("book-1", "data:image/png;base64,cover");
-    expect(bindings.markBookCoverFailed).toHaveBeenCalledWith("book-1");
   });
 
   it("passes highlights through and treats a missing list as empty", async () => {
@@ -272,15 +143,5 @@ describe("backend facade", () => {
     await expect(getReaderSettings()).resolves.toEqual(reader);
     await expect(saveReaderSettings(reader)).resolves.toEqual(reader);
     expect(bindings.saveReaderSettings).toHaveBeenCalledWith(reader);
-  });
-
-  it("passes the library settings through", async () => {
-    const library = { sortOrder: "title" };
-    bindings.getLibrarySettings.mockResolvedValue(library);
-    bindings.saveLibrarySettings.mockResolvedValue(library);
-
-    await expect(getLibrarySettings()).resolves.toEqual(library);
-    await expect(saveLibrarySettings(library)).resolves.toEqual(library);
-    expect(bindings.saveLibrarySettings).toHaveBeenCalledWith(library);
   });
 });

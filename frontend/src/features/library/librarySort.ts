@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  getLibrarySettings,
-  saveLibrarySettings,
-  type BookSummary,
-} from "../../shared/api/backend";
+import { getLibrarySettings, saveLibrarySettings } from "./api";
+import type { BookSummary } from "../../shared/api/books";
 
 export const librarySortOrders = ["recent", "added", "title", "progress"] as const;
 

@@ -5,11 +5,11 @@ const backend = vi.hoisted(() => ({
   getLibrarySettings: vi.fn(),
   saveLibrarySettings: vi.fn(),
 }));
-vi.mock("../../shared/api/backend", () => ({
+vi.mock("./api", () => ({
   getLibrarySettings: backend.getLibrarySettings,
   saveLibrarySettings: backend.saveLibrarySettings,
 }));
-import type { BookSummary } from "../../shared/api/backend";
+import type { BookSummary } from "../../shared/api/books";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { LibrarySortMenu } from "./LibrarySortMenu";
 import { sortBooks, useLibrarySortOrder } from "./librarySort";

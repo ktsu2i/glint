@@ -1,11 +1,6 @@
 import { collapse as collapseCFI, compare as compareCFI } from "foliate-js/epubcfi.js";
 import type { FoliateTocItem } from "foliate-js/view.js";
-import type {
-  BookBookmark,
-  BookHighlight,
-  HighlightColor,
-  ReaderSettings,
-} from "../../shared/api/backend";
+import type { BookBookmark, BookHighlight, HighlightColor, ReaderSettings } from "./api";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;

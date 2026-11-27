@@ -6,8 +6,8 @@ import type {
   PageViewport,
   PDFPageProxy,
 } from "pdfjs-dist";
-import { LocalizedError } from "../../shared/i18n/error";
-import { normalizePageText } from "../../shared/lib/text";
+import { LocalizedError } from "../i18n/error";
+import { normalizePageText } from "../lib/text";
 
 type TextContent = Awaited<ReturnType<PDFPageProxy["getTextContent"]>>;
 

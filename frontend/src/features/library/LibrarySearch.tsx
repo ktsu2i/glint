@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { BookOpenTextIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
-import type { BookSummary, LibrarySearchHit } from "../../shared/api/backend";
+import type { BookSummary } from "../../shared/api/books";
+import type { LibrarySearchHit } from "./api";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 
 const SEARCH_QUERY_MAX_LENGTH = 200;
