@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   generateCoverThumbnail: vi.fn(),
   getAppearanceSettings: vi.fn(),
   getLanguageSettings: vi.fn(),
+  getLibrarySettings: vi.fn(),
+  saveLibrarySettings: vi.fn(),
   saveAppearanceSettings: vi.fn(),
   saveLanguageSettings: vi.fn(),
   searchLibrary: vi.fn(),
@@ -34,6 +36,8 @@ vi.mock("./shared/api/backend", () => ({
   saveReadingPosition: mocks.saveReadingPosition,
   getAppearanceSettings: mocks.getAppearanceSettings,
   getLanguageSettings: mocks.getLanguageSettings,
+  getLibrarySettings: mocks.getLibrarySettings,
+  saveLibrarySettings: mocks.saveLibrarySettings,
   saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLanguageSettings: mocks.saveLanguageSettings,
   searchLibrary: mocks.searchLibrary,
@@ -130,6 +134,8 @@ beforeEach(() => {
   mocks.generateCoverThumbnail.mockResolvedValue("data:image/png;base64,cover");
   mocks.getAppearanceSettings.mockResolvedValue({ theme: "system" });
   mocks.getLanguageSettings.mockResolvedValue({ language: "ja" });
+  mocks.getLibrarySettings.mockResolvedValue({ sortOrder: "recent" });
+  mocks.saveLibrarySettings.mockImplementation(async (settings: unknown) => settings);
   mocks.saveAppearanceSettings.mockImplementation(async (theme: string) => ({ theme }));
   mocks.saveLanguageSettings.mockImplementation(async (language: string) => ({ language }));
   settingsEvents.appearance = [];

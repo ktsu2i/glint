@@ -6,7 +6,7 @@ import type {
   HighlightColor,
   ReaderSettings,
 } from "../../shared/api/backend";
-import { forgetLegacyValue, readLegacyValue } from "./legacyStorage";
+import { forgetLegacyValue, readLegacyValue } from "../../shared/lib/legacyStorage";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;

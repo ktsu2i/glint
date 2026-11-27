@@ -26,6 +26,8 @@ const bindings = vi.hoisted(() => ({
   saveAppearanceSettings: vi.fn(),
   getReaderSettings: vi.fn(),
   saveReaderSettings: vi.fn(),
+  getLibrarySettings: vi.fn(),
+  saveLibrarySettings: vi.fn(),
 }));
 
 vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
@@ -57,6 +59,8 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice",
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
   GetReaderSettings: bindings.getReaderSettings,
   SaveReaderSettings: bindings.saveReaderSettings,
+  GetLibrarySettings: bindings.getLibrarySettings,
+  SaveLibrarySettings: bindings.saveLibrarySettings,
 }));
 
 import {
@@ -64,6 +68,7 @@ import {
   addHighlight,
   changeHighlightColor,
   getAppearanceSettings,
+  getLibrarySettings,
   getReaderSettings,
   listBooks,
   listBookmarks,
@@ -81,6 +86,7 @@ import {
   pendingIndexBooks,
   saveAppearanceSettings,
   saveBindingDirection,
+  saveLibrarySettings,
   saveReaderSettings,
   saveReadingPosition,
   searchBook,
@@ -266,5 +272,15 @@ describe("backend facade", () => {
     await expect(getReaderSettings()).resolves.toEqual(reader);
     await expect(saveReaderSettings(reader)).resolves.toEqual(reader);
     expect(bindings.saveReaderSettings).toHaveBeenCalledWith(reader);
+  });
+
+  it("passes the library settings through", async () => {
+    const library = { sortOrder: "title" };
+    bindings.getLibrarySettings.mockResolvedValue(library);
+    bindings.saveLibrarySettings.mockResolvedValue(library);
+
+    await expect(getLibrarySettings()).resolves.toEqual(library);
+    await expect(saveLibrarySettings(library)).resolves.toEqual(library);
+    expect(bindings.saveLibrarySettings).toHaveBeenCalledWith(library);
   });
 });

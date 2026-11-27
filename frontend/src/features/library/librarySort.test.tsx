@@ -1,5 +1,14 @@
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const backend = vi.hoisted(() => ({
+  getLibrarySettings: vi.fn(),
+  saveLibrarySettings: vi.fn(),
+}));
+vi.mock("../../shared/api/backend", () => ({
+  getLibrarySettings: backend.getLibrarySettings,
+  saveLibrarySettings: backend.saveLibrarySettings,
+}));
 import type { BookSummary } from "../../shared/api/backend";
 import { I18nProvider } from "../../shared/i18n/i18n";
 import { LibrarySortMenu } from "./LibrarySortMenu";
@@ -69,22 +78,55 @@ describe("sortBooks", () => {
 });
 
 describe("useLibrarySortOrder", () => {
+  let saved = "recent";
+  beforeEach(() => {
+    saved = "recent";
+    backend.getLibrarySettings.mockReset().mockImplementation(async () => ({ sortOrder: saved }));
+    backend.saveLibrarySettings
+      .mockReset()
+      .mockImplementation(async (settings: { sortOrder: string }) => {
+        saved = settings.sortOrder;
+        return settings;
+      });
+  });
   afterEach(() => window.localStorage.clear());
 
-  it("remembers the chosen order", () => {
+  it("remembers the chosen order in the library", async () => {
     const first = renderHook(() => useLibrarySortOrder());
     expect(first.result.current[0]).toBe("recent");
     act(() => first.result.current[1]("title"));
     expect(first.result.current[0]).toBe("title");
+    expect(backend.saveLibrarySettings).toHaveBeenCalledWith({ sortOrder: "title" });
 
     const second = renderHook(() => useLibrarySortOrder());
-    expect(second.result.current[0]).toBe("title");
+    await waitFor(() => expect(second.result.current[0]).toBe("title"));
+    expect(window.localStorage.length).toBe(0);
   });
 
-  it("falls back to recently opened for an unknown saved order", () => {
-    window.localStorage.setItem("glint.library.sortOrder", "size");
+  it("falls back to recently opened for an unknown saved order", async () => {
+    saved = "size";
     const { result } = renderHook(() => useLibrarySortOrder());
+    await waitFor(() => expect(backend.getLibrarySettings).toHaveBeenCalled());
     expect(result.current[0]).toBe("recent");
+  });
+
+  it("moves the order an earlier version kept to the library", async () => {
+    window.localStorage.setItem("glint.library.sortOrder", "progress");
+    const { result } = renderHook(() => useLibrarySortOrder());
+
+    await waitFor(() => expect(result.current[0]).toBe("progress"));
+    expect(backend.saveLibrarySettings).toHaveBeenCalledWith({ sortOrder: "progress" });
+    await waitFor(() => expect(window.localStorage.getItem("glint.library.sortOrder")).toBeNull());
+  });
+
+  it("drops an unknown order an earlier version kept", async () => {
+    window.localStorage.setItem("glint.library.sortOrder", "size");
+    saved = "added";
+    const { result } = renderHook(() => useLibrarySortOrder());
+
+    await waitFor(() => expect(result.current[0]).toBe("added"));
+    expect(window.localStorage.getItem("glint.library.sortOrder")).toBeNull();
+    expect(backend.saveLibrarySettings).not.toHaveBeenCalled();
   });
 });
 

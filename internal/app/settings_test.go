@@ -75,6 +75,29 @@ func TestSettingsServiceRoundTripsReaderSettings(t *testing.T) {
 	assert.EqualError(t, err, "The text size or page layout is invalid.")
 }
 
+func TestSettingsServiceRoundTripsLibrarySettings(t *testing.T) {
+	h := newHarness(t)
+	service := NewSettingsService(h.settings, nil)
+	_, err := service.GetLibrarySettings()
+	require.ErrorIs(t, err, errNotReady)
+	require.NoError(t, service.ServiceStartup(t.Context(), application.ServiceOptions{}))
+
+	library, err := service.GetLibrarySettings()
+	require.NoError(t, err)
+	assert.Equal(t, LibrarySettings{SortOrder: "recent"}, library)
+
+	saved, err := service.SaveLibrarySettings(LibrarySettings{SortOrder: "progress"})
+	require.NoError(t, err)
+	assert.Equal(t, LibrarySettings{SortOrder: "progress"}, saved)
+	library, err = service.GetLibrarySettings()
+	require.NoError(t, err)
+	assert.Equal(t, saved, library)
+
+	h.useJapanese()
+	_, err = service.SaveLibrarySettings(LibrarySettings{SortOrder: "size"})
+	assert.EqualError(t, err, "並び順は recent、added、title、progress のいずれかを指定してください。")
+}
+
 type emittedEvent struct {
 	name string
 	data any

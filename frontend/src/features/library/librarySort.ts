@@ -1,11 +1,17 @@
-import { useCallback, useState } from "react";
-import type { BookSummary } from "../../shared/api/backend";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getLibrarySettings,
+  saveLibrarySettings,
+  type BookSummary,
+} from "../../shared/api/backend";
+import { forgetLegacyValue, readLegacyValue } from "../../shared/lib/legacyStorage";
 
 export const librarySortOrders = ["recent", "added", "title", "progress"] as const;
 
 export type LibrarySortOrder = (typeof librarySortOrders)[number];
 
-const sortOrderStorageKey = "glint.library.sortOrder";
+// Where an earlier version kept the order on this device.
+const legacySortOrderKey = "glint.library.sortOrder";
 
 export function readingProgress(book: BookSummary): number {
   if (book.pageCount < 1) {
@@ -70,23 +76,63 @@ function isSortOrder(value: unknown): value is LibrarySortOrder {
   return librarySortOrders.some((order) => order === value);
 }
 
-function loadSortOrder(): LibrarySortOrder {
-  if (typeof window === "undefined") {
-    return "recent";
-  }
-  const stored = window.localStorage.getItem(sortOrderStorageKey);
-  return isSortOrder(stored) ? stored : "recent";
+function persistSortOrder(order: LibrarySortOrder): Promise<unknown> {
+  return saveLibrarySettings({ sortOrder: order });
 }
 
-// useLibrarySortOrder remembers the shelf order on this Mac between launches.
+/**
+ * The saved shelf order. One kept by an earlier version in localStorage moves
+ * to the library here.
+ */
+async function loadSortOrder(): Promise<LibrarySortOrder> {
+  const legacy = readLegacyValue(legacySortOrderKey);
+  if (isSortOrder(legacy)) {
+    persistSortOrder(legacy).then(
+      () => forgetLegacyValue(legacySortOrderKey),
+      (reason: unknown) => console.warn("Moving the library sort order failed", reason),
+    );
+    return legacy;
+  }
+  if (legacy !== null) {
+    forgetLegacyValue(legacySortOrderKey);
+  }
+  const saved = await getLibrarySettings();
+  return isSortOrder(saved.sortOrder) ? saved.sortOrder : "recent";
+}
+
+// useLibrarySortOrder remembers the shelf order in the library between launches.
 export function useLibrarySortOrder(): [LibrarySortOrder, (order: LibrarySortOrder) => void] {
-  const [order, setOrder] = useState<LibrarySortOrder>(loadSortOrder);
+  const [order, setOrder] = useState<LibrarySortOrder>("recent");
+  // A choice made while the saved order loads wins over it.
+  const chosenRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const saved = await loadSortOrder();
+        if (active && !chosenRef.current) {
+          setOrder(saved);
+        }
+      } catch (reason) {
+        console.warn("Loading the library sort order failed", reason);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const changeOrder = useCallback((next: LibrarySortOrder) => {
     if (!isSortOrder(next)) {
       return;
     }
+    chosenRef.current = true;
     setOrder(next);
-    window.localStorage.setItem(sortOrderStorageKey, next);
+    persistSortOrder(next).catch((reason: unknown) => {
+      console.warn("Saving the library sort order failed", reason);
+    });
   }, []);
   return [order, changeOrder];
 }

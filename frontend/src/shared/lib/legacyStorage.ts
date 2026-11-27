@@ -1,5 +1,5 @@
 /**
- * Earlier versions kept some reading state in localStorage. The library keeps
+ * Earlier versions kept some state in localStorage. The library keeps
  * it now; these move a value over once and then drop it from localStorage.
  */
 export function readLegacyValue(key: string): string | null {

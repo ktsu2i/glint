@@ -37,7 +37,7 @@ import {
   type BookSearchResult,
   type HighlightColor,
 } from "../../shared/api/backend";
-import { moveLegacyValue } from "./legacyStorage";
+import { moveLegacyValue } from "../../shared/lib/legacyStorage";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";

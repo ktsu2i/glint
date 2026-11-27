@@ -24,9 +24,11 @@ import {
 import {
   GetAppearanceSettings,
   GetLanguageSettings,
+  GetLibrarySettings,
   GetReaderSettings,
   SaveAppearanceSettings,
   SaveLanguageSettings,
+  SaveLibrarySettings,
   SaveReaderSettings,
 } from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
 import { SetWindowControlsVisible } from "../../../bindings/github.com/kaito/glint/internal/app/windowservice";
@@ -313,4 +315,17 @@ export async function getReaderSettings(): Promise<ReaderSettings> {
 
 export async function saveReaderSettings(settings: ReaderSettings): Promise<ReaderSettings> {
   return (await SaveReaderSettings(settings)) as ReaderSettings;
+}
+
+/** How the library shows the shelf. The order is checked where it is used. */
+export type LibrarySettings = {
+  sortOrder: string;
+};
+
+export async function getLibrarySettings(): Promise<LibrarySettings> {
+  return GetLibrarySettings();
+}
+
+export async function saveLibrarySettings(settings: LibrarySettings): Promise<LibrarySettings> {
+  return SaveLibrarySettings(settings);
 }
