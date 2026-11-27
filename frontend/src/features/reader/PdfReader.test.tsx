@@ -1297,20 +1297,4 @@ describe("PdfReader", () => {
     );
     expect(backend.saveBindingDirection).not.toHaveBeenCalled();
   });
-
-  it("moves the binding an earlier version kept to the library", async () => {
-    resolveDocument(makeDocument());
-    window.localStorage.clear();
-    window.localStorage.setItem("glint.reader.bindingDirection.book-1", "rtl");
-    render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "表示" }));
-    expect(screen.getByRole("button", { name: "右綴じ" }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-    expect(backend.saveBindingDirection).toHaveBeenCalledWith("book-1", "rtl");
-    await waitFor(() =>
-      expect(window.localStorage.getItem("glint.reader.bindingDirection.book-1")).toBeNull(),
-    );
-  });
 });

@@ -109,25 +109,6 @@ describe("useLibrarySortOrder", () => {
     await waitFor(() => expect(backend.getLibrarySettings).toHaveBeenCalled());
     expect(result.current[0]).toBe("recent");
   });
-
-  it("moves the order an earlier version kept to the library", async () => {
-    window.localStorage.setItem("glint.library.sortOrder", "progress");
-    const { result } = renderHook(() => useLibrarySortOrder());
-
-    await waitFor(() => expect(result.current[0]).toBe("progress"));
-    expect(backend.saveLibrarySettings).toHaveBeenCalledWith({ sortOrder: "progress" });
-    await waitFor(() => expect(window.localStorage.getItem("glint.library.sortOrder")).toBeNull());
-  });
-
-  it("drops an unknown order an earlier version kept", async () => {
-    window.localStorage.setItem("glint.library.sortOrder", "size");
-    saved = "added";
-    const { result } = renderHook(() => useLibrarySortOrder());
-
-    await waitFor(() => expect(result.current[0]).toBe("added"));
-    expect(window.localStorage.getItem("glint.library.sortOrder")).toBeNull();
-    expect(backend.saveLibrarySettings).not.toHaveBeenCalled();
-  });
 });
 
 describe("LibrarySortMenu", () => {

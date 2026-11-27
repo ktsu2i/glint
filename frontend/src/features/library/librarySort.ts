@@ -4,14 +4,10 @@ import {
   saveLibrarySettings,
   type BookSummary,
 } from "../../shared/api/backend";
-import { forgetLegacyValue, readLegacyValue } from "../../shared/lib/legacyStorage";
 
 export const librarySortOrders = ["recent", "added", "title", "progress"] as const;
 
 export type LibrarySortOrder = (typeof librarySortOrders)[number];
-
-// Where an earlier version kept the order on this device.
-const legacySortOrderKey = "glint.library.sortOrder";
 
 export function readingProgress(book: BookSummary): number {
   if (book.pageCount < 1) {
@@ -76,26 +72,7 @@ function isSortOrder(value: unknown): value is LibrarySortOrder {
   return librarySortOrders.some((order) => order === value);
 }
 
-function persistSortOrder(order: LibrarySortOrder): Promise<unknown> {
-  return saveLibrarySettings({ sortOrder: order });
-}
-
-/**
- * The saved shelf order. One kept by an earlier version in localStorage moves
- * to the library here.
- */
 async function loadSortOrder(): Promise<LibrarySortOrder> {
-  const legacy = readLegacyValue(legacySortOrderKey);
-  if (isSortOrder(legacy)) {
-    persistSortOrder(legacy).then(
-      () => forgetLegacyValue(legacySortOrderKey),
-      (reason: unknown) => console.warn("Moving the library sort order failed", reason),
-    );
-    return legacy;
-  }
-  if (legacy !== null) {
-    forgetLegacyValue(legacySortOrderKey);
-  }
   const saved = await getLibrarySettings();
   return isSortOrder(saved.sortOrder) ? saved.sortOrder : "recent";
 }
@@ -130,7 +107,7 @@ export function useLibrarySortOrder(): [LibrarySortOrder, (order: LibrarySortOrd
     }
     chosenRef.current = true;
     setOrder(next);
-    persistSortOrder(next).catch((reason: unknown) => {
+    saveLibrarySettings({ sortOrder: next }).catch((reason: unknown) => {
       console.warn("Saving the library sort order failed", reason);
     });
   }, []);

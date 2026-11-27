@@ -195,21 +195,7 @@ describe("EpubReader", () => {
     expect(view.init).toHaveBeenCalledWith({ lastLocation: "epubcfi(/6/4!/4/10)" });
   });
 
-  it("reopens on the page an earlier version kept, and drops it from localStorage", async () => {
-    window.localStorage.setItem(
-      "glint.epub.position.epub-1",
-      JSON.stringify({ section: 2, cfi: "epubcfi(/6/4!/4/10)" }),
-    );
-    const { view } = await openReader(2);
-    expect(view.init).toHaveBeenCalledWith({ lastLocation: "epubcfi(/6/4!/4/10)" });
-    expect(window.localStorage.getItem("glint.epub.position.epub-1")).toBeNull();
-  });
-
   it("opens the section a library search points at", async () => {
-    window.localStorage.setItem(
-      "glint.epub.position.epub-1",
-      JSON.stringify({ section: 2, cfi: "epubcfi(/6/4!/4/10)" }),
-    );
     const { view } = await openReader(3);
     expect(view.goTo).toHaveBeenCalledWith(2);
     expect(view.init).not.toHaveBeenCalled();
@@ -348,19 +334,6 @@ describe("EpubReader", () => {
       ),
     );
     expect(backend.saveReaderSettings).not.toHaveBeenCalled();
-  });
-
-  it("moves the text size and layout an earlier version kept to the library", async () => {
-    window.localStorage.setItem("glint.epub.fontScale", "120");
-    window.localStorage.setItem("glint.epub.layout", "single");
-    const { view } = await openReader();
-
-    expect(view.renderer.getAttribute("max-column-count")).toBe("1");
-    expect(backend.saveReaderSettings).toHaveBeenCalledWith({
-      epubFontScale: 120,
-      epubLayout: "single",
-    });
-    await waitFor(() => expect(window.localStorage.length).toBe(0));
   });
 
   it("explains when the book cannot be opened", async () => {

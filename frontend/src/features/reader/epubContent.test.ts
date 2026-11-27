@@ -1,18 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  defaultReaderSettings,
   epubStyles,
   flattenToc,
-  forgetLegacyReaderSettings,
   guardEpubContent,
   isCFIOnPage,
   pageStartCFI,
   rangeSpeechText,
-  readLegacyReaderSettings,
   sortEpubBookmarks,
   sortEpubHighlights,
   stripActiveContent,
-  takeLegacyEpubPosition,
 } from "./epubContent";
 import type { BookBookmark, BookHighlight } from "../../shared/api/backend";
 
@@ -92,43 +88,6 @@ describe("flattenToc", () => {
       { key: "1.0", label: "Two", href: "c2.xhtml", depth: 1 },
     ]);
     expect(flattenToc(null)).toEqual([]);
-  });
-});
-
-describe("legacy storage", () => {
-  beforeEach(() => window.localStorage.clear());
-
-  it("takes the position an earlier version kept, once", () => {
-    expect(takeLegacyEpubPosition("book")).toBeNull();
-    window.localStorage.setItem(
-      "glint.epub.position.book",
-      JSON.stringify({ section: 3, cfi: "epubcfi(/6/6!/4/2)" }),
-    );
-    expect(takeLegacyEpubPosition("book")).toEqual({ section: 3, cfi: "epubcfi(/6/6!/4/2)" });
-    expect(window.localStorage.getItem("glint.epub.position.book")).toBeNull();
-
-    window.localStorage.setItem("glint.epub.position.bad", '{"section":1,"cfi":"x"}');
-    expect(takeLegacyEpubPosition("bad")).toBeNull();
-    expect(window.localStorage.getItem("glint.epub.position.bad")).toBeNull();
-  });
-
-  it("lays the text size and layout an earlier version kept over the saved settings", () => {
-    const saved = { epubFontScale: 120, epubLayout: "spread" as const };
-    expect(readLegacyReaderSettings(saved)).toBeNull();
-
-    window.localStorage.setItem("glint.epub.layout", "single");
-    expect(readLegacyReaderSettings(saved)).toEqual({ epubFontScale: 120, epubLayout: "single" });
-    window.localStorage.setItem("glint.epub.fontScale", "130");
-    expect(readLegacyReaderSettings(defaultReaderSettings)).toEqual({
-      epubFontScale: 130,
-      epubLayout: "single",
-    });
-    // A size out of range keeps the saved one.
-    window.localStorage.setItem("glint.epub.fontScale", "999");
-    expect(readLegacyReaderSettings(saved)?.epubFontScale).toBe(120);
-
-    forgetLegacyReaderSettings();
-    expect(readLegacyReaderSettings(saved)).toBeNull();
   });
 });
 

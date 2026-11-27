@@ -6,7 +6,6 @@ import type {
   HighlightColor,
   ReaderSettings,
 } from "../../shared/api/backend";
-import { forgetLegacyValue, readLegacyValue } from "../../shared/lib/legacyStorage";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;
@@ -151,67 +150,7 @@ export function flattenToc(
   return lines;
 }
 
-const legacyPositionKey = (bookId: string) => `glint.epub.position.${bookId}`;
-
-/**
- * The place in a book an earlier version kept in localStorage, dropped from
- * there as it is read. The library keeps the place from the next page turn.
- */
-export function takeLegacyEpubPosition(bookId: string): { section: number; cfi: string } | null {
-  const key = legacyPositionKey(bookId);
-  const raw = readLegacyValue(key);
-  if (raw === null) {
-    return null;
-  }
-  forgetLegacyValue(key);
-  try {
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== "object" || value === null) {
-      return null;
-    }
-    const section = "section" in value ? value.section : undefined;
-    const cfi = "cfi" in value ? value.cfi : undefined;
-    if (typeof section !== "number" || typeof cfi !== "string" || !cfi.startsWith("epubcfi(")) {
-      return null;
-    }
-    return { section, cfi };
-  } catch {
-    return null;
-  }
-}
-
-const legacyFontScaleKey = "glint.epub.fontScale";
-const legacyLayoutKey = "glint.epub.layout";
-
 export const defaultReaderSettings: ReaderSettings = { epubFontScale: 100, epubLayout: "spread" };
-
-/**
- * The text size and layout an earlier version kept in localStorage, laid over
- * the saved settings, or null when there are none to move.
- */
-export function readLegacyReaderSettings(saved: ReaderSettings): ReaderSettings | null {
-  const scale = readLegacyValue(legacyFontScaleKey);
-  const layout = readLegacyValue(legacyLayoutKey);
-  if (scale === null && layout === null) {
-    return null;
-  }
-  const value = Number(scale);
-  return {
-    epubFontScale:
-      scale !== null &&
-      Number.isInteger(value) &&
-      value >= EPUB_MIN_FONT_SCALE &&
-      value <= EPUB_MAX_FONT_SCALE
-        ? value
-        : saved.epubFontScale,
-    epubLayout: layout === "single" || layout === "spread" ? layout : saved.epubLayout,
-  };
-}
-
-export function forgetLegacyReaderSettings() {
-  forgetLegacyValue(legacyFontScaleKey);
-  forgetLegacyValue(legacyLayoutKey);
-}
 
 /**
  * The fill of each highlight color. foliate-js draws it at the opacity the

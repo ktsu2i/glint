@@ -37,7 +37,6 @@ import {
   type BookSearchResult,
   type HighlightColor,
 } from "../../shared/api/backend";
-import { moveLegacyValue } from "../../shared/lib/legacyStorage";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
@@ -97,19 +96,8 @@ function showWindowControls(visible: boolean) {
   setWindowControlsVisible(visible).catch(() => {});
 }
 
-const legacyBindingDirectionKey = (bookId: string) => `glint.reader.bindingDirection.${bookId}`;
-
-function loadBindingDirection(book: BookFile | null): BindingDirection {
-  if (!book) {
-    return "ltr";
-  }
-  const legacy = moveLegacyValue(legacyBindingDirectionKey(book.id), (value) =>
-    saveBindingDirection(book.id, value === "rtl" ? "rtl" : "ltr"),
-  );
-  if (legacy !== null) {
-    return legacy === "rtl" ? "rtl" : "ltr";
-  }
-  return book.bindingDirection === "rtl" ? "rtl" : "ltr";
+function bindingDirectionOf(book: BookFile | null): BindingDirection {
+  return book?.bindingDirection === "rtl" ? "rtl" : "ltr";
 }
 
 type PdfReaderProps = {
@@ -137,10 +125,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const [isEditingPage, setIsEditingPage] = useState(false);
   const pageInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("single");
-  // The effect that opens the book settles the direction, moving one kept by
-  // an earlier version.
-  const [bindingDirection, setBindingDirection] = useState<BindingDirection>(
-    book?.bindingDirection === "rtl" ? "rtl" : "ltr",
+  const [bindingDirection, setBindingDirection] = useState<BindingDirection>(() =>
+    bindingDirectionOf(book),
   );
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -300,7 +286,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     setPageNumber(Math.max(1, initialPage));
     setZoomMode({ kind: "fit-page" });
     setEffectiveScale(1);
-    setBindingDirection(loadBindingDirection(book));
+    setBindingDirection(bindingDirectionOf(book));
     pageChangeCallbackRef.current(0, 0);
 
     let timeout = 0;

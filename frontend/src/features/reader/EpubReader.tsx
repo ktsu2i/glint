@@ -48,15 +48,12 @@ import {
   epubHighlightFills,
   epubStyles,
   flattenToc,
-  forgetLegacyReaderSettings,
   guardEpubContent,
   isCFIOnPage,
   pageStartCFI,
   rangeSpeechText,
-  readLegacyReaderSettings,
   sortEpubBookmarks,
   sortEpubHighlights,
-  takeLegacyEpubPosition,
   type EpubTheme,
   type EpubTocLine,
 } from "./epubContent";
@@ -196,25 +193,14 @@ type EpubReaderProps = {
   onBack?: () => void;
 };
 
-/**
- * The text size and layout every EPUB shares. One kept by an earlier version
- * in localStorage moves to the library here.
- */
+/** The text size and layout every EPUB shares. */
 async function loadReaderSettings(): Promise<ReaderSettings> {
-  let saved = defaultReaderSettings;
   try {
-    saved = await getReaderSettings();
+    return await getReaderSettings();
   } catch (reason) {
     console.warn("Loading the reader settings failed", reason);
+    return defaultReaderSettings;
   }
-  const legacy = readLegacyReaderSettings(saved);
-  if (!legacy) {
-    return saved;
-  }
-  saveReaderSettings(legacy).then(forgetLegacyReaderSettings, (reason: unknown) => {
-    console.warn("Moving the reader settings failed", reason);
-  });
-  return legacy;
 }
 
 function persistReaderSettings(settings: ReaderSettings) {
@@ -288,7 +274,6 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
     }
     let active = true;
     let opened: View | null = null;
-    const bookId = book.id;
 
     const handleRelocate = (detail: FoliateRelocateDetail) => {
       const section = (detail.section?.current ?? 0) + 1;
@@ -376,10 +361,8 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       setView(foliate);
 
       // The CFI is the place in the section the book was left on.
-      const legacy = takeLegacyEpubPosition(bookId);
-      const savedCFI = initialCfi || (legacy?.section === initialSection ? legacy.cfi : "");
-      if (savedCFI) {
-        await foliate.init({ lastLocation: savedCFI });
+      if (initialCfi) {
+        await foliate.init({ lastLocation: initialCfi });
       } else if (initialSection > 1) {
         await foliate.goTo(initialSection - 1);
       } else {
@@ -399,7 +382,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       opened?.close();
       opened?.remove();
     };
-  }, [book.id, book.url, initialCfi, initialSection]);
+  }, [book.url, initialCfi, initialSection]);
 
   useEffect(() => {
     view?.renderer?.setStyles(epubStyles(fontScale, theme));
