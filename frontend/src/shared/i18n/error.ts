@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import type { TranslationKey } from "./i18n";
+import type { TranslationKey } from "./locales/en";
 
 export class LocalizedError extends Error {
   readonly translationKey: TranslationKey;

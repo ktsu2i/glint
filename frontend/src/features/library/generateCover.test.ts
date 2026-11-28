@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loader = vi.hoisted(() => ({ createPdfLoadingTask: vi.fn() }));
-vi.mock("../reader/loadPdf", () => ({ createPdfLoadingTask: loader.createPdfLoadingTask }));
+vi.mock("../../shared/pdf/loadPdf", () => ({ createPdfLoadingTask: loader.createPdfLoadingTask }));
 
 import { generateCoverThumbnail } from "./generateCover";
 

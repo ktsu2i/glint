@@ -22,13 +22,13 @@ const backend = vi.hoisted(() => ({
   setWindowControlsVisible: vi.fn(),
 }));
 
-vi.mock("./loadPdf", () => ({
+vi.mock("../../shared/pdf/loadPdf", () => ({
   createPdfLoadingTask: loader.createPdfLoadingTask,
   createPdfTextLayer: loader.createPdfTextLayer,
   extractPdfPage: loader.extractPdfPage,
   loadPdfOutline: loader.loadPdfOutline,
 }));
-vi.mock("../../shared/api/backend", () => ({
+vi.mock("./api", () => ({
   addBookmark: backend.addBookmark,
   addHighlight: backend.addHighlight,
   changeHighlightColor: backend.changeHighlightColor,
@@ -77,7 +77,7 @@ function render(ui: ReactNode) {
     wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider>,
   });
 }
-import type { BookFile } from "../../shared/api/backend";
+import type { BookFile } from "../../shared/api/books";
 
 type ResizeCallback = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
 

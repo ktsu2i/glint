@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { LocalizedError, translateLocalizedError } from "./error";
-import { resources, type TranslationKey } from "./i18n";
+import { resources } from "./i18n";
+import type { TranslationKey } from "./locales/en";
 
 function translate(language: "en" | "ja") {
   return (key: TranslationKey, values: Record<string, string | number> = {}) => {

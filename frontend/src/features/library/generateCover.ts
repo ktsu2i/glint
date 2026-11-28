@@ -1,5 +1,5 @@
 import type { PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist";
-import { createPdfLoadingTask } from "../reader/loadPdf";
+import { createPdfLoadingTask } from "../../shared/pdf/loadPdf";
 
 const coverWidth = 320;
 

@@ -1,6 +1,6 @@
-import { createPdfLoadingTask, extractPdfPage, loadPdfOutline } from "../reader/loadPdf";
-import type { OutlineNode } from "../reader/loadPdf";
-import { saveBookSegments, type BookSegmentInput } from "../../shared/api/backend";
+import { createPdfLoadingTask, extractPdfPage, loadPdfOutline } from "../../shared/pdf/loadPdf";
+import type { OutlineNode } from "../../shared/pdf/loadPdf";
+import { saveBookSegments, type BookSegmentInput } from "./api";
 
 const pageIndexBatchSize = 16;
 

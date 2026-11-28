@@ -31,12 +31,10 @@ import {
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
-  type BindingDirection,
-  type BookFile,
   type BookHighlight,
-  type BookSearchResult,
   type HighlightColor,
-} from "../../shared/api/backend";
+} from "./api";
+import type { BindingDirection, BookFile, BookSearchResult } from "../../shared/api/books";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import { normalizePageText } from "../../shared/lib/text";
@@ -53,7 +51,7 @@ import {
   loadPdfOutline,
   type OutlineNode,
   type PdfTextLayer,
-} from "./loadPdf";
+} from "../../shared/pdf/loadPdf";
 import {
   detectUtteranceLang,
   isSpeechSupported,

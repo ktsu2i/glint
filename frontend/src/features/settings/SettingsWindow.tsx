@@ -6,7 +6,7 @@ import {
   saveAppearanceSettings,
   type LanguagePreference,
   type ThemePreference,
-} from "../../shared/api/backend";
+} from "../../shared/api/settings";
 import { onAppearanceChanged } from "../../shared/api/events";
 import { I18nProvider, useLanguageSettings } from "../../shared/i18n/i18n";
 import { syncDocumentTheme } from "./theme";

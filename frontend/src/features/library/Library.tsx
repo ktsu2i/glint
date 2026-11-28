@@ -10,7 +10,7 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
-import type { BookFormat, BookSummary } from "../../shared/api/backend";
+import type { BookFormat, BookSummary } from "../../shared/api/books";
 import { readingProgress } from "./librarySort";
 
 const MAX_DISPLAY_NAME_LENGTH = 200;

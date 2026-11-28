@@ -40,6 +40,17 @@
     "import/no-duplicates": "error",
     "import/no-self-import": "error",
     "import/first": "error",
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/bindings/**"],
+            "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+          }
+        ]
+      }
+    ],
     "import/no-unassigned-import": [
       "error",
       {
@@ -77,7 +88,7 @@
   "ignorePatterns": ["bindings/", "dist/", "coverage/"],
   "overrides": [
     {
-      "files": ["src/features/reader/pdfPolyfills.ts"],
+      "files": ["src/shared/pdf/pdfPolyfills.ts"],
       "rules": {
         "eslint/no-extend-native": "off",
         "typescript/consistent-type-definitions": "off",
@@ -86,8 +97,128 @@
       }
     },
     {
-      "files": ["src/shared/api/backend.ts"],
+      "files": ["src/shared/**"],
       "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": ["**/features/**", "../app/**", "../../app/**", "../../../app/**"],
+                "message": "src/shared must not import src/features or src/app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/library/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": [
+                  "../reader",
+                  "../reader/**",
+                  "**/features/reader",
+                  "**/features/reader/**",
+                  "../settings",
+                  "../settings/**",
+                  "**/features/settings",
+                  "**/features/settings/**"
+                ],
+                "message": "A feature must not import another feature; move what they share to src/shared."
+              },
+              {
+                "group": ["**/app/App", "../../app/**", "../../../app/**"],
+                "message": "A feature must not import src/app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/reader/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": [
+                  "../library",
+                  "../library/**",
+                  "**/features/library",
+                  "**/features/library/**",
+                  "../settings",
+                  "../settings/**",
+                  "**/features/settings",
+                  "**/features/settings/**"
+                ],
+                "message": "A feature must not import another feature; move what they share to src/shared."
+              },
+              {
+                "group": ["**/app/App", "../../app/**", "../../../app/**"],
+                "message": "A feature must not import src/app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/settings/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": [
+                  "../library",
+                  "../library/**",
+                  "**/features/library",
+                  "**/features/library/**",
+                  "../reader",
+                  "../reader/**",
+                  "**/features/reader",
+                  "**/features/reader/**"
+                ],
+                "message": "A feature must not import another feature; move what they share to src/shared."
+              },
+              {
+                "group": ["**/app/App", "../../app/**", "../../../app/**"],
+                "message": "A feature must not import src/app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/*/api.ts", "src/shared/api/*.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": "off",
         "typescript/no-unsafe-type-assertion": "off"
       }
     },

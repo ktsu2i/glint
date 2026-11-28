@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   searchLibrary: vi.fn(),
 }));
 
-vi.mock("./shared/api/backend", () => ({
+vi.mock("../features/library/api", () => ({
   listBooks: mocks.listBooks,
   markBookCoverFailed: mocks.markBookCoverFailed,
   openBook: mocks.openBook,
@@ -33,20 +33,24 @@ vi.mock("./shared/api/backend", () => ({
   removeBook: mocks.removeBook,
   renameBook: mocks.renameBook,
   saveBookCover: mocks.saveBookCover,
-  saveReadingPosition: mocks.saveReadingPosition,
-  getAppearanceSettings: mocks.getAppearanceSettings,
-  getLanguageSettings: mocks.getLanguageSettings,
   getLibrarySettings: mocks.getLibrarySettings,
   saveLibrarySettings: mocks.saveLibrarySettings,
+  searchLibrary: mocks.searchLibrary,
+}));
+vi.mock("../features/reader/api", () => ({
+  saveReadingPosition: mocks.saveReadingPosition,
+}));
+vi.mock("../shared/api/settings", () => ({
+  getAppearanceSettings: mocks.getAppearanceSettings,
+  getLanguageSettings: mocks.getLanguageSettings,
   saveAppearanceSettings: mocks.saveAppearanceSettings,
   saveLanguageSettings: mocks.saveLanguageSettings,
-  searchLibrary: mocks.searchLibrary,
 }));
 const settingsEvents = vi.hoisted(() => ({
   appearance: [] as Array<(theme: string) => void>,
   language: [] as Array<(language: string) => void>,
 }));
-vi.mock("./shared/api/events", () => ({
+vi.mock("../shared/api/events", () => ({
   onAppearanceChanged: (callback: (theme: string) => void) => {
     settingsEvents.appearance.push(callback);
     return () => {
@@ -60,14 +64,14 @@ vi.mock("./shared/api/events", () => ({
     };
   },
 }));
-vi.mock("./features/library/indexer", () => ({
+vi.mock("../features/library/indexer", () => ({
   indexBookPages: mocks.indexBookPages,
   isAbortError: () => false,
 }));
-vi.mock("./features/library/generateCover", () => ({
+vi.mock("../features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
 }));
-vi.mock("./features/reader/PdfReader", () => ({
+vi.mock("../features/reader/PdfReader", () => ({
   PdfReader: ({
     book,
     initialPage,

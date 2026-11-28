@@ -1,23 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import { useTranslation } from "react-i18next";
-import { generateCoverThumbnail } from "./features/library/generateCover";
-import { indexBookPages, isAbortError, type IndexableBook } from "./features/library/indexer";
-import { Library } from "./features/library/Library";
-import { LibraryTopBar } from "./features/library/LibraryTopBar";
-import { sortBooks, useLibrarySortOrder } from "./features/library/librarySort";
+import { generateCoverThumbnail } from "../features/library/generateCover";
+import { indexBookPages, isAbortError, type IndexableBook } from "../features/library/indexer";
+import { Library } from "../features/library/Library";
+import { LibraryTopBar } from "../features/library/LibraryTopBar";
+import { sortBooks, useLibrarySortOrder } from "../features/library/librarySort";
 import {
   LibrarySearchField,
   LibrarySearchResults,
   type LibrarySearchStatus,
-} from "./features/library/LibrarySearch";
-import { EpubReader } from "./features/reader/EpubReader";
-import { PdfReader } from "./features/reader/PdfReader";
-import { syncDocumentTheme } from "./features/settings/theme";
-import { onAppearanceChanged } from "./shared/api/events";
-import { I18nProvider } from "./shared/i18n/i18n";
+} from "../features/library/LibrarySearch";
+import { EpubReader } from "../features/reader/EpubReader";
+import { PdfReader } from "../features/reader/PdfReader";
+import { syncDocumentTheme } from "../features/settings/theme";
+import { onAppearanceChanged } from "../shared/api/events";
+import { I18nProvider } from "../shared/i18n/i18n";
+import { getAppearanceSettings, type ThemePreference } from "../shared/api/settings";
 import {
-  getAppearanceSettings,
   listBooks,
   markBookCoverFailed,
   openBook,
@@ -27,13 +27,11 @@ import {
   removeBook,
   renameBook,
   saveBookCover,
-  saveReadingPosition,
   searchLibrary,
-  type BookFile,
-  type BookSummary,
   type LibrarySearchHit,
-  type ThemePreference,
-} from "./shared/api/backend";
+} from "../features/library/api";
+import { saveReadingPosition } from "../features/reader/api";
+import type { BookFile, BookSummary } from "../shared/api/books";
 
 // Long enough to skip the keystrokes in a word, short enough to feel live.
 const LIBRARY_SEARCH_DEBOUNCE_MS = 250;

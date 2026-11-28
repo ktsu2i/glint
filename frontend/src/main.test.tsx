@@ -6,7 +6,7 @@ const reactRoot = vi.hoisted(() => ({
 }));
 
 vi.mock("react-dom/client", () => ({ createRoot: reactRoot.createRoot }));
-vi.mock("./App", () => ({ default: () => <div>app</div> }));
+vi.mock("./app/App", () => ({ default: () => <div>app</div> }));
 vi.mock("./features/settings/SettingsWindow", () => ({
   SettingsWindowApp: () => <div>settings</div>,
 }));

@@ -31,13 +31,12 @@ import {
   searchBook,
   setWindowControlsVisible,
   type BookBookmark,
-  type BookFile,
   type BookHighlight,
-  type BookSearchResult,
   type EpubLayout,
   type HighlightColor,
   type ReaderSettings,
-} from "../../shared/api/backend";
+} from "./api";
+import type { BookFile, BookSearchResult } from "../../shared/api/books";
 import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
 import { ToolButton } from "../../shared/components/ToolButton";
 import {

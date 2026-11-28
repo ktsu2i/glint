@@ -1,5 +1,5 @@
 import { Events } from "@wailsio/runtime";
-import type { LanguagePreference, ThemePreference } from "./backend";
+import type { LanguagePreference, ThemePreference } from "./settings";
 
 // The backend pushes these events to every window after a setting is saved,
 // so the main window follows changes made in the settings window.
