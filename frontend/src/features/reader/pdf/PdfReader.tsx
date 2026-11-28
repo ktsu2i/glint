@@ -20,10 +20,12 @@ import { useBookSearch } from "../common/useBookSearch";
 import { useReaderChrome } from "../common/useReaderChrome";
 import { rectContainsPoint, selectionToPageSelections, type PageSelection } from "./highlights";
 import { OutlineList } from "./OutlineList";
+import { PdfPagePreview } from "./PdfPagePreview";
 import { usePageInput } from "./usePageInput";
 import { usePdfBookmarks, usePdfHighlights } from "./usePdfAnnotations";
 import { usePdfDocument } from "./usePdfDocument";
 import { usePdfOutline } from "./usePdfOutline";
+import { usePdfPreviewCache } from "./usePdfPagePreview";
 import { usePdfPageRender, type ViewMode } from "./usePdfPageRender";
 import { usePdfReadAloud } from "./usePdfReadAloud";
 import { usePdfStage } from "./usePdfStage";
@@ -81,6 +83,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const { document, error, setError } = usePdfDocument(book, initialPage, {
     onLoaded: (_loaded, startPage) => setPageNumber(startPage),
   });
+  const previewCache = usePdfPreviewCache();
 
   const {
     stageRef,
@@ -757,6 +760,19 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
               }))
             : []
         }
+        seek={{
+          min: 1,
+          max: sliderMaximum,
+          onSeek: setPageNumber,
+          renderHover: (page) => (
+            <PdfPagePreview
+              document={document}
+              cache={previewCache}
+              pageNumber={page}
+              label={`${page} / ${numPages || 1}`}
+            />
+          ),
+        }}
       />
     </section>
   );

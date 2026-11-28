@@ -581,6 +581,16 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
               })
             : []
         }
+        seek={{
+          min: 0,
+          max: sliderSteps,
+          onSeek: (value) => void view?.goToFraction(value / sliderSteps),
+          renderHover: (value) => (
+            <span className="reader-slider-hover-label">
+              {Math.round((value / sliderSteps) * 100)}%
+            </span>
+          ),
+        }}
       />
     </section>
   );
