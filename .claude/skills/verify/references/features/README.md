@@ -24,10 +24,11 @@ For a broad regression, walk this list top to bottom. Keep new entries behavior-
 - [library](library.md): import, sort, rename, remove, covers, continue reading
 - [pdf-reader](pdf-reader.md): page turns, go to page, slider, view settings (binding, zoom), restoring the reading position
 - [epub-reader](epub-reader.md): EPUB sections, table of contents, page turns, text size and spreads, position, highlights and bookmarks by CFI, stripping active content
+- [book-search](book-search.md): search within a book, matching rules, jumping to results, for PDF and EPUB
 - [highlights](highlights.md): create from a selection, change color, remove, jump from the list
 - [bookmarks](bookmarks.md): save and remove a page, jump and remove from the list
 
-Not written yet: book-search, library-search, read-aloud, settings, and multi-feature journeys.
+Not written yet: library-search, read-aloud, settings, and multi-feature journeys.
 
 ## Entry contract
 

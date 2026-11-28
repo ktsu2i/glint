@@ -132,4 +132,4 @@ When a change touches these, report them as gaps and check the real app with `go
 ## Maintaining the feature map
 
 - When you add a feature or change the UI, update the matching feature file in the same PR, in English, with the same four headings.
-- Files not written yet (search, read-aloud, settings, journeys) are added as those features need verification.
+- Files not written yet (library search, read-aloud, settings, journeys) are added as those features need verification.
