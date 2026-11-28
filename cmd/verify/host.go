@@ -239,7 +239,68 @@ var waitStates = map[string]*playwright.WaitForSelectorState{
 	"detached": playwright.WaitForSelectorStateDetached,
 }
 
+// target is where a command looks for elements: the page, or with --in-book
+// the frame that shows the current EPUB section.
+type target struct {
+	locate   func(selector string) playwright.Locator
+	evaluate func(expression string) (any, error)
+}
+
+// inBookCommands accept --in-book as their first argument.
+var inBookCommands = map[string]bool{
+	"click-css": true, "mouse-click": true, "right-click": true, "hover": true,
+	"select-text": true, "snapshot": true, "wait": true, "eval": true,
+}
+
+func (h *host) target(name string, args []string) (target, []string, error) {
+	if len(args) == 0 || args[0] != "--in-book" {
+		return target{
+			locate:   func(selector string) playwright.Locator { return h.page.Locator(selector) },
+			evaluate: func(expression string) (any, error) { return h.page.Evaluate(expression) },
+		}, args, nil
+	}
+	if !inBookCommands[name] {
+		return target{}, nil, fmt.Errorf("%s does not take --in-book", name)
+	}
+	frame, err := h.bookFrame()
+	if err != nil {
+		return target{}, nil, err
+	}
+	return target{
+		locate:   func(selector string) playwright.Locator { return frame.Locator(selector) },
+		evaluate: func(expression string) (any, error) { return frame.Evaluate(expression) },
+	}, args[1:], nil
+}
+
+// bookFrame finds the frame foliate-js renders the current EPUB section in.
+// It sits in a closed shadow root, so page selectors cannot reach it, but
+// Playwright still lists it as a child frame. It waits for the frame like
+// other actions wait for elements.
+func (h *host) bookFrame() (playwright.Frame, error) {
+	deadline := time.Now().Add(actionTimeout)
+	for {
+		var urls []string
+		for _, frame := range h.page.Frames() {
+			if frame == h.page.MainFrame() {
+				continue
+			}
+			urls = append(urls, frame.URL())
+			if strings.HasPrefix(frame.URL(), "blob:") {
+				return frame, nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("no EPUB section is open (child frames: %q)", urls)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
 func (h *host) run(ctx context.Context, name string, args []string) (string, error) {
+	in, args, err := h.target(name, args)
+	if err != nil {
+		return "", err
+	}
 	arg := func(i int) string {
 		if i < len(args) {
 			return args[i]
@@ -272,18 +333,18 @@ func (h *host) run(ctx context.Context, name string, args []string) (string, err
 		}
 		return fmt.Sprintf("clicked %s %q", arg(0), accessibleName), nil
 	case "click-css":
-		if err := page.Locator(arg(0)).First().Click(); err != nil {
+		if err := in.locate(arg(0)).First().Click(); err != nil {
 			return "", err
 		}
 		return "clicked " + arg(0), nil
 	case "right-click":
-		err := page.Locator(arg(0)).First().Click(playwright.LocatorClickOptions{Button: playwright.MouseButtonRight})
+		err := in.locate(arg(0)).First().Click(playwright.LocatorClickOptions{Button: playwright.MouseButtonRight})
 		if err != nil {
 			return "", err
 		}
 		return "right-clicked " + arg(0), nil
 	case "mouse-click":
-		box, err := h.box(arg(0))
+		box, err := h.box(in, arg(0))
 		if err != nil {
 			return "", err
 		}
@@ -302,14 +363,14 @@ func (h *host) run(ctx context.Context, name string, args []string) (string, err
 		}
 		return "typed", nil
 	case "hover":
-		if err := page.Locator(arg(0)).First().Hover(); err != nil {
+		if err := in.locate(arg(0)).First().Hover(); err != nil {
 			return "", err
 		}
 		return "hovering " + arg(0), nil
 	case "select-text":
-		return h.selectText(arg(0))
+		return h.selectText(in, arg(0))
 	case "snapshot":
-		return page.Locator("body").AriaSnapshot()
+		return in.locate("body").AriaSnapshot()
 	case "screenshot":
 		file := arg(0)
 		if file == "" {
@@ -332,12 +393,12 @@ func (h *host) run(ctx context.Context, name string, args []string) (string, err
 		if !ok {
 			return "", errors.New("state must be visible, hidden, attached, or detached")
 		}
-		if err := page.Locator(arg(0)).First().WaitFor(playwright.LocatorWaitForOptions{State: state}); err != nil {
+		if err := in.locate(arg(0)).First().WaitFor(playwright.LocatorWaitForOptions{State: state}); err != nil {
 			return "", err
 		}
 		return arg(0) + " is " + stateName, nil
 	case "eval":
-		result, err := page.Evaluate(strings.Join(args, " "))
+		result, err := in.evaluate(strings.Join(args, " "))
 		if err != nil {
 			return "", err
 		}
@@ -365,12 +426,13 @@ func (h *host) run(ctx context.Context, name string, args []string) (string, err
 	return "", fmt.Errorf("unknown command %q", name)
 }
 
-func (h *host) box(selector string) (*playwright.Rect, error) {
-	target := h.page.Locator(selector).First()
-	if err := target.WaitFor(); err != nil {
+func (h *host) box(in target, selector string) (*playwright.Rect, error) {
+	element := in.locate(selector).First()
+	if err := element.WaitFor(); err != nil {
 		return nil, err
 	}
-	box, err := target.BoundingBox()
+	// The box is in page coordinates, also for elements inside a frame.
+	box, err := element.BoundingBox()
 	if err != nil {
 		return nil, err
 	}
@@ -380,8 +442,8 @@ func (h *host) box(selector string) (*playwright.Rect, error) {
 	return box, nil
 }
 
-func (h *host) selectText(selector string) (string, error) {
-	box, err := h.box(selector)
+func (h *host) selectText(in target, selector string) (string, error) {
+	box, err := h.box(in, selector)
 	if err != nil {
 		return "", err
 	}
@@ -399,7 +461,7 @@ func (h *host) selectText(selector string) (string, error) {
 	if err := mouse.Up(); err != nil {
 		return "", err
 	}
-	selected, err := h.page.Evaluate("() => globalThis.getSelection()?.toString() ?? ''")
+	selected, err := in.evaluate("() => globalThis.getSelection()?.toString() ?? ''")
 	if err != nil {
 		return "", err
 	}

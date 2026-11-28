@@ -48,6 +48,11 @@ Inspection and evidence
   sql <query>                 Query the app's SQLite database read-only
   logs                        Print the end of the app log
 
+EPUB content
+  --in-book                   As the first argument of click-css, mouse-click, right-click,
+                              hover, select-text, snapshot, wait, or eval, act inside the
+                              frame that shows the current EPUB section
+
 Native dialogs
   dialog open-file <path>     Answer the next file dialog with a path
   dialog confirm <accept|cancel>
