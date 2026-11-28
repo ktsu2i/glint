@@ -88,14 +88,14 @@ export function SettingsWindow() {
     }
   }
 
-  const themeCopy: Record<ThemePreference, [string, string]> = {
-    light: [t("settings.themeLight"), t("settings.themeLightDescription")],
-    dark: [t("settings.themeDark"), t("settings.themeDarkDescription")],
-    system: [t("settings.themeSystem"), t("settings.themeSystemDescription")],
+  const themeLabels: Record<ThemePreference, string> = {
+    light: t("settings.themeLight"),
+    dark: t("settings.themeDark"),
+    system: t("settings.themeSystem"),
   };
-  const languageCopy: Record<LanguagePreference, [string, string]> = {
-    en: [t("settings.english"), t("settings.englishDescription")],
-    ja: [t("settings.japanese"), t("settings.japaneseDescription")],
+  const languageLabels: Record<LanguagePreference, string> = {
+    en: t("settings.english"),
+    ja: t("settings.japanese"),
   };
   const tabs: Array<{ id: SettingsTab; label: string; icon: typeof PaletteIcon }> = [
     { id: "appearance", label: t("settings.appearance"), icon: PaletteIcon },
@@ -132,10 +132,7 @@ export function SettingsWindow() {
           id="settings-panel-appearance"
           aria-labelledby="settings-tab-appearance"
         >
-          <div className="settings-panel-heading">
-            <h2>{t("settings.themeOptions")}</h2>
-            <p>{t("settings.appearanceDescription")}</p>
-          </div>
+          <h2 className="settings-panel-heading">{t("settings.themeOptions")}</h2>
           {themeError && (
             <p className="settings-error" role="alert">
               {themeError}
@@ -147,7 +144,7 @@ export function SettingsWindow() {
             aria-label={t("settings.themeOptions")}
           >
             {themeOptions.map((option) => {
-              const [label, description] = themeCopy[option];
+              const label = themeLabels[option];
               const selected = theme === option;
               return (
                 <button
@@ -155,7 +152,6 @@ export function SettingsWindow() {
                   type="button"
                   className={`settings-theme-option is-${option}`}
                   aria-label={label}
-                  aria-describedby={`settings-theme-${option}-description`}
                   aria-pressed={selected}
                   disabled={themeLoading || savingTheme}
                   onClick={() => void handleThemeChange(option)}
@@ -166,7 +162,6 @@ export function SettingsWindow() {
                   </span>
                   <span className="settings-option-copy" aria-hidden="true">
                     <strong>{label}</strong>
-                    <small id={`settings-theme-${option}-description`}>{description}</small>
                   </span>
                 </button>
               );
@@ -180,10 +175,7 @@ export function SettingsWindow() {
           id="settings-panel-language"
           aria-labelledby="settings-tab-language"
         >
-          <div className="settings-panel-heading">
-            <h2>{t("settings.languageOptions")}</h2>
-            <p>{t("settings.languageDescription")}</p>
-          </div>
+          <h2 className="settings-panel-heading">{t("settings.languageOptions")}</h2>
           {(languageError || savingLanguage) && (
             <p
               className={languageError ? "settings-error" : "settings-saving"}
@@ -198,7 +190,7 @@ export function SettingsWindow() {
             aria-label={t("settings.languageOptions")}
           >
             {languageOptions.map((option) => {
-              const [label, description] = languageCopy[option];
+              const label = languageLabels[option];
               const selected = language === option;
               return (
                 <button
@@ -214,7 +206,6 @@ export function SettingsWindow() {
                   </span>
                   <span className="settings-option-copy">
                     <strong>{label}</strong>
-                    <small>{description}</small>
                   </span>
                 </button>
               );
