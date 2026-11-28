@@ -115,6 +115,7 @@ main.go ─→ internal/app ─→ feature packages (books, settings, future rep
 - Reverse imports are forbidden. Feature packages must not import `internal/app`, and `internal/library` must not import feature packages.
 - Keep dependencies between feature packages minimal and never circular.
 - Only `main.go` and `internal/app` may import Wails v3 `application` / `events`. `main.go` assembles the app, windows, and services, and manages their lifecycle.
+- golangci-lint `depguard` rules in `.golangci.yml` enforce these rules. When adding a feature package, add it to the `features` rule.
 
 ### `internal/app` (Wails binding layer)
 
