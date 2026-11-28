@@ -38,6 +38,10 @@ jobs:
       - name: Run tests
         run: go test -tags server ./...
 
+      # verify tag は glint-driver 用の fake dialogs を有効にする。差し替わるのは internal/app だけ。
+      - name: Run tests with the verify build
+        run: go test -tags 'server verify' ./internal/app/...
+
   frontend-test:
     name: Frontend test
     runs-on: ubuntu-latest

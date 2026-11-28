@@ -4,6 +4,7 @@ go 1.27.4
 
 require (
 	github.com/glebarez/go-sqlite v1.23.0
+	github.com/mxschmitt/playwright-go v0.6401.0
 	github.com/pressly/goose/v3 v3.30.2
 	github.com/stretchr/testify v1.12.1
 	github.com/wailsapp/wails/v3 v3.1.0
@@ -60,6 +61,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dominikbraun/graph v0.23.0 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
@@ -74,6 +76,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
+	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-task/template v0.2.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
@@ -193,6 +196,7 @@ require (
 )
 
 tool (
+	github.com/ktsu2i/glint/cmd/verify
 	github.com/sqlc-dev/sqlc/cmd/sqlc
 	github.com/wailsapp/wails/v3/cmd/wails3
 )

@@ -17,6 +17,7 @@
     "knip": "knip",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm knip",
     "fixture:pdf": "node ../scripts/generate-reader-fixture.mjs",
+    "fixture:epub": "node ../scripts/generate-epub-fixture.mjs",
     "pretest": "node scripts/require-pnpm.mjs",
     "test": "vitest run",
     "pretest:coverage": "node scripts/require-pnpm.mjs",

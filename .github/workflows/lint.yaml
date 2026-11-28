@@ -89,6 +89,9 @@ jobs:
       - name: Run golangci-lint
         run: golangci-lint run --build-tags server ./...
 
+      - name: Run golangci-lint on the verify build
+        run: golangci-lint run --build-tags 'server verify' ./internal/app/...
+
       - name: Format check
         run: golangci-lint fmt --diff ./...
 

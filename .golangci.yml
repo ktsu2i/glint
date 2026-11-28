@@ -61,6 +61,24 @@ linters:
           deny:
             - pkg: github.com/ktsu2i/glint/internal
               desc: internal/library is the store and may only import internal/sqlite
+        no-playwright-in-app:
+          list-mode: lax
+          files:
+            - "**/main.go"
+            - "**/internal/**"
+            - "!**/cmd/**"
+          deny:
+            - pkg: github.com/mxschmitt/playwright-go
+              desc: Playwright is only for cmd/verify
+        verify-tool:
+          list-mode: lax
+          files:
+            - "**/cmd/verify/**"
+          deny:
+            - pkg: github.com/ktsu2i/glint/internal
+              desc: go tool verify drives the app from outside and must not import its packages
+            - pkg: github.com/wailsapp/wails
+              desc: go tool verify drives the app from outside and must not import Wails
         leaf-packages:
           list-mode: lax
           files:
