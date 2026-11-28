@@ -3,177 +3,82 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
+
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/database"
 )
 
-type Migrator struct {
-	DB *sql.DB
-	FS fs.FS
-}
+// ErrLegacySchema reports a database left by the old migrator at a version
+// other than the one 00001_init.sql squashes, which goose cannot take over.
+var ErrLegacySchema = errors.New("database was migrated by the old migrator to an unsupported version")
 
-func (m *Migrator) Up(ctx context.Context) error {
-	if _, err := m.DB.ExecContext(ctx, `
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            version    INTEGER PRIMARY KEY,
-            name       TEXT NOT NULL,
-            applied_at TEXT NOT NULL
-        )`); err != nil {
-		return fmt.Errorf("create schema_migrations: %w", err)
-	}
-	if err := m.upgradeLegacyMigrationTable(ctx); err != nil {
+// legacySquashedVersion is the last version of the old migrator, whose
+// migrations were squashed into 00001_init.sql.
+const legacySquashedVersion = 15
+
+// Migrate applies the pending goose migrations in fsys to db.
+func Migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
+	if err := adoptLegacySchema(ctx, db); err != nil {
 		return err
 	}
-
-	applied, err := m.appliedVersions(ctx)
+	provider, err := goose.NewProvider(database.DialectSQLite3, db, fsys)
 	if err != nil {
-		return err
+		return fmt.Errorf("load migrations: %w", err)
 	}
-
-	entries, err := fs.ReadDir(m.FS, ".")
-	if err != nil {
-		return fmt.Errorf("list migrations: %w", err)
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".sql") {
-			continue
-		}
-		version, err := parseVersion(name)
-		if err != nil {
-			return fmt.Errorf("parse migration %q: %w", name, err)
-		}
-		if _, ok := applied[version]; ok {
-			continue
-		}
-		body, err := fs.ReadFile(m.FS, name)
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", name, err)
-		}
-		if err := m.applyOne(ctx, version, name, string(body)); err != nil {
-			return err
-		}
+	if _, err := provider.Up(ctx); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
 	}
 	return nil
 }
 
-func (m *Migrator) upgradeLegacyMigrationTable(ctx context.Context) error {
-	columns, err := m.migrationTableColumns(ctx)
-	if err != nil {
-		return err
+// adoptLegacySchema hands a database migrated by the old migrator over to
+// goose. Its schema already matches 00001_init.sql, so it records that version
+// as applied and drops the old schema_migrations table.
+func adoptLegacySchema(ctx context.Context, db *sql.DB) error {
+	var legacyTables int
+	if err := db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+	).Scan(&legacyTables); err != nil {
+		return fmt.Errorf("inspect schema_migrations: %w", err)
 	}
-	if columns["name"] && columns["applied_at"] {
+	if legacyTables == 0 {
 		return nil
 	}
 
-	tx, err := m.DB.BeginTx(ctx, nil)
+	var version int
+	if err := db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
+		return fmt.Errorf("read schema_migrations: %w", err)
+	}
+	if version != legacySquashedVersion {
+		return fmt.Errorf("%w: %d", ErrLegacySchema, version)
+	}
+
+	store, err := database.NewStore(database.DialectSQLite3, goose.DefaultTablename)
 	if err != nil {
-		return fmt.Errorf("upgrade schema_migrations: %w", err)
+		return fmt.Errorf("create goose store: %w", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("adopt legacy schema: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	statements := []string{
-		"ALTER TABLE schema_migrations RENAME TO schema_migrations_legacy",
-		`CREATE TABLE schema_migrations (
-            version    INTEGER PRIMARY KEY,
-            name       TEXT NOT NULL,
-            applied_at TEXT NOT NULL
-        )`,
-		"INSERT INTO schema_migrations (version, name, applied_at) SELECT version, 'legacy', ? FROM schema_migrations_legacy",
-		"DROP TABLE schema_migrations_legacy",
+	if err := store.CreateVersionTable(ctx, tx); err != nil {
+		return fmt.Errorf("adopt legacy schema: %w", err)
 	}
-	for _, statement := range statements {
-		var execErr error
-		if strings.Contains(statement, "SELECT version") {
-			_, execErr = tx.ExecContext(ctx, statement, time.Now().UTC().Format(time.RFC3339))
-		} else {
-			_, execErr = tx.ExecContext(ctx, statement)
+	// goose records version 0 when it creates the table, then each applied version.
+	for _, applied := range []int64{0, 1} {
+		if err := store.Insert(ctx, tx, database.InsertRequest{Version: applied}); err != nil {
+			return fmt.Errorf("adopt legacy schema: %w", err)
 		}
-		if execErr != nil {
-			return fmt.Errorf("upgrade schema_migrations: %w", execErr)
-		}
+	}
+	if _, err := tx.ExecContext(ctx, "DROP TABLE schema_migrations"); err != nil {
+		return fmt.Errorf("adopt legacy schema: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("upgrade schema_migrations: %w", err)
+		return fmt.Errorf("adopt legacy schema: %w", err)
 	}
 	return nil
-}
-
-func (m *Migrator) applyOne(ctx context.Context, version int, name, body string) error {
-	tx, err := m.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin migration %s: %w", name, err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(ctx, body); err != nil {
-		return fmt.Errorf("apply migration %s: %w", name, err)
-	}
-	if _, err := tx.ExecContext(ctx,
-		"INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
-		version, name, time.Now().UTC().Format(time.RFC3339),
-	); err != nil {
-		return fmt.Errorf("record migration %s: %w", name, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit migration %s: %w", name, err)
-	}
-	return nil
-}
-
-func parseVersion(name string) (int, error) {
-	idx := strings.Index(name, "_")
-	if idx <= 0 {
-		return 0, fmt.Errorf("expected NNNN_name.sql, got %q", name)
-	}
-	return strconv.Atoi(name[:idx])
-}
-
-func (m *Migrator) appliedVersions(ctx context.Context) (map[int]struct{}, error) {
-	rows, err := m.DB.QueryContext(ctx, "SELECT version FROM schema_migrations")
-	if err != nil {
-		return nil, fmt.Errorf("read schema_migrations: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	applied := map[int]struct{}{}
-	for rows.Next() {
-		var version int
-		if err := rows.Scan(&version); err != nil {
-			return nil, fmt.Errorf("scan schema_migrations: %w", err)
-		}
-		applied[version] = struct{}{}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read schema_migrations: %w", err)
-	}
-	return applied, nil
-}
-
-func (m *Migrator) migrationTableColumns(ctx context.Context) (map[string]bool, error) {
-	rows, err := m.DB.QueryContext(ctx, "PRAGMA table_info(schema_migrations)")
-	if err != nil {
-		return nil, fmt.Errorf("inspect schema_migrations: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	columns := map[string]bool{}
-	for rows.Next() {
-		var cid, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return nil, fmt.Errorf("inspect schema_migrations column: %w", err)
-		}
-		columns[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("inspect schema_migrations: %w", err)
-	}
-	return columns, nil
 }

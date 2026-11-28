@@ -157,8 +157,7 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	migrator := &sqlite.Migrator{DB: db, FS: migrations.FS}
-	if err := migrator.Up(ctx); err != nil {
+	if err := sqlite.Migrate(ctx, db, migrations.FS); err != nil {
 		return fmt.Errorf("apply library migrations: %w", err)
 	}
 	return nil
