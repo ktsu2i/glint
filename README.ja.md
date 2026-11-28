@@ -1,12 +1,32 @@
-# Glint
+<h1 align="center">
+  <img src="assets/logo.png" alt="Glint logo" width="128">
+  <br>Glint
+</h1>
 
-[English](README.md) | **日本語**
+<p align="center">
+  <strong>技術書を読むための macOS アプリ</strong>
+  <br>
+  PDF と EPUB を手元の本棚に並べて読み、読んだ本をまとめて全文検索できます。
+  <br>
+  <br>
+  <a href="#主な機能">主な機能</a>
+  ·
+  <a href="#インストール">インストール</a>
+  ·
+  <a href="https://github.com/ktsu2i/glint/releases/latest">ダウンロード</a>
+</p>
 
-技術書を読むための macOS アプリです。PDF と EPUB を手元の本棚に並べて読み、読んだ本をまとめて全文検索できます。
+<p align="center">
+  <a href="https://github.com/ktsu2i/glint/releases/latest"><img src="https://img.shields.io/github/v/release/ktsu2i/glint?style=for-the-badge&label=Release" alt="Latest release"></a>
+  <a href="https://github.com/ktsu2i/glint/actions/workflows/test.yaml"><img src="https://img.shields.io/github/actions/workflow/status/ktsu2i/glint/test.yaml?branch=main&style=for-the-badge&label=Test" alt="Test status"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey?style=for-the-badge&logo=apple" alt="macOS 13 or later">
+</p>
 
-![Glint の本棚](assets/library-ja.png)
+<p align="center"><a href="README.md">English</a> | <strong>日本語</strong></p>
 
-![Glint で本を開いて読む様子](assets/demo.gif)
+<p align="center">
+  <img src="assets/demo.gif" alt="Glint で本を開いて読む様子" width="100%">
+</p>
 
 ## 主な機能
 
@@ -41,7 +61,3 @@ Glint は自動でアップデートを確認し、新しいバージョンが�
 ## プライバシー
 
 本、読書位置、ハイライト、しおりはすべて Mac の中だけに保存されます。Glint が行う通信はアップデートの確認だけで、本の情報は送りません。
-
-## 今後の予定
-
-いま読んでいる本と自分のコードをつなげる機能を開発中です。ローカルのリポジトリを指定すると、読んでいる章から、その章が説明しているファイルや symbol へ移動できるようにする予定です。

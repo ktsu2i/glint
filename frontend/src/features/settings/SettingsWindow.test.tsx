@@ -88,7 +88,7 @@ describe("SettingsWindow", () => {
 
     await waitFor(() => expect(backend.saveLanguageSettings).toHaveBeenCalledWith("en"));
     expect(await screen.findByRole("heading", { name: "Language", level: 1 })).toBeTruthy();
-    expect(document.documentElement.lang).toBe("en");
+    await waitFor(() => expect(document.documentElement.lang).toBe("en"));
   });
 
   it("keeps the previous language when saving fails", async () => {
@@ -103,6 +103,6 @@ describe("SettingsWindow", () => {
 
     expect(await screen.findByText("language storage unavailable")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "言語", level: 1 })).toBeTruthy();
-    expect(document.documentElement.lang).toBe("ja");
+    await waitFor(() => expect(document.documentElement.lang).toBe("ja"));
   });
 });
