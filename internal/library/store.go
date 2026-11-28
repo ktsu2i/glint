@@ -12,9 +12,9 @@ import (
 
 	_ "github.com/glebarez/go-sqlite" // registers the pure Go "sqlite" database/sql driver
 
-	"github.com/kaito/glint/internal/library/librarydb"
-	"github.com/kaito/glint/internal/sqlite"
-	"github.com/kaito/glint/migrations"
+	"github.com/ktsu2i/glint/internal/library/librarydb"
+	"github.com/ktsu2i/glint/internal/sqlite"
+	"github.com/ktsu2i/glint/migrations"
 )
 
 type Store struct {

@@ -10,11 +10,11 @@ import {
   SaveBookCover,
   SaveBookSegments,
   SearchLibrary,
-} from "../../../bindings/github.com/kaito/glint/internal/app/booksservice";
+} from "../../../bindings/github.com/ktsu2i/glint/internal/app/booksservice";
 import {
   GetLibrarySettings,
   SaveLibrarySettings,
-} from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
+} from "../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice";
 import type { BookFile, BookSearchResult, BookSummary } from "../../shared/api/books";
 
 export type BookSegmentInput = {

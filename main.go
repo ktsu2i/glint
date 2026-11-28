@@ -12,12 +12,12 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
-	"github.com/kaito/glint/internal/app"
-	"github.com/kaito/glint/internal/assetserver"
-	"github.com/kaito/glint/internal/books"
-	"github.com/kaito/glint/internal/library"
-	"github.com/kaito/glint/internal/settings"
-	"github.com/kaito/glint/internal/update"
+	"github.com/ktsu2i/glint/internal/app"
+	"github.com/ktsu2i/glint/internal/assetserver"
+	"github.com/ktsu2i/glint/internal/books"
+	"github.com/ktsu2i/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/settings"
+	"github.com/ktsu2i/glint/internal/update"
 )
 
 //go:embed all:frontend/dist

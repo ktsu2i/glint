@@ -16,7 +16,7 @@ const bindings = vi.hoisted(() => ({
   saveLibrarySettings: vi.fn(),
 }));
 
-vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
+vi.mock("../../../bindings/github.com/ktsu2i/glint/internal/app/booksservice", () => ({
   ListBooks: bindings.listBooks,
   MarkBookCoverFailed: bindings.markBookCoverFailed,
   OpenBook: bindings.openBook,
@@ -30,7 +30,7 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", ()
   SearchLibrary: bindings.searchLibrary,
 }));
 
-vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice", () => ({
+vi.mock("../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice", () => ({
   GetLibrarySettings: bindings.getLibrarySettings,
   SaveLibrarySettings: bindings.saveLibrarySettings,
 }));

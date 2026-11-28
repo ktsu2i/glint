@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaito/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/library"
 )
 
 var pngCover = append([]byte("\x89PNG\r\n\x1a\n"), []byte("cover")...)

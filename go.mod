@@ -1,4 +1,4 @@
-module github.com/kaito/glint
+module github.com/ktsu2i/glint
 
 go 1.27.4
 

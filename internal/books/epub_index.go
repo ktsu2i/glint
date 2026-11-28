@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kaito/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/library"
 )
 
 func (s *Service) indexEPUBSpine(ctx context.Context, book library.Book, pkg *epubPackage) error {

@@ -15,7 +15,7 @@ const bindings = vi.hoisted(() => ({
   saveReaderSettings: vi.fn(),
 }));
 
-vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", () => ({
+vi.mock("../../../bindings/github.com/ktsu2i/glint/internal/app/booksservice", () => ({
   AddBookmark: bindings.addBookmark,
   AddHighlight: bindings.addHighlight,
   ChangeHighlightColor: bindings.changeHighlightColor,
@@ -28,7 +28,7 @@ vi.mock("../../../bindings/github.com/kaito/glint/internal/app/booksservice", ()
   SearchBook: bindings.searchBook,
 }));
 
-vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice", () => ({
+vi.mock("../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice", () => ({
   GetReaderSettings: bindings.getReaderSettings,
   SaveReaderSettings: bindings.saveReaderSettings,
 }));

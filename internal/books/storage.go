@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaito/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/library"
 )
 
 // booksDirectory is where the library keeps its own copy of every book file,

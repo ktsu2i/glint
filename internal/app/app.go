@@ -11,7 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"github.com/kaito/glint/internal/settings"
+	"github.com/ktsu2i/glint/internal/settings"
 )
 
 var errNotReady = errors.New("application is not ready")
