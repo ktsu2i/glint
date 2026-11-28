@@ -49,6 +49,8 @@ Run the same checks as CI for whatever you changed.
 - Exported methods of a Go service: regenerate bindings, then run the frontend checks
 - Frontend: `pnpm check`, `pnpm test`, `pnpm run build`
 - `.github/workflows`: `actionlint`, `jactionlint`, `ghalint run`, `zizmor .` (versions pinned in `aqua.yaml`)
+- Dialogs in `internal/app`: also `go test -tags verify ./internal/app/...` (the `verify` build answers dialogs from files)
+- UI or persisted behavior: drive the running app with the `verify-glint` skill (`.claude/skills/verify-glint/SKILL.md`) and report the evidence: screenshots, SQL rows, and state after `restart-app`
 
 ## Working conventions
 
