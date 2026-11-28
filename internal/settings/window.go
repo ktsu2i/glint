@@ -54,19 +54,22 @@ func (manager *Manager) SaveMainWindowState(ctx context.Context, state WindowSta
 	return manager.store.SaveSetting(ctx, mainWindowSettingKey, string(value))
 }
 
-func PlaceWindow(bounds WindowBounds, workAreas []WindowBounds) WindowBounds {
+type Screen struct {
+	WorkArea WindowBounds
+	Primary  bool
+}
+
+func PlaceWindow(bounds WindowBounds, screens []Screen) WindowBounds {
 	var target WindowBounds
 	overlap := 0
-	for _, area := range workAreas {
-		if size := bounds.intersectionArea(area); size > overlap {
-			target, overlap = area, size
+	for _, screen := range screens {
+		if size := bounds.intersectionArea(screen.WorkArea); size > overlap {
+			target, overlap = screen.WorkArea, size
 		}
 	}
 	if overlap == 0 {
-		for _, area := range workAreas {
-			if area.hasArea() {
-				return centre(bounds, area)
-			}
+		if area, ok := fallbackArea(screens); ok {
+			return centre(bounds, area)
 		}
 		return bounds
 	}
@@ -77,6 +80,23 @@ func PlaceWindow(bounds WindowBounds, workAreas []WindowBounds) WindowBounds {
 	placed.X = clamp(bounds.X, target.X, target.X+target.Width-placed.Width)
 	placed.Y = clamp(bounds.Y, target.Y, target.Y+target.Height-placed.Height)
 	return placed
+}
+
+func fallbackArea(screens []Screen) (WindowBounds, bool) {
+	var fallback WindowBounds
+	found := false
+	for _, screen := range screens {
+		if !screen.WorkArea.hasArea() {
+			continue
+		}
+		if screen.Primary {
+			return screen.WorkArea, true
+		}
+		if !found {
+			fallback, found = screen.WorkArea, true
+		}
+	}
+	return fallback, found
 }
 
 func centre(bounds, area WindowBounds) WindowBounds {
