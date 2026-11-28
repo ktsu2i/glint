@@ -1,38 +1,38 @@
 # Glint feature map
 
-Glint の振る舞いの一覧。agent はこれを見て、何を操作し、何を証拠にするかを決める。人にとっては回帰確認のチェックリストになる。
+A behavior-level inventory of Glint. Agents use it to decide what to drive and what counts as evidence. Humans use it as the regression checklist.
 
-## 前提条件
+## Baseline preconditions
 
-- `doctor` が `doctor: ok` を返している。
-- `start` 直後の空のライブラリから始める。前の確認のデータを持ち越さない（`stop` で消える）。
-- UI の言語は英語（ドライバが `en-US` でページを開く）。日本語の確認は設定を切り替えてから行う。
-- テスト用の本は `frontend/testdata/generated-reader.pdf` を使う。3 ページで、各ページに見出し、本文 2 行、コード 1 行がある。
+- `doctor` reports `doctor: ok`.
+- Start from the empty library right after `start`. Do not carry data over from an earlier run (`stop` deletes it).
+- The UI language is English (the driver opens the page with `en-US`). To check Japanese, switch the setting first.
+- Use `frontend/testdata/generated-reader.pdf` as the book. It has 3 pages, each with a heading, two lines of body text, and one line of code.
 
-## 確認の範囲と gap の書き方
+## Coverage and gap reporting
 
-変更に関係するファイルが、確かめる範囲を決める。
+The feature file for the change defines what to cover.
 
-- 入口が複数あるなら全部通す（ボタン、キー、メニュー、一覧からの移動など）。
-- 成功、キャンセル、エラー、空、永続化の経路のうち、変更が影響しうるものを通す。永続化は `sql` と `restart-app` の両方で確かめる。
-- 届かない経路は、どれが、なぜ（native UI、OS、ドライバ）届かないかを書き、確かめた一番近い経路を示す。
+- When there are several entry points (buttons, keys, menus, jumps from a list), drive all of them.
+- Drive the success, cancel, error, empty, and persistence paths the change can affect. Check persistence with both `sql` and `restart-app`.
+- When a path is unreachable, name it, say why (native UI, OS, or driver), and cover the closest path that remains.
 
-## 全体確認の順番
+## Full sweep
 
-広い回帰確認では、上から順に回す。新しい項目は振る舞いの単位で、セレクタか目に見える状態を根拠にし、ソースを読まなくても実行できる短さで書く。
+For a broad regression, walk this list top to bottom. Keep new entries behavior-level, grounded in selectors or visible state, and short enough to run without reading source.
 
-- [library](library.md)：インポート、並び替え、名前の変更、削除、表紙、続きから読む
-- [pdf-reader](pdf-reader.md)：PDF のページ送り、ページ番号への移動、スライダー、表示（綴じ方向、ズーム）、読書位置の復元
-- [highlights](highlights.md)：選択からのハイライト作成、色の変更、削除、一覧からの移動
-- [bookmarks](bookmarks.md)：ページの保存と解除、一覧からの移動と削除
+- [library](library.md): import, sort, rename, remove, covers, continue reading
+- [pdf-reader](pdf-reader.md): page turns, go to page, slider, view settings (binding, zoom), restoring the reading position
+- [highlights](highlights.md): create from a selection, change color, remove, jump from the list
+- [bookmarks](bookmarks.md): save and remove a page, jump and remove from the list
 
-まだ書いていないもの：epub-reader、book-search、library-search、read-aloud、settings、複数の機能にまたがる journeys。
+Not written yet: epub-reader, book-search, library-search, read-aloud, settings, and multi-feature journeys.
 
-## 各ファイルの書式
+## Entry contract
 
-どのファイルも次の 4 つの見出しを持つ。
+Every feature file uses the same four H2s:
 
-1. `サブ機能`
-2. `ユーザーからの到達方法`
-3. `ドライバでの操作`
-4. `落とし穴`
+1. `Sub-features`
+2. `How to get to it (user POV)`
+3. `Driving it with glint-driver`
+4. `Gotchas`

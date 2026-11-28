@@ -1,47 +1,47 @@
 # Bookmarks
 
-ページを保存して後で戻る機能。PDF はページ番号で、EPUB はページ先頭の CFI と本全体での位置（`progress`）で保存する。
+Saving a page to come back to it. PDF bookmarks store the page number; EPUB bookmarks store the CFI of the page start and the position within the whole book (`progress`).
 
-## サブ機能
+## Sub-features
 
-- save：上のバーの「Save page N」で今のページを保存する
-- unsave：保存済みのページでは同じボタンが「Remove bookmark from page N」になり、押すと解除する
-- list：「Open bookmarks」で一覧を開き、「Go to bookmarked page N」で移動する
-- slider-mark：保存したページはスライダー上にも印が出る（「Go to page N, bookmarked」）
-- persistence：開き直しても、アプリを再起動しても残る
+- save: "Save page N" in the top bar saves the current page
+- unsave: on a saved page the same button becomes "Remove bookmark from page N" and removes it
+- list: "Open bookmarks" opens the list; "Go to bookmarked page N" jumps to it
+- slider-mark: saved pages are also marked on the slider ("Go to page N, bookmarked")
+- persistence: bookmarks survive reopening the book and restarting the app
 
-## ユーザーからの到達方法
+## How to get to it (user POV)
 
-リーダーの上のバーの右側にあるブックマークのボタン。一覧は左側の「Open bookmarks」から開く。
+The bookmark button on the right of the reader's top bar. The list opens from "Open bookmarks" on the left.
 
-## ドライバでの操作
+## Driving it with glint-driver
 
 ```bash
 node frontend/scripts/glint-driver.mjs press ArrowRight
 node frontend/scripts/glint-driver.mjs click button "Save page 2"
 node frontend/scripts/glint-driver.mjs sql "select page_number, cfi, progress from book_bookmarks"     # 2||0.0
-node frontend/scripts/glint-driver.mjs snapshot          # ボタンが "Remove bookmark from page 2" に変わる
+node frontend/scripts/glint-driver.mjs snapshot          # the button becomes "Remove bookmark from page 2"
 
-# 一覧から移動
+# jump from the list
 node frontend/scripts/glint-driver.mjs press ArrowLeft
 node frontend/scripts/glint-driver.mjs click button "Open bookmarks"
 node frontend/scripts/glint-driver.mjs click button "Go to bookmarked page 2"
 
-# 解除
+# remove
 node frontend/scripts/glint-driver.mjs click button "Remove bookmark from page 2"
 node frontend/scripts/glint-driver.mjs sql "select count(*) from book_bookmarks"
 
-# 永続化
+# persistence
 node frontend/scripts/glint-driver.mjs restart-app
 node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
 node frontend/scripts/glint-driver.mjs click button "Open bookmarks"
 node frontend/scripts/glint-driver.mjs snapshot
 ```
 
-## 落とし穴
+## Gotchas
 
-- ボタンの名前はページ番号を含むので、ページを移動すると変わる。押す前に `snapshot` で今の名前を見る。
-- 一覧を開いていると「Remove bookmark from page N」が上のバーと一覧の両方にある。`click` は最初に見つかった上のバーの方を押す。
-- 矢印キーの向きは綴じ方向で変わる（[pdf-reader](pdf-reader.md)）。上の手順は左綴じ（初期値）が前提。
-- PDF のブックマークは `cfi` が空で `progress` は 0。EPUB は `cfi` と `progress` が入る。
-- 一覧のパネルは開いたままになる。別のパネルを確かめる前に「Close panel」で閉じる。
+- Button names include the page number, so they change when the page changes. Read the current name with `snapshot` before clicking.
+- With the list open, "Remove bookmark from page N" exists both in the top bar and in the list. `click` presses the first match, the one in the top bar.
+- Arrow key direction depends on the binding (see [pdf-reader](pdf-reader.md)). The steps above assume left binding, the default.
+- PDF bookmarks have an empty `cfi` and `progress` 0. EPUB bookmarks have both set.
+- The list panel stays open. Close it with "Close panel" before checking another panel.

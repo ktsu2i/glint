@@ -73,4 +73,4 @@ node frontend/scripts/glint-driver.mjs stop
 
 ## Feature map
 
-振る舞いの一覧は [`references/features/`](references/features/README.md) にある。1 機能 1 ファイルで、どれも「サブ機能 / ユーザーからの到達方法 / ドライバでの操作 / 落とし穴」の 4 つの見出しを持つ。広い回帰確認では、README の順に上から回す。
+振る舞いの一覧は [`references/features/`](references/features/README.md) にある。1 機能 1 ファイルで、どれも「Sub-features / How to get to it (user POV) / Driving it with glint-driver / Gotchas」の 4 つの見出しを持つ。references は英語で書く。広い回帰確認では、README の順に上から回す。

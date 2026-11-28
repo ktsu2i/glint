@@ -1,48 +1,48 @@
 # Highlights
 
-本文を選んで色を付けるハイライト。PDF ではページ上の矩形（`rects`）で、EPUB では CFI で位置を持つ。
+Coloring selected text. PDF highlights are located by on-page rectangles (`rects`), EPUB highlights by CFI.
 
-## サブ機能
+## Sub-features
 
-- create：本文を選ぶと「Highlight the selection」のツールバーが出て、「Highlight in yellow / green / pink / purple」で作る
-- activate：既存のハイライトをクリックすると「Highlight」のツールバーが出る
-- change-color：「Change to <color>」で色を変える
-- remove：ツールバーの「Remove highlight」、または一覧の「Remove the highlight on page N」で消す
-- list：「Open highlights」で一覧を開き、「Go to the highlight on page N」で移動する
-- persistence：開き直しても、アプリを再起動しても残る
+- create: selecting text shows the "Highlight the selection" toolbar; "Highlight in yellow / green / pink / purple" creates the highlight
+- activate: clicking an existing highlight shows the "Highlight" toolbar
+- change-color: "Change to <color>"
+- remove: "Remove highlight" in the toolbar, or "Remove the highlight on page N" in the list
+- list: "Open highlights" opens the list; "Go to the highlight on page N" jumps to it
+- persistence: highlights survive reopening the book and restarting the app
 
-## ユーザーからの到達方法
+## How to get to it (user POV)
 
-リーダーで本文をドラッグして選ぶ。一覧は上のバーの「Open highlights」から開く。
+Drag across text in the reader. The list opens from "Open highlights" in the top bar.
 
-## ドライバでの操作
+## Driving it with glint-driver
 
 ```bash
-# 作成
-node frontend/scripts/glint-driver.mjs select-text ".text-layer[data-page='1'] span"   # 選んだ文字列を出す
+# create
+node frontend/scripts/glint-driver.mjs select-text ".text-layer[data-page='1'] span"   # prints the selected text
 node frontend/scripts/glint-driver.mjs click button "Highlight in yellow"
 node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-yellow"
 node frontend/scripts/glint-driver.mjs sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
 
-# 色の変更
+# change color
 node frontend/scripts/glint-driver.mjs mouse-click ".highlight-mark.is-yellow"
 node frontend/scripts/glint-driver.mjs click button "Change to pink"
 node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
 
-# 一覧
+# list
 node frontend/scripts/glint-driver.mjs click button "Open highlights"
-node frontend/scripts/glint-driver.mjs snapshot          # complementary "Highlights" の中の listitem
+node frontend/scripts/glint-driver.mjs snapshot          # listitems inside complementary "Highlights"
 node frontend/scripts/glint-driver.mjs click button "Go to the highlight on page 1"
 
-# 永続化
+# persistence
 node frontend/scripts/glint-driver.mjs restart-app
 node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
 node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
 ```
 
-## 落とし穴
+## Gotchas
 
-- `.highlight-mark` は text layer の下にあり、`click-css` だと text layer にクリックを取られる。既存のハイライトを選ぶときは `mouse-click` を使う（アプリはクリックした座標からハイライトを探す）。
-- `select-text` は要素の左端から右端までドラッグする。行をまたぐ選択はまだドライバにない。
-- PDF のハイライトは `rects` を持ち `cfi` は空、EPUB はその逆。どちらか一方だけが入っていることを `sql` で確かめる。
-- 色はユーザーに見える証拠なので、`sql` に加えて `screenshot` も残す。
+- `.highlight-mark` sits under the text layer, so `click-css` gets intercepted by the text layer. Use `mouse-click` to select an existing highlight (the app looks up the highlight at the clicked point).
+- `select-text` drags from the left edge to the right edge of one element. Selecting across lines is not supported by the driver yet.
+- A PDF highlight has `rects` and an empty `cfi`; an EPUB highlight is the opposite. Check with `sql` that exactly one of them is set.
+- Color is user-visible evidence, so keep a `screenshot` in addition to `sql`.
