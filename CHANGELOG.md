@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.5.2](https://github.com/ktsu2i/glint/compare/v0.5.1...v0.5.2) - 2026-11-28
+
+### Other Changes
+- feat: check for updates in the background on launch by @ktsu2i in https://github.com/ktsu2i/glint/pull/68
+- docs: rewrite README for end users by @ktsu2i in https://github.com/ktsu2i/glint/pull/70
+- docs: add app logo and restyle README header by @ktsu2i in https://github.com/ktsu2i/glint/pull/71
+
 ## [v0.5.1](https://github.com/ktsu2i/glint/compare/v0.5.0...v0.5.1) - 2026-11-28
 
 ### Other Changes
