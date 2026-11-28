@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  <strong>A macOS app for reading PDF and EPUB.</strong>
+  <strong>A macOS app that makes PDF and EPUB easier to read.</strong>
   <br>
   Open PDFs and EPUBs, keep them on a local shelf, and search across everything you've read.
   <br>
