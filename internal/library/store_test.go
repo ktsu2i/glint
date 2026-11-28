@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaito/glint/migrations"
+	"github.com/ktsu2i/glint/migrations"
 )
 
 func latestMigrationVersion(t *testing.T) int {

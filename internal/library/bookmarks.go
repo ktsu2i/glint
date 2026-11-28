@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaito/glint/internal/library/librarydb"
+	"github.com/ktsu2i/glint/internal/library/librarydb"
 )
 
 var ErrInvalidBookmark = errors.New("invalid bookmark")

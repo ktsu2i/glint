@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaito/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/library"
 )
 
 type Inspection struct {

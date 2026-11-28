@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/kaito/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/library"
 )
 
 // ErrSourceMissing reports that a library entry's source file is no longer on disk.

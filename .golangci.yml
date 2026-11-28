@@ -56,4 +56,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/kaito/glint
+        - github.com/ktsu2i/glint

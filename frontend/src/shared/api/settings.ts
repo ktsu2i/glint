@@ -3,7 +3,7 @@ import {
   GetLanguageSettings,
   SaveAppearanceSettings,
   SaveLanguageSettings,
-} from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
+} from "../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice";
 
 // Appearance and language apply to every window, so they live here rather
 // than in a feature.

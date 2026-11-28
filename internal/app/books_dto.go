@@ -1,6 +1,6 @@
 package app
 
-import "github.com/kaito/glint/internal/library"
+import "github.com/ktsu2i/glint/internal/library"
 
 type BookFile struct {
 	ID               string      `json:"id"`

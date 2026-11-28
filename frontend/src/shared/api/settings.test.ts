@@ -7,7 +7,7 @@ const bindings = vi.hoisted(() => ({
   saveLanguageSettings: vi.fn(),
 }));
 
-vi.mock("../../../bindings/github.com/kaito/glint/internal/app/settingsservice", () => ({
+vi.mock("../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice", () => ({
   GetAppearanceSettings: bindings.getAppearanceSettings,
   SaveAppearanceSettings: bindings.saveAppearanceSettings,
   GetLanguageSettings: bindings.getLanguageSettings,

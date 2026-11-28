@@ -9,12 +9,12 @@ import {
   SaveBindingDirection,
   SaveReadingPosition,
   SearchBook,
-} from "../../../bindings/github.com/kaito/glint/internal/app/booksservice";
+} from "../../../bindings/github.com/ktsu2i/glint/internal/app/booksservice";
 import {
   GetReaderSettings,
   SaveReaderSettings,
-} from "../../../bindings/github.com/kaito/glint/internal/app/settingsservice";
-import { SetWindowControlsVisible } from "../../../bindings/github.com/kaito/glint/internal/app/windowservice";
+} from "../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice";
+import { SetWindowControlsVisible } from "../../../bindings/github.com/ktsu2i/glint/internal/app/windowservice";
 import type { BindingDirection, BookSearchResult } from "../../shared/api/books";
 
 /**

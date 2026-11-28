@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/kaito/glint/internal/library/librarydb"
+	"github.com/ktsu2i/glint/internal/library/librarydb"
 )
 
 const (

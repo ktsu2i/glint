@@ -3,7 +3,7 @@ package app
 import (
 	"errors"
 
-	"github.com/kaito/glint/internal/settings"
+	"github.com/ktsu2i/glint/internal/settings"
 )
 
 type AppearanceSettings struct {

@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"github.com/kaito/glint/internal/assetserver"
-	"github.com/kaito/glint/internal/books"
-	"github.com/kaito/glint/internal/library"
-	"github.com/kaito/glint/internal/settings"
+	"github.com/ktsu2i/glint/internal/assetserver"
+	"github.com/ktsu2i/glint/internal/books"
+	"github.com/ktsu2i/glint/internal/library"
+	"github.com/ktsu2i/glint/internal/settings"
 )
 
 var pngDataURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(

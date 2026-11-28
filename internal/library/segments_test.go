@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaito/glint/internal/sqlite"
-	"github.com/kaito/glint/migrations"
+	"github.com/ktsu2i/glint/internal/sqlite"
+	"github.com/ktsu2i/glint/migrations"
 )
 
 func pageSegment(pageNumber int, text string) BookSegment {

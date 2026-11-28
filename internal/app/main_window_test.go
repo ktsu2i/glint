@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"github.com/kaito/glint/internal/settings"
+	"github.com/ktsu2i/glint/internal/settings"
 )
 
 type fakeMainWindowStore struct {
