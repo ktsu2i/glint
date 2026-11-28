@@ -43,6 +43,12 @@ static void glintStartUpdater(void) {
 			updaterDelegate:nil
 			userDriverDelegate:nil];
 		glintInstallCheckForUpdatesMenuItem();
+		// 定期チェックは前回から 1 日以上経っていないと走らず、初回起動でも走らない。
+		// 起動のたびに裏でチェックし、新しいバージョンがあるときだけ更新ダイアログを出す。
+		SPUUpdater *updater = [glintUpdaterController updater];
+		if ([updater automaticallyChecksForUpdates] && [updater canCheckForUpdates]) {
+			[updater checkForUpdatesInBackground];
+		}
 	});
 }
 */
