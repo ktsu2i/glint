@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { loadPdfOutline, type OutlineNode } from "../../../shared/pdf/loadPdf";
 
@@ -52,10 +52,5 @@ export function usePdfOutline(document: PDFDocumentProxy | null, pageNumber: num
     return last;
   }, [flatOutline, pageNumber]);
 
-  const reset = useCallback(() => {
-    setOutline([]);
-    setLoaded(false);
-  }, []);
-
-  return { outline, loaded, activeKey, reset };
+  return { outline, loaded, activeKey };
 }

@@ -71,30 +71,39 @@ vi.mock("../features/library/indexer", () => ({
 vi.mock("../features/library/generateCover", () => ({
   generateCoverThumbnail: mocks.generateCoverThumbnail,
 }));
-vi.mock("../features/reader/pdf/PdfReader", () => ({
-  PdfReader: ({
-    book,
-    initialPage,
-    onPageChange,
-    onBack,
-  }: {
-    book: { name: string } | null;
-    initialPage: number;
-    onPageChange: (page: number, pageCount: number) => void;
-    onBack: () => void;
-  }) => (
-    <div data-testid="pdf-reader">
-      <span>{book?.name ?? "no-book"}</span>
-      <span>initial-{initialPage}</span>
-      <button type="button" onClick={() => onPageChange(4, 12)}>
-        set-page
-      </button>
-      <button type="button" onClick={onBack}>
-        back-to-library
-      </button>
-    </div>
-  ),
-}));
+const readerMounts = vi.hoisted(() => ({ count: 0 }));
+vi.mock("../features/reader/pdf/PdfReader", async () => {
+  const { useState } = await import("react");
+  return {
+    PdfReader: function PdfReader({
+      book,
+      initialPage,
+      onPageChange,
+      onBack,
+    }: {
+      book: { name: string; indexedPageCount: number } | null;
+      initialPage: number;
+      onPageChange: (page: number, pageCount: number) => void;
+      onBack: () => void;
+    }) {
+      const [mount] = useState(() => (readerMounts.count += 1));
+      return (
+        <div data-testid="pdf-reader">
+          <span>{book?.name ?? "no-book"}</span>
+          <span>initial-{initialPage}</span>
+          <span>mount-{mount}</span>
+          <span>indexed-{book?.indexedPageCount}</span>
+          <button type="button" onClick={() => onPageChange(4, 12)}>
+            set-page
+          </button>
+          <button type="button" onClick={onBack}>
+            back-to-library
+          </button>
+        </div>
+      );
+    },
+  };
+});
 import App from "./App";
 
 const openedBook = {
@@ -287,6 +296,28 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Guideを開く" }));
     expect(await screen.findByText("initial-3")).toBeTruthy();
     expect(mocks.openBook).toHaveBeenCalledWith("book-1");
+  });
+
+  it("keeps the reader mounted while the open book is indexed", async () => {
+    readerMounts.count = 0;
+    let finishIndexing!: (result: { pageCount: number; persistedCount: number }) => void;
+    mocks.indexBookPages.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishIndexing = resolve;
+      }),
+    );
+    mocks.listBooks.mockResolvedValue([summary]);
+    mocks.openBook.mockResolvedValue(openedBook);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Guideを開く" }));
+    expect(await screen.findByText("indexed-0")).toBeTruthy();
+    await waitFor(() => expect(mocks.indexBookPages).toHaveBeenCalled());
+    act(() => finishIndexing({ pageCount: 1, persistedCount: 1 }));
+    expect(await screen.findByText("indexed-1")).toBeTruthy();
+
+    expect(screen.getByText("mount-1")).toBeTruthy();
+    expect(readerMounts.count).toBe(1);
   });
 
   it("renames a saved book from its context menu", async () => {

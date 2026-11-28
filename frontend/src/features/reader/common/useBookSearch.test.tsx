@@ -30,33 +30,6 @@ describe("useBookSearch", () => {
     expect(hook.current.searching).toBe(false);
   });
 
-  it("drops the answer to a search that was reset before it came back", async () => {
-    let answer!: (results: unknown[]) => void;
-    backend.searchBook.mockReturnValue(
-      new Promise((resolve) => {
-        answer = resolve;
-      }),
-    );
-    const { result: hook } = renderHook(() => useBookSearch("book-1"), { wrapper });
-
-    act(() => hook.current.setQuery("go"));
-    let pending!: Promise<void>;
-    act(() => {
-      pending = hook.current.submit();
-    });
-    expect(hook.current.searching).toBe(true);
-
-    act(() => hook.current.reset());
-    await act(async () => {
-      answer([result]);
-      await pending;
-    });
-
-    expect(hook.current.results).toEqual([]);
-    expect(hook.current.submittedQuery).toBe("");
-    expect(hook.current.searching).toBe(false);
-  });
-
   it("does nothing without a book", async () => {
     const { result: hook } = renderHook(() => useBookSearch(undefined), { wrapper });
     act(() => hook.current.setQuery("go"));

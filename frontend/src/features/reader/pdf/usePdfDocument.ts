@@ -8,7 +8,6 @@ import { createPdfLoadingTask } from "../../../shared/pdf/loadPdf";
 const loadTimeoutMilliseconds = 60_000;
 
 type PdfDocumentCallbacks = {
-  onBookChange: (opened: boolean) => void;
   onLoaded: (document: PDFDocumentProxy, startPage: number) => void;
 };
 
@@ -21,20 +20,12 @@ export function usePdfDocument(
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState("");
   const bookUrl = book?.url;
-  const loadKey = `${bookUrl ?? ""}#${initialPage}`;
-  const [shownKey, setShownKey] = useState(loadKey);
-  if (shownKey !== loadKey) {
-    setShownKey(loadKey);
-    setDocument(null);
-    setError("");
-  }
   const callbacksRef = useRef(callbacks);
   useEffect(() => {
     callbacksRef.current = callbacks;
   });
 
   useEffect(() => {
-    callbacksRef.current.onBookChange(bookUrl !== undefined);
     if (bookUrl === undefined) {
       return;
     }

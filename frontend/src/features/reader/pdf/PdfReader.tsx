@@ -62,7 +62,7 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     pageChangeCallbackRef.current = onPageChange;
   }, [onPageChange]);
 
-  const [pageNumber, setPageNumber] = useState(1);
+  const [pageNumber, setPageNumber] = useState(() => Math.max(1, initialPage));
   const [viewMode, setViewMode] = useState<ViewMode>("single");
   const [bindingDirection, setBindingDirection] = useState<BindingDirection>(() =>
     bindingDirectionOf(book),
@@ -79,27 +79,6 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
 
   const { document, error, setError } = usePdfDocument(book, initialPage, {
-    onBookChange: (opened) => {
-      readAloud.setActive(false);
-      render.reset();
-      if (readAloud.supported) {
-        window.speechSynthesis.cancel();
-      }
-      outline.reset();
-      setOpenPanel(null);
-      search.reset();
-      if (opened) {
-        setIsViewMenuOpen(false);
-        chrome.setChromeVisible(true);
-        setPageNumber(Math.max(1, initialPage));
-        setZoomMode({ kind: "fit-page" });
-        setEffectiveScale(1);
-        setBindingDirection(bindingDirectionOf(book));
-      } else {
-        setPageNumber(1);
-      }
-      pageChangeCallbackRef.current(0, 0);
-    },
     onLoaded: (_loaded, startPage) => setPageNumber(startPage),
   });
 

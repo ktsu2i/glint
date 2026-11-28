@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { normalizePageText } from "../../../shared/lib/text";
@@ -227,10 +227,5 @@ export function usePdfPageRender({
     zoomMode,
   ]);
 
-  const reset = useCallback(() => {
-    setRenderedPages([]);
-    setReadableText(noText);
-  }, []);
-
-  return { renderedPages, readableText, reset };
+  return { renderedPages, readableText };
 }

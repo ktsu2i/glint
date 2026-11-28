@@ -95,6 +95,7 @@ function AppContent() {
               />
             ) : (
               <PdfReader
+                key={book ? `${book.id}:${book.url}:${book.initialPage}` : "none"}
                 book={book}
                 initialPage={book?.initialPage ?? 1}
                 onPageChange={position.save}

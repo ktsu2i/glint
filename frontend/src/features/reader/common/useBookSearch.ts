@@ -45,14 +45,5 @@ export function useBookSearch(bookId: string | undefined) {
     }
   }, [bookId, query, t]);
 
-  const reset = useCallback(() => {
-    requestRef.current += 1;
-    setQuery("");
-    setSubmittedQuery("");
-    setResults([]);
-    setSearching(false);
-    setError("");
-  }, []);
-
-  return { query, setQuery, submittedQuery, results, searching, error, submit, reset };
+  return { query, setQuery, submittedQuery, results, searching, error, submit };
 }
