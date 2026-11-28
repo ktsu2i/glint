@@ -4,13 +4,8 @@ import type { HighlightColor } from "../api";
 
 const highlightColors: HighlightColor[] = ["yellow", "green", "pink", "purple"];
 
-/** Where a floating toolbar points, in the reader's coordinates, with the reader's width. */
 export type FloatingAnchor = { x: number; top: number; bottom: number; width: number };
 
-/**
- * Places a floating toolbar above the anchor, or below it near the top of the
- * window, and keeps it inside the reader.
- */
 export function floatingStyle(anchor: FloatingAnchor) {
   const x = anchor.width > 0 ? Math.min(anchor.width - 110, Math.max(110, anchor.x)) : anchor.x;
   return anchor.top < 110
@@ -20,7 +15,6 @@ export function floatingStyle(anchor: FloatingAnchor) {
 
 type ToolbarStyle = ReturnType<typeof floatingStyle>;
 
-/** The colors offered for selected text. */
 export function SelectionHighlightToolbar({
   style,
   busy,
@@ -55,7 +49,6 @@ export function SelectionHighlightToolbar({
   );
 }
 
-/** Recolors or removes the highlight that was clicked. */
 export function HighlightActionsToolbar({
   style,
   color: current,

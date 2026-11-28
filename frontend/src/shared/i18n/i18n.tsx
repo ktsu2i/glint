@@ -97,7 +97,6 @@ export function I18nProvider({
     };
   }, [i18n, initialLanguage]);
 
-  // Follow a language saved in another window, such as the settings window.
   useEffect(() => {
     if (initialLanguage !== undefined) return;
     return onLanguageChanged((next) => {

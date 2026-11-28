@@ -8,7 +8,6 @@ type LibrarySortMenuProps = {
   onOrderChange: (order: LibrarySortOrder) => void;
 };
 
-// LibrarySortMenu chooses the order of the books on the shelf.
 export function LibrarySortMenu({ order, onOrderChange }: LibrarySortMenuProps) {
   const { t } = useTranslation();
   const label = t("librarySort.open", { order: t(`librarySort.${order}`) });

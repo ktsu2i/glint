@@ -8,16 +8,9 @@ export type PageSelection = {
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
-// Rectangles smaller than this, in fractions of the page, are layout noise.
 const minimumRectSize = 0.001;
 const cjkPattern = /[　-ヿ㐀-鿿豈-﫿＀-￯]/u;
 
-/**
- * Splits a selection into one entry per page it covers. Each entry carries the
- * selected text and its rectangles in fractions of the page, so the highlight
- * can be drawn again at any zoom. Only text nodes count, which keeps the
- * text layer's helper elements out of the rectangles.
- */
 export function selectionToPageSelections(range: Range, pages: HTMLElement[]): PageSelection[] {
   const selections: PageSelection[] = [];
   for (const page of pages) {
@@ -83,7 +76,6 @@ function isLineBreakBetween(previous: Node, next: Node | null): boolean {
   return false;
 }
 
-/** Joins the selected runs, dropping line breaks between CJK characters. */
 export function joinSelectedText(pieces: string[]): string {
   return pieces
     .join("")
@@ -111,10 +103,6 @@ function clamp(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-/**
- * Merges the rectangles of runs on the same line, so overlapping runs do not
- * draw darker patches and a long selection stays a handful of rectangles.
- */
 export function mergeLineRects(rects: HighlightRect[]): HighlightRect[] {
   const sorted = rects.toSorted((a, b) => a.y - b.y || a.x - b.x);
   const merged: HighlightRect[] = [];

@@ -69,7 +69,6 @@ type LibrarySearchHit struct {
 	Segments     []SegmentSearchResult
 }
 
-// segmentMatch is a row of the hand-written search query in matchingSegments.
 type segmentMatch struct {
 	BookID      string
 	Ordinal     int
@@ -427,13 +426,10 @@ func normalizeBookSearchQuery(query string) (string, []string, error) {
 	return phrase, terms, nil
 }
 
-// normalizeSearchText applies NFKC so that full-width and half-width forms such as "ＡＰＩ" and "API" are stored the same way.
 func normalizeSearchText(text string) string {
 	return strings.TrimSpace(norm.NFKC.String(text))
 }
 
-// foldCase maps every rune to one representative of its Unicode case-folding orbit,
-// the same equivalence that caseVariants expands for LIKE.
 func foldCase(text string) string {
 	return strings.Map(foldRune, text)
 }
@@ -452,9 +448,6 @@ func foldRune(r rune) rune {
 	return smallest
 }
 
-// caseVariants lists every spelling of term whose runes differ only in case.
-// ASCII runes keep a single form because LIKE already ignores ASCII case.
-// It is only used for terms shorter than trigramLength, so the product stays small.
 func caseVariants(term string) []string {
 	variants := []string{""}
 	for _, r := range term {
@@ -475,8 +468,6 @@ func caseVariants(term string) []string {
 	return variants
 }
 
-// normalizeStoredSegmentTexts applies normalizeSearchText to segments saved before it existed.
-// It runs once per database and records completion in app_settings.
 func (store *Store) normalizeStoredSegmentTexts(ctx context.Context) error {
 	done, err := store.Setting(ctx, segmentTextFormSetting)
 	if err != nil {

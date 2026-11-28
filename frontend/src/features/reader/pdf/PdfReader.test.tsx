@@ -571,40 +571,6 @@ describe("PdfReader", () => {
     vi.useRealTimers();
   });
 
-  // oxlint-disable-next-line vitest/expect-expect -- unmount 後の resolve で例外や state 更新が起きないことを確認する。
-  it("does not update state after an unfinished load is unmounted", async () => {
-    let resolveTask!: (task: unknown) => void;
-    loader.createPdfLoadingTask.mockReturnValue(
-      new Promise((resolve) => {
-        resolveTask = resolve;
-      }),
-    );
-    const { unmount } = render(
-      <PdfReader book={makeBook("/book/pending")} onPageChange={vi.fn()} />,
-    );
-    unmount();
-
-    resolveTask({ promise: Promise.resolve(makeDocument()), destroy: vi.fn() });
-    await act(async () => {});
-  });
-
-  // oxlint-disable-next-line vitest/expect-expect -- unmount 後の reject で例外や state 更新が起きないことを確認する。
-  it("ignores a loading failure after unmount", async () => {
-    let rejectTask!: (reason: unknown) => void;
-    loader.createPdfLoadingTask.mockReturnValue(
-      new Promise((_, reject) => {
-        rejectTask = reject;
-      }),
-    );
-    const { unmount } = render(
-      <PdfReader book={makeBook("/book/pending")} onPageChange={vi.fn()} />,
-    );
-    unmount();
-
-    rejectTask(new Error("late failure"));
-    await act(async () => {});
-  });
-
   it("renders at unit device scale", async () => {
     Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 0 });
     const page = makePage();

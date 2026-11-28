@@ -31,6 +31,10 @@ import "../reader.css";
 
 const manualZoomStep = 0.1;
 
+function sameLayout<T extends Record<string, unknown>>(a: T, b: T): boolean {
+  return Object.keys(a).every((key) => Object.is(a[key], b[key]));
+}
+
 type PendingSelection = FloatingAnchor & { parts: PageSelection[] };
 type ActiveHighlight = FloatingAnchor & { id: number };
 
@@ -71,12 +75,11 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
   });
   const search = useBookSearch(book?.id);
   const readAloud = useReadAloud();
-  // Floating controls are placed in the reader's coordinates.
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
 
   const { document, error, setError } = usePdfDocument(book, initialPage, {
-    onBookChange: (next) => {
+    onBookChange: (opened) => {
       readAloud.setActive(false);
       render.reset();
       if (readAloud.supported) {
@@ -85,19 +88,19 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
       outline.reset();
       setOpenPanel(null);
       search.reset();
-      if (next) {
+      if (opened) {
         setIsViewMenuOpen(false);
         chrome.setChromeVisible(true);
         setPageNumber(Math.max(1, initialPage));
         setZoomMode({ kind: "fit-page" });
         setEffectiveScale(1);
-        setBindingDirection(bindingDirectionOf(next));
+        setBindingDirection(bindingDirectionOf(book));
       } else {
         setPageNumber(1);
       }
       pageChangeCallbackRef.current(0, 0);
     },
-    onLoaded: (loaded) => setPageNumber(Math.min(loaded.numPages, Math.max(1, initialPage))),
+    onLoaded: (_loaded, startPage) => setPageNumber(startPage),
   });
 
   const {
@@ -154,16 +157,15 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     cancel: cancelEditingPage,
   } = usePageInput(pageNumber, numPages, setPageNumber);
 
-  // Floating controls are placed for one layout, so a new page or size dismisses them.
-  useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- 表示が変わったら浮いている操作を閉じる。
+  const layout = { bookId: book?.id, pageNumber, viewMode, zoomMode, stageSize };
+  const [placedLayout, setPlacedLayout] = useState(layout);
+  if (!sameLayout(placedLayout, layout)) {
+    setPlacedLayout(layout);
     setPendingSelection(null);
     setActiveHighlight(null);
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- これらが変わった時だけ閉じる。
-  }, [book?.id, pageNumber, viewMode, zoomMode, stageSize]);
+  }
 
   useEffect(() => {
-    // Clicking elsewhere collapses the selection, and the colors go with it.
     const handleSelectionChange = () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
@@ -253,7 +255,6 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     setChromeVisible,
   ]);
 
-  /** The highlight drawn under a point on screen; the latest one is on top. */
   function highlightAt(clientX: number, clientY: number): BookHighlight | undefined {
     const pages = stageNodeRef.current?.querySelectorAll<HTMLElement>(".pdf-page[data-page]");
     for (const page of pages ?? []) {

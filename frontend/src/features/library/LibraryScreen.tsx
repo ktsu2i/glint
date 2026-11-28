@@ -10,7 +10,6 @@ import type { LibrarySearch } from "./useLibrarySearch";
 import "./library.css";
 
 type LibraryScreenProps = {
-  /** Whether the top bar shows the shelf or the search across every book. */
   mode: "shelf" | "search";
   library: LibraryBooks;
   search: LibrarySearch;
@@ -34,7 +33,6 @@ export function LibraryScreen({
     () => sortBooks(library.books, sortOrder, i18n.language),
     [library.books, sortOrder, i18n.language],
   );
-  // Opening the search again remounts the field, which focuses it.
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
 
   const openSearch = () => {
@@ -54,7 +52,6 @@ export function LibraryScreen({
     return () => window.removeEventListener("keydown", openLibrarySearch);
   }, [onOpenSearch]);
 
-  // Escape closes the library search wherever the focus is, not only in the field.
   useEffect(() => {
     if (mode !== "search") {
       return;

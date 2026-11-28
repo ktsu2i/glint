@@ -128,7 +128,6 @@ describe("bookmarks", () => {
   it("finds the bookmarks that fall on a page", () => {
     expect(isCFIOnPage("epubcfi(/6/4!/4/2/1:0)", page)).toBe(true);
     expect(isCFIOnPage("epubcfi(/6/4!/4/6/1:3)", page)).toBe(true);
-    // The next page starts where this one ends.
     expect(isCFIOnPage("epubcfi(/6/4!/4/10/1:5)", page)).toBe(false);
     expect(isCFIOnPage("epubcfi(/6/2!/4/6/1:3)", page)).toBe(false);
     expect(isCFIOnPage("epubcfi(/6/6!/4/2/1:0)", page)).toBe(false);

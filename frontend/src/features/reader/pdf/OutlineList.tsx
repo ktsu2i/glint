@@ -9,7 +9,6 @@ type OutlineListProps = {
   onSelect: (pageNumber: number) => void;
 };
 
-/** The table of contents of a PDF, as a tree. */
 export function OutlineList({ nodes, parentPath, depth, activeKey, onSelect }: OutlineListProps) {
   const { t } = useTranslation();
   return (

@@ -23,10 +23,6 @@ function sortHighlights(highlights: BookHighlight[]): BookHighlight[] {
   return highlights.toSorted((a, b) => a.pageNumber - b.pageNumber || a.id - b.id);
 }
 
-/**
- * The bookmarked pages of a PDF. Only pages the document has are listed,
- * once it is loaded.
- */
 export function usePdfBookmarks(
   book: BookFile | null,
   document: PDFDocumentProxy | null,
@@ -82,7 +78,6 @@ export function usePdfBookmarks(
   };
 }
 
-/** The highlights of a PDF, by the rectangles they cover on each page. */
 export function usePdfHighlights(book: BookFile | null, document: PDFDocumentProxy | null) {
   const { t } = useTranslation();
   const list = useSavedList(book?.id, {
@@ -94,10 +89,6 @@ export function usePdfHighlights(book: BookFile | null, document: PDFDocumentPro
   const pageHighlights =
     numPages > 0 ? highlights.filter((highlight) => highlight.pageNumber <= numPages) : highlights;
 
-  /**
-   * Saves the selection in the color, one highlight per page it spans.
-   * Reports whether every page was saved.
-   */
   async function saveSelection(parts: PageSelection[], color: HighlightColor): Promise<boolean> {
     if (!book || !document || busy) {
       return false;
@@ -135,7 +126,6 @@ export function usePdfHighlights(book: BookFile | null, document: PDFDocumentPro
     }, "error.saveHighlight");
   }
 
-  /** Removes the highlight, and reports whether it is gone. */
   async function remove(id: number): Promise<boolean> {
     if (!book || busy) {
       return false;

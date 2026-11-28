@@ -4,10 +4,6 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { createUtterance, type useReadAloud } from "../common/speech";
 import type { ReadableText } from "./usePdfPageRender";
 
-/**
- * Reads the text of the page aloud once it is known, then turns to the next
- * page and reads on until the last one.
- */
 export function usePdfReadAloud({
   readAloud: { supported, voices, active, setActive },
   document,

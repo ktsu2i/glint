@@ -22,30 +22,24 @@ type SaveLanguageSettingsRequest struct {
 	Language string `json:"language"`
 }
 
-// LibrarySettings are how the library shows the shelf.
 type LibrarySettings struct {
 	SortOrder string `json:"sortOrder"`
 }
 
-// ReaderSettings are how the reader shows books. Every book shares them.
 type ReaderSettings struct {
 	EPUBFontScale int    `json:"epubFontScale"`
 	EPUBLayout    string `json:"epubLayout"`
 }
 
-// Settings changes are pushed to every window, so the main window follows
-// what the settings window saves.
 const (
 	appearanceChangedEvent = "settings:appearance-changed"
 	languageChangedEvent   = "settings:language-changed"
 )
 
-// eventEmitter pushes events to the frontend. Tests replace it with a fake.
 type eventEmitter interface {
 	Emit(name string, data ...any) bool
 }
 
-// SettingsService is bound to the frontend for the appearance and language settings.
 type SettingsService struct {
 	base
 	settings *settings.Manager

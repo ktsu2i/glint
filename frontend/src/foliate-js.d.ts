@@ -1,5 +1,3 @@
-// The parts of foliate-js (https://github.com/johnfactotum/foliate-js) that
-// Glint uses. The library ships plain JavaScript without types.
 declare module "foliate-js/view.js" {
   export type FoliateTocItem = {
     label?: string;
@@ -45,7 +43,6 @@ declare module "foliate-js/view.js" {
 
   export type FoliatePaginator = HTMLElement & {
     setStyles(styles: string): void;
-    /** Whether the last page of the book is showing. */
     readonly atEnd?: boolean;
   };
 
@@ -113,7 +110,6 @@ declare module "foliate-js/overlayer.js" {
 }
 
 declare module "foliate-js/epubcfi.js" {
-  /** Orders two CFIs by their position in the book. */
   export function compare(a: string, b: string): number;
   /** The start of a range CFI, or its end with toEnd. */
   export function collapse(cfi: string, toEnd?: boolean): string;

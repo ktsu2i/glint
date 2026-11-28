@@ -4,8 +4,6 @@ package app
 
 import "github.com/wailsapp/wails/v3/pkg/application"
 
-// NativeWindowControls switches the window buttons on and off where AppKit
-// is not available to fade them.
 type NativeWindowControls struct {
 	window *application.WebviewWindow
 }

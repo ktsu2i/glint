@@ -12,19 +12,15 @@ import (
 	"github.com/ktsu2i/glint/internal/library"
 )
 
-// ErrSourceMissing reports that a library entry's source file is no longer on disk.
 var ErrSourceMissing = errors.New("book source file is missing")
 
-// ErrFormatMismatch reports that a file's format does not match its library entry.
 var ErrFormatMismatch = errors.New("book file format does not match the library entry")
 
-// Entry is a library book with its on-disk state resolved.
 type Entry struct {
 	library.Book
 	Available bool
 }
 
-// OpenedBook is a book ready for the reader, with its index progress.
 type OpenedBook struct {
 	Book            library.Book
 	Spine           []SpineItem
@@ -32,21 +28,18 @@ type OpenedBook struct {
 	NextSegment     int
 }
 
-// IndexTarget is a PDF whose page text still has to be extracted by the frontend.
 type IndexTarget struct {
 	Book        library.Book
 	NextSegment int
 	Total       int
 }
 
-// LibraryHit groups the matching segments of one book.
 type LibraryHit struct {
 	Entry        Entry
 	TotalMatches int
 	Segments     []library.SegmentSearchResult
 }
 
-// Service holds the book use cases. It does not depend on Wails or the UI.
 type Service struct {
 	library       *library.Store
 	dataDirectory string
@@ -56,7 +49,6 @@ func New(lib *library.Store, dataDirectory string) *Service {
 	return &Service{library: lib, dataDirectory: dataDirectory}
 }
 
-// Import copies the file at filePath into the library, records it, and opens it.
 func (s *Service) Import(ctx context.Context, filePath string) (OpenedBook, error) {
 	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
@@ -99,7 +91,6 @@ func (s *Service) Import(ctx context.Context, filePath string) (OpenedBook, erro
 	return s.opened(ctx, book, pkg)
 }
 
-// Open loads a library book, refreshing its record if the source file changed.
 func (s *Service) Open(ctx context.Context, id string) (OpenedBook, error) {
 	book, err := s.library.Get(ctx, id)
 	if err != nil {
@@ -185,7 +176,6 @@ func (s *Service) recordSourceStat(ctx context.Context, book *library.Book, insp
 	return nil
 }
 
-// Relink replaces a library entry's file with a copy of the file at filePath and opens it.
 func (s *Service) Relink(ctx context.Context, id, filePath string) (OpenedBook, error) {
 	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
@@ -224,7 +214,6 @@ func (s *Service) Relink(ctx context.Context, id, filePath string) (OpenedBook, 
 	return s.opened(ctx, book, pkg)
 }
 
-// Get returns a library entry without touching its source file.
 func (s *Service) Get(ctx context.Context, id string) (library.Book, error) {
 	return s.library.Get(ctx, id)
 }
@@ -237,8 +226,6 @@ func (s *Service) Rename(ctx context.Context, id, name string) (Entry, error) {
 	return s.entry(ctx, book)
 }
 
-// Remove deletes the library entry, its copy of the book file, and its cover
-// cache. The file the book was added from is left alone.
 func (s *Service) Remove(ctx context.Context, id string) error {
 	book, err := s.library.Get(ctx, id)
 	if err != nil {
@@ -254,8 +241,6 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	return nil
 }
 
-// List returns the library, first moving books still read from outside the
-// library onto library copies while their files are there.
 func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	books, err := s.library.List(ctx)
 	if err != nil {
@@ -276,7 +261,6 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	return entries, nil
 }
 
-// entry resolves the on-disk state of a book and resets a cover whose cache file is gone.
 func (s *Service) entry(ctx context.Context, book library.Book) (Entry, error) {
 	if book.CoverThumbnailStatus == "ready" && !fileExists(book.CoverThumbnailPath) {
 		if err := s.library.ResetCover(ctx, book.ID, time.Now()); err != nil {
@@ -288,13 +272,10 @@ func (s *Service) entry(ctx context.Context, book library.Book) (Entry, error) {
 	return Entry{Book: book, Available: fileExists(book.SourcePath)}, nil
 }
 
-// SaveReadingPosition keeps where a book was left: a PDF page, or an EPUB
-// section with the CFI of the place in it.
 func (s *Service) SaveReadingPosition(ctx context.Context, bookID string, pageNumber, pageCount int, cfi string) error {
 	return s.library.SaveReadingPosition(ctx, bookID, pageNumber, pageCount, cfi, time.Now())
 }
 
-// SaveBindingDirection keeps which side a PDF is bound on.
 func (s *Service) SaveBindingDirection(ctx context.Context, bookID, direction string) error {
 	return s.library.SaveBindingDirection(ctx, bookID, direction, time.Now())
 }
@@ -303,8 +284,6 @@ func (s *Service) ListBookmarks(ctx context.Context, bookID string) ([]library.B
 	return s.library.ListBookmarks(ctx, bookID)
 }
 
-// AddBookmark saves a bookmark placed the way the book's format needs: a PDF
-// page, or a CFI in an EPUB.
 func (s *Service) AddBookmark(ctx context.Context, bookID string, input library.NewBookmark) (library.BookBookmark, error) {
 	book, err := s.library.Get(ctx, bookID)
 	if err != nil {
@@ -324,8 +303,6 @@ func (s *Service) ListHighlights(ctx context.Context, bookID string) ([]library.
 	return s.library.ListHighlights(ctx, bookID)
 }
 
-// AddHighlight saves a highlight placed the way the book's format needs:
-// rectangles on a PDF page, or a CFI in an EPUB.
 func (s *Service) AddHighlight(ctx context.Context, bookID string, input library.NewHighlight) (library.BookHighlight, error) {
 	book, err := s.library.Get(ctx, bookID)
 	if err != nil {
@@ -345,7 +322,6 @@ func (s *Service) RemoveHighlight(ctx context.Context, bookID string, id int64) 
 	return s.library.DeleteHighlight(ctx, bookID, id)
 }
 
-// SaveSegments stores extracted text. The segment kind follows the book's format.
 func (s *Service) SaveSegments(ctx context.Context, bookID string, segments []library.BookSegment, total int) (int, error) {
 	book, err := s.library.Get(ctx, bookID)
 	if err != nil {
@@ -363,7 +339,6 @@ func (s *Service) SaveSegments(ctx context.Context, bookID string, segments []li
 	return s.library.SaveBookSegments(ctx, bookID, inputs, total, time.Now())
 }
 
-// PendingIndexTargets lists available PDFs whose pages are not fully indexed.
 func (s *Service) PendingIndexTargets(ctx context.Context) ([]IndexTarget, error) {
 	books, err := s.library.List(ctx)
 	if err != nil {
@@ -443,9 +418,6 @@ func (s *Service) opened(ctx context.Context, book library.Book, pkg *epubPackag
 	return opened, nil
 }
 
-// importID reuses the id of a book already in the library with the same
-// content, so importing it again refreshes that entry and its copy. It also
-// returns the existing entry's file path, or "" for a new book.
 func (s *Service) importID(ctx context.Context, fileHash string) (id, existingPath string, err error) {
 	existing, err := s.library.ByHash(ctx, fileHash)
 	if err == nil {

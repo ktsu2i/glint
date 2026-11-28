@@ -5,13 +5,11 @@ import type { ReaderPanel } from "./ReaderTopBar";
 
 type ReaderSheetProps = {
   panel: ReaderPanel;
-  /** How many entries the panel lists; shown next to the title when above 0. */
   count: number;
   onClose: () => void;
   children: ReactNode;
 };
 
-/** The side sheet that holds the table of contents, search, bookmarks, or highlights. */
 export function ReaderSheet({ panel, count, onClose, children }: ReaderSheetProps) {
   const { t } = useTranslation();
   const titles = {

@@ -20,7 +20,6 @@ function AppContent() {
   const [book, setBook] = useState<BookFile | null>(null);
   useAppTheme();
 
-  // Library state lives here so it survives reading a book.
   const library = useLibraryBooks();
   const sort = useLibrarySortOrder();
   const search = useLibrarySearch(view === "search");

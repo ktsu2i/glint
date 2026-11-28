@@ -5,9 +5,6 @@ import {
   SaveLanguageSettings,
 } from "../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice";
 
-// Appearance and language apply to every window, so they live here rather
-// than in a feature.
-
 export type ThemePreference = "light" | "dark" | "system";
 
 type AppearanceSettings = {

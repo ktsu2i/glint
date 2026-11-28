@@ -1,9 +1,5 @@
 import { useRef, useState } from "react";
 
-/**
- * The page number field of the bottom bar. It follows the page until it is
- * edited, and a number typed into it is kept within the document.
- */
 export function usePageInput(
   pageNumber: number,
   numPages: number,
@@ -40,19 +36,16 @@ export function usePageInput(
     });
   }
 
-  /** Applies the typed page and closes the field. */
   function finish() {
     commit();
     setEditing(false);
   }
 
-  /** Closes the field without moving. */
   function cancel() {
     setValue(String(pageNumber));
     setEditing(false);
   }
 
-  // Until it is edited, the field shows the page.
   return {
     value: editing ? value : String(pageNumber),
     setValue,

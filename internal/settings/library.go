@@ -9,10 +9,8 @@ import (
 
 const librarySortOrderSettingKey = "library.sortOrder"
 
-// ErrInvalidLibrarySortOrder reports a sort order the library does not offer.
 var ErrInvalidLibrarySortOrder = errors.New("library sort order must be recent, added, title or progress")
 
-// LibrarySortOrder is the order books are shown on the shelf.
 type LibrarySortOrder string
 
 const (

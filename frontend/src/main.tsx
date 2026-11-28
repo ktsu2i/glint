@@ -1,4 +1,3 @@
-// Global styles come first so the styles of each feature can build on them.
 import "./app/global.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

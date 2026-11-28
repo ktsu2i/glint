@@ -5,11 +5,6 @@ import type { ReaderPanel } from "../common/ReaderTopBar";
 
 type Place = { cfi: string; pageNumber: number };
 
-/**
- * Names each highlight and bookmark after the table of contents entry it
- * falls under, looked up while their list is open. Until then, or without
- * an entry, a place is named by its section.
- */
 export function usePlaceLabels(
   view: View | null,
   openPanel: ReaderPanel | null,

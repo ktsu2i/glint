@@ -10,11 +10,8 @@ import (
 
 const mainWindowSettingKey = "window.main"
 
-// ErrInvalidWindowSize reports window bounds without a positive width and height.
 var ErrInvalidWindowSize = errors.New("window width and height must be positive")
 
-// WindowBounds is a rectangle in screen points, with the origin at the
-// top-left of the primary screen and Y growing downwards.
 type WindowBounds struct {
 	X      int `json:"x"`
 	Y      int `json:"y"`
@@ -22,17 +19,12 @@ type WindowBounds struct {
 	Height int `json:"height"`
 }
 
-// WindowState is what the main window looks like when Glint quits. Bounds
-// is the frame of the window when it is neither maximised nor full screen,
-// so that the window can return to it after either state.
 type WindowState struct {
 	Bounds     WindowBounds `json:"bounds"`
 	Maximised  bool         `json:"maximised"`
 	Fullscreen bool         `json:"fullscreen"`
 }
 
-// GetMainWindowState returns the saved state of the main window, and false
-// when no state has been saved yet.
 func (manager *Manager) GetMainWindowState(ctx context.Context) (WindowState, bool, error) {
 	value, err := manager.store.Setting(ctx, mainWindowSettingKey)
 	if err != nil {
@@ -62,11 +54,6 @@ func (manager *Manager) SaveMainWindowState(ctx context.Context, state WindowSta
 	return manager.store.SaveSetting(ctx, mainWindowSettingKey, string(value))
 }
 
-// PlaceWindow moves saved bounds onto the screens that are connected now.
-// The window goes to the work area it overlaps the most, shrinks to fit in
-// it and moves inside it. When it overlaps none, for example because its
-// display has been disconnected, it is centred on the first work area, which
-// should be the primary screen. Without any work area the bounds are kept.
 func PlaceWindow(bounds WindowBounds, workAreas []WindowBounds) WindowBounds {
 	var target WindowBounds
 	overlap := 0

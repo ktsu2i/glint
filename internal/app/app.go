@@ -1,8 +1,3 @@
-// Package app is the Wails binding layer. Its services are bound to the
-// frontend, so their exported methods form the public API that Wails turns
-// into TypeScript bindings. They open native dialogs, localize messages and
-// convert results into DTOs, and leave the work itself to the feature
-// packages. Only this package may import the Wails runtime.
 package app
 
 import (
@@ -16,7 +11,6 @@ import (
 
 var errNotReady = errors.New("application is not ready")
 
-// base holds the Wails application context shared by the bound services.
 type base struct {
 	ctx context.Context
 }
@@ -38,7 +32,6 @@ func (b *base) ready() bool {
 	return b.ctx != nil
 }
 
-// localizer picks native copy in the language the user chose.
 type localizer struct {
 	settings *settings.Manager
 }

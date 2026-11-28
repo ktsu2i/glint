@@ -7,7 +7,6 @@ import { createFoliateView } from "./foliate";
 import type { ReaderLocation } from "./useEpubAnnotations";
 import { loadReaderSettings } from "./useEpubSettings";
 
-/** What the reader does with events from the view and the sections in it. */
 export type FoliateHandlers = {
   handleKeyDown: (event: KeyboardEvent) => void;
   handleWheel: (event: WheelEvent) => void;
@@ -20,26 +19,14 @@ export type FoliateHandlers = {
 type FoliateViewOptions = {
   stageRef: RefObject<HTMLDivElement | null>;
   url: string;
-  /** The place in the section the book was left on, as a CFI. */
   initialCfi: string;
-  /** The section to open, counted from 1, when there is no CFI. */
   initialSection: number;
-  /**
-   * Listeners on the view and inside each section are attached once, so they
-   * call through this ref, which holds the current handlers.
-   */
   handlersRef: RefObject<FoliateHandlers | null>;
-  /** The highlights to draw on each section as it is laid out. */
   highlightsRef: RefObject<BookHighlight[]>;
   onSettingsLoaded: (settings: ReaderSettings) => void;
-  /** Runs when the view moves, with where it is and the text on the page. */
   onRelocate: (location: ReaderLocation, pageRange: Range | null) => void;
 };
 
-/**
- * Opens the book in a foliate-js view on the stage and lands where the reader
- * stopped. The view closes when the book or the place to open changes.
- */
 export function useFoliateView({
   stageRef,
   url,
@@ -109,7 +96,6 @@ export function useFoliateView({
           }
         });
       });
-      // Each section gets its own overlay; draw the section's highlights on it.
       foliate.addEventListener("create-overlay", ({ detail: { index } }) => {
         for (const highlight of highlightsRef.current) {
           if (highlight.pageNumber === index + 1 && highlight.cfi) {
@@ -124,7 +110,6 @@ export function useFoliateView({
       foliate.addEventListener("show-annotation", ({ detail }) =>
         handlersRef.current?.handleAnnotation(detail),
       );
-      // Glint makes no requests beyond its own; links out of the book stay closed.
       foliate.addEventListener("external-link", (event) => event.preventDefault());
       stage.append(foliate);
 
@@ -146,7 +131,6 @@ export function useFoliateView({
       setToc(flattenToc(foliate.book?.toc));
       setView(foliate);
 
-      // The CFI is the place in the section the book was left on.
       if (initialCfi) {
         await foliate.init({ lastLocation: initialCfi });
       } else if (initialSection > 1) {

@@ -4,10 +4,6 @@ import { markBookCoverFailed, pendingIndexBooks, saveBookCover } from "./api";
 import { generateCoverThumbnail } from "./generateCover";
 import { indexBookPages, isAbortError, type IndexableBook } from "./indexer";
 
-/**
- * Generates the cover of a PDF whose cover is still pending, once per book at
- * a time. onSettled runs whether the cover was saved or marked as failed.
- */
 export function useCoverGeneration(onSettled: () => Promise<void>) {
   const generating = useRef(new Set<string>());
 
@@ -35,10 +31,6 @@ export function useCoverGeneration(onSettled: () => Promise<void>) {
 
 type IndexedResult = Awaited<ReturnType<typeof indexBookPages>>;
 
-/**
- * Indexes the text of PDF pages in the background. On mount it resumes the
- * books left unfinished, one at a time, and on unmount it stops all of them.
- */
 export function useBookIndexing(onIndexed: (bookId: string, result: IndexedResult) => void) {
   const aborters = useRef<Map<string, AbortController>>(new Map());
 

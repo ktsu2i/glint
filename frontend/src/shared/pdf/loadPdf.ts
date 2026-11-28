@@ -122,6 +122,17 @@ async function normalizeOutlineItem(
   return { title: item.title, pageNumber, children };
 }
 
+function isPageRef(value: unknown): value is { num: number; gen: number } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "num" in value &&
+    typeof value.num === "number" &&
+    "gen" in value &&
+    typeof value.gen === "number"
+  );
+}
+
 async function resolveDestinationPage(
   document: PDFDocumentProxy,
   dest: string | unknown[] | null | undefined,
@@ -134,8 +145,10 @@ async function resolveDestinationPage(
     if (!Array.isArray(explicit) || explicit.length === 0) {
       return null;
     }
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- PDF.js の explicit destination は先頭要素が page の RefProxy。
-    const ref = explicit[0] as { num: number; gen: number };
+    const ref: unknown = explicit[0];
+    if (!isPageRef(ref)) {
+      return null;
+    }
     const index = await document.getPageIndex(ref);
     return index + 1;
   } catch {

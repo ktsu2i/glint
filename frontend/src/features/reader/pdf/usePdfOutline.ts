@@ -16,10 +16,6 @@ function flattenOutline(nodes: OutlineNode[], parentPath = ""): FlatOutlineEntry
   return result;
 }
 
-/**
- * The table of contents of the PDF, and the entry the page falls under. The
- * entry is named by its path of indexes, as OutlineList names it.
- */
 export function usePdfOutline(document: PDFDocumentProxy | null, pageNumber: number) {
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -28,7 +24,6 @@ export function usePdfOutline(document: PDFDocumentProxy | null, pageNumber: num
     if (!document) {
       return;
     }
-    // A new document comes after reset, so the outline is already marked as loading.
     let active = true;
     const load = async () => {
       let nodes: OutlineNode[] = [];

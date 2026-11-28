@@ -10,7 +10,6 @@ import (
 	"github.com/pressly/goose/v3/database"
 )
 
-// Migrate applies the pending goose migrations in fsys to db.
 func Migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	provider, err := goose.NewProvider(database.DialectSQLite3, db, fsys)
 	if err != nil {

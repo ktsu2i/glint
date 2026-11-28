@@ -30,8 +30,6 @@ func schema(t *testing.T, db *sql.DB) []string {
 	return objects
 }
 
-// Every migration must roll back cleanly, so `goose down` can be used while
-// iterating on a new migration.
 func TestMigrationsRollBackAndReapply(t *testing.T) {
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "library.sqlite3"))
 	require.NoError(t, err)

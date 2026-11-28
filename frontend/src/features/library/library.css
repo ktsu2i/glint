@@ -1,4 +1,3 @@
-/* Library screens: a floating glass bar over the ambient backdrop. */
 .library-screen {
   position: relative;
   min-height: 0;
@@ -367,7 +366,6 @@
   font-weight: 700;
 }
 
-/* The hero offers to continue the book opened most recently. */
 .library-hero {
   max-width: 1180px;
   display: flex;
@@ -650,7 +648,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Rename, relink, and remove live in the right-click menu of each book. */
 .book-menu-positioner {
   z-index: 20;
   outline: 0;
@@ -716,7 +713,6 @@
   cursor: default;
 }
 
-/* Sort choices keep their text aligned whether or not they are checked. */
 .book-menu-check {
   width: 13px;
   display: inline-flex;

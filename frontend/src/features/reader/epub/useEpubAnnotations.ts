@@ -15,9 +15,7 @@ import {
 import { useSavedList } from "../common/useSavedList";
 import { isCFIOnPage, pageStartCFI, sortEpubBookmarks, sortEpubHighlights } from "./epubContent";
 
-/** Where the reader is in the book. */
 export type ReaderLocation = {
-  /** The range CFI of what the page shows. */
   cfi: string;
   fraction: number;
   section: number;
@@ -26,7 +24,6 @@ export type ReaderLocation = {
   tocLabel: string;
 };
 
-/** Text selected in a section, to highlight. */
 type HighlightSelection = { cfi: string; text: string; section: number };
 
 async function loadHighlights(bookId: string): Promise<BookHighlight[]> {
@@ -37,11 +34,6 @@ async function loadBookmarks(bookId: string): Promise<BookBookmark[]> {
   return sortEpubBookmarks(await listBookmarks(bookId));
 }
 
-/**
- * The highlights of an EPUB, by CFI, drawn on the view as annotations.
- * highlightsRef holds them for foliate-js, which asks while it draws a
- * section, outside React's render.
- */
 export function useEpubHighlights(
   bookId: string,
   view: View | null,
@@ -61,7 +53,6 @@ export function useEpubHighlights(
     highlightsRef.current = highlights;
   }, [highlights, highlightsRef]);
 
-  // Highlights that arrive after the first section was drawn are added to it now.
   useEffect(() => {
     if (!view || !loaded) {
       return;
@@ -81,7 +72,6 @@ export function useEpubHighlights(
     [highlightsRef, setEntries],
   );
 
-  /** Saves the selection in the color and draws it. Reports whether that worked. */
   async function save(selection: HighlightSelection, color: HighlightColor): Promise<boolean> {
     if (!view || busy) {
       return false;
@@ -112,7 +102,6 @@ export function useEpubHighlights(
     }, "error.saveHighlight");
   }
 
-  /** Removes the highlight; onRemoved runs once it is gone from the list. */
   async function remove(id: number, onRemoved: () => void) {
     const highlight = highlightsRef.current.find((entry) => entry.id === id);
     if (!view || !highlight || busy) {
@@ -137,7 +126,6 @@ export function useEpubHighlights(
   };
 }
 
-/** The bookmarks of an EPUB, and those on the page being read. */
 export function useEpubBookmarks(bookId: string, location: ReaderLocation | null) {
   const list = useSavedList(bookId, {
     load: loadBookmarks,

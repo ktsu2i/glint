@@ -13,7 +13,6 @@ type ListEntry = {
 
 type ListState = {
   loaded: boolean;
-  /** Shown in place of the list when it is empty. */
   error: string;
   busy: boolean;
 };
@@ -25,7 +24,6 @@ type BookmarkListProps = ListState & {
   emptyMessage: string;
 };
 
-/** The bookmarks in the side sheet. */
 export function BookmarkList({ loaded, error, busy, entries, emptyMessage }: BookmarkListProps) {
   const { t } = useTranslation();
   return (
@@ -67,7 +65,6 @@ export type HighlightEntry = ListEntry & { color: HighlightColor; place: string;
 
 type HighlightListProps = ListState & { entries: HighlightEntry[] };
 
-/** The highlights in the side sheet. */
 export function HighlightList({ loaded, error, busy, entries }: HighlightListProps) {
   const { t } = useTranslation();
   return (

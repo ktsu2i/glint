@@ -3,10 +3,6 @@ import { useTranslation } from "react-i18next";
 import type { BookFile } from "../../shared/api/books";
 import { saveReadingPosition } from "./api";
 
-/**
- * Saves where the book is being read, skipping a place that was just saved.
- * Call reset when a book is opened so its first place is always saved.
- */
 export function useReadingPosition(book: BookFile | null) {
   const { t } = useTranslation();
   const lastSaved = useRef("");

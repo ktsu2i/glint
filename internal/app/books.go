@@ -15,7 +15,6 @@ import (
 	"github.com/ktsu2i/glint/internal/settings"
 )
 
-// BooksService is bound to the frontend for the library and the reader.
 type BooksService struct {
 	base
 	books   *books.Service
@@ -359,7 +358,6 @@ func (s *BooksService) registerBook(book library.Book) (string, error) {
 	return s.assets.Register(book.SourcePath, bookContentType(book.Format))
 }
 
-// bookError turns the book errors the user can act on into localized messages.
 func (s *BooksService) bookError(err error) error {
 	ctx := s.context()
 	switch {

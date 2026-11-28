@@ -5,15 +5,10 @@ import { openBook, openBookFile, relinkBook, removeBook, renameBook } from "./ap
 import type { LibraryBooks } from "./useLibraryBooks";
 
 type LibraryActionOptions = {
-  /** Shows a book that was imported, opened, or chosen again. */
   onOpen: (book: BookFile) => void;
   onRenamed: (summary: BookSummary) => void;
 };
 
-/**
- * What the shelf and the search results can do to a book. Failures show as
- * the library error, and busyBookId marks the book being worked on.
- */
 export function useLibraryActions(
   library: LibraryBooks,
   { onOpen, onRenamed }: LibraryActionOptions,
@@ -47,7 +42,6 @@ export function useLibraryActions(
     setError("");
     try {
       const opened = await openBook(summary.id);
-      // The saved place belongs to the section the book was left on.
       onOpen(
         pageNumber === undefined ? opened : { ...opened, initialPage: pageNumber, initialCfi: "" },
       );

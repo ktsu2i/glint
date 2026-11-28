@@ -159,7 +159,6 @@ input:focus-visible,
   outline-offset: 4px;
 }
 
-/* Ambient backdrop: the book colour bleeds softly behind the page. */
 .ambient {
   background:
     radial-gradient(60% 70% at 12% 8%, var(--ambient-tint) 0%, transparent 70%),
@@ -168,7 +167,6 @@ input:focus-visible,
   color: var(--ambient-ink);
 }
 
-/* Glass surfaces float over the ambient backdrop and the page. */
 .glass {
   border-radius: 16px;
   background: var(--glass-background);
@@ -296,7 +294,6 @@ input:focus-visible,
   min-height: 0;
 }
 
-/* Controls inside the 40px top bars keep a 6px margin all around. */
 .library-topbar .glass-button,
 .reader-topbar .glass-button,
 .reader-topbar .tool-button {

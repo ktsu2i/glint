@@ -14,7 +14,6 @@ import {
 } from "./epubContent";
 import { useDocumentTheme } from "./epubDom";
 
-/** The text size and layout every EPUB shares. */
 export async function loadReaderSettings(): Promise<ReaderSettings> {
   try {
     return await getReaderSettings();
@@ -30,10 +29,6 @@ function persistReaderSettings(settings: ReaderSettings) {
   });
 }
 
-/**
- * The text size and layout of the view, styled for the app theme. Changes
- * are saved for every EPUB.
- */
 export function useEpubSettings(view: View | null) {
   const theme = useDocumentTheme();
   const [fontScale, setFontScale] = useState(defaultReaderSettings.epubFontScale);
@@ -48,7 +43,6 @@ export function useEpubSettings(view: View | null) {
     view?.renderer?.setAttribute("max-column-count", layout === "spread" ? "2" : "1");
   }, [view, layout]);
 
-  /** Takes the settings loaded when the book opened. */
   const apply = useCallback((settings: ReaderSettings) => {
     setFontScale(settings.epubFontScale);
     setLayout(settings.epubLayout);
