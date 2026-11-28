@@ -64,7 +64,61 @@ func TestImportPDFRecordsBook(t *testing.T) {
 	assert.Equal(t, "sample.pdf", opened.Book.FileName)
 	assert.Equal(t, "sample", opened.Book.Display())
 	assert.Equal(t, BookFormatPDF, opened.Book.Format)
-	assert.Equal(t, path, opened.Book.SourcePath)
+	assert.Equal(t, filepath.Join(h.dataDir, "books", opened.Book.ID, "sample.pdf"), opened.Book.SourcePath)
+	assert.FileExists(t, opened.Book.SourcePath)
+}
+
+func TestImportedBookSurvivesDeletingTheOriginalFile(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Deleted.pdf", "%PDF-1.7\nfixture")
+	opened := h.importBook(path)
+	require.NoError(t, os.Remove(path))
+
+	entries, err := h.service.List(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.True(t, entries[0].Available)
+	reopened, err := h.service.Open(t.Context(), opened.Book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, opened.Book.SourcePath, reopened.Book.SourcePath)
+}
+
+func TestImportingTheSameFileAgainKeepsOneEntryAndCopy(t *testing.T) {
+	h := newHarness(t)
+	first := h.importBook(h.writePDF("Twice.pdf", "%PDF-1.7\nfixture"))
+	second := h.importBook(h.writePDF("Renamed Twice.pdf", "%PDF-1.7\nfixture"))
+
+	assert.Equal(t, first.Book.ID, second.Book.ID)
+	assert.Equal(t, filepath.Join(h.dataDir, "books", first.Book.ID, "Renamed Twice.pdf"), second.Book.SourcePath)
+	files, err := os.ReadDir(filepath.Join(h.dataDir, "books", first.Book.ID))
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	entries, err := h.service.List(t.Context())
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+}
+
+func TestListMovesBooksAddedBeforeCopyingIntoTheLibrary(t *testing.T) {
+	h := newHarness(t)
+	path := h.writePDF("Legacy.pdf", "%PDF-1.7\nlegacy")
+	inspection, _, err := inspectBook(path)
+	require.NoError(t, err)
+	legacy, err := h.store.Import(t.Context(), "legacy", path, inspection.FileHash, BookFormatPDF, inspection.SizeBytes, time.Now())
+	require.NoError(t, err)
+	require.NoError(t, h.store.SaveReadingPosition(t.Context(), legacy.ID, 4, 9, "", time.Now()))
+
+	entries, err := h.service.List(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	stored := filepath.Join(h.dataDir, "books", "legacy", "Legacy.pdf")
+	assert.Equal(t, stored, entries[0].SourcePath)
+	assert.Equal(t, 4, entries[0].LastPage)
+
+	require.NoError(t, os.Remove(path))
+	reopened, err := h.service.Open(t.Context(), legacy.ID)
+	require.NoError(t, err)
+	assert.Equal(t, stored, reopened.Book.SourcePath)
+	assert.Equal(t, 4, reopened.Book.LastPage)
 }
 
 func TestImportPDFRejectsInvalidHeader(t *testing.T) {
@@ -130,9 +184,8 @@ func TestServiceKeepsBindingDirection(t *testing.T) {
 
 func TestOpenReportsMissingSource(t *testing.T) {
 	h := newHarness(t)
-	path := h.writePDF("Moved.pdf", "%PDF-1.7\nfixture")
-	opened := h.importBook(path)
-	require.NoError(t, os.Remove(path))
+	opened := h.importBook(h.writePDF("Moved.pdf", "%PDF-1.7\nfixture"))
+	require.NoError(t, os.Remove(opened.Book.SourcePath))
 
 	entries, err := h.service.List(t.Context())
 	require.NoError(t, err)
@@ -142,7 +195,7 @@ func TestOpenReportsMissingSource(t *testing.T) {
 	assert.ErrorIs(t, err, ErrSourceMissing)
 }
 
-func TestRemoveDeletesRecordAndCoverButKeepsSourcePDF(t *testing.T) {
+func TestRemoveDeletesRecordCoverAndCopyButKeepsSourcePDF(t *testing.T) {
 	h := newHarness(t)
 	path := h.writePDF("Removable.pdf", "%PDF-1.7\nfixture")
 	opened := h.importBook(path)
@@ -158,6 +211,7 @@ func TestRemoveDeletesRecordAndCoverButKeepsSourcePDF(t *testing.T) {
 	assert.Empty(t, entries)
 	assert.NoFileExists(t, covers[0])
 	assert.FileExists(t, path, "Remove must not delete the user's source PDF")
+	assert.NoDirExists(t, filepath.Join(h.dataDir, "books", opened.Book.ID), "Remove deletes the library copy")
 	assert.ErrorIs(t, h.service.Remove(t.Context(), opened.Book.ID), library.ErrBookNotFound)
 }
 
@@ -191,8 +245,7 @@ func TestSaveCoverRejectsInvalidContent(t *testing.T) {
 
 func TestLibraryResetsCoverWhenCacheOrPDFChanges(t *testing.T) {
 	h := newHarness(t)
-	path := h.writePDF("Changing.pdf", "%PDF-1.7\nfirst")
-	opened := h.importBook(path)
+	opened := h.importBook(h.writePDF("Changing.pdf", "%PDF-1.7\nfirst"))
 	require.NoError(t, h.service.SaveCover(t.Context(), opened.Book.ID, pngCover))
 	covers, err := filepath.Glob(filepath.Join(h.dataDir, "covers", "*.png"))
 	require.NoError(t, err)
@@ -203,7 +256,7 @@ func TestLibraryResetsCoverWhenCacheOrPDFChanges(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "pending", entries[0].CoverThumbnailStatus)
 
-	require.NoError(t, os.WriteFile(path, []byte("%PDF-1.7\nsecond version"), 0o600))
+	require.NoError(t, os.WriteFile(opened.Book.SourcePath, []byte("%PDF-1.7\nsecond version"), 0o600))
 	reopened, err := h.service.Open(t.Context(), opened.Book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "pending", reopened.Book.CoverThumbnailStatus)
@@ -323,8 +376,8 @@ func TestPersistsPageBookmarks(t *testing.T) {
 
 func TestOpenSkipsHashingWhenSizeAndModTimeAreUnchanged(t *testing.T) {
 	h := newHarness(t)
-	path := h.writePDF("Stable.pdf", "%PDF-1.7\nfirst")
-	opened := h.importBook(path)
+	opened := h.importBook(h.writePDF("Stable.pdf", "%PDF-1.7\nfirst"))
+	path := opened.Book.SourcePath
 	h.saveSegments(opened.Book.ID, 1, pdfSegment(1, "indexed"))
 	info, err := os.Stat(path)
 	require.NoError(t, err)
@@ -343,8 +396,8 @@ func TestOpenSkipsHashingWhenSizeAndModTimeAreUnchanged(t *testing.T) {
 
 func TestOpenRecordsModTimeWhenOnlyModTimeChanges(t *testing.T) {
 	h := newHarness(t)
-	path := h.writePDF("Touched.pdf", "%PDF-1.7\nfixture")
-	opened := h.importBook(path)
+	opened := h.importBook(h.writePDF("Touched.pdf", "%PDF-1.7\nfixture"))
+	path := opened.Book.SourcePath
 	h.saveSegments(opened.Book.ID, 1, pdfSegment(1, "indexed"))
 
 	touched := time.Now().Add(time.Hour)
@@ -427,7 +480,9 @@ func TestRelinkRejectsFormatMismatch(t *testing.T) {
 	moved := h.writePDF("Moved Relink.pdf", "%PDF-1.7\nfixture")
 	relinked, err := h.service.Relink(t.Context(), opened.Book.ID, moved)
 	require.NoError(t, err)
-	assert.Equal(t, moved, relinked.Book.SourcePath)
+	assert.Equal(t, filepath.Join(h.dataDir, "books", opened.Book.ID, "Moved Relink.pdf"), relinked.Book.SourcePath)
+	assert.FileExists(t, relinked.Book.SourcePath)
+	assert.NoFileExists(t, opened.Book.SourcePath, "the copy of the previous file is replaced")
 }
 
 func TestPendingIndexTargetsListsAvailablePDFsWithMissingPages(t *testing.T) {
@@ -438,10 +493,9 @@ func TestPendingIndexTargetsListsAvailablePDFsWithMissingPages(t *testing.T) {
 	complete := h.importBook(h.writePDF("Complete.pdf", "%PDF-1.7\ncomplete"))
 	h.saveSegments(complete.Book.ID, 1, pdfSegment(1, "one"))
 
-	missingPath := h.writePDF("Missing.pdf", "%PDF-1.7\nmissing")
-	missing := h.importBook(missingPath)
+	missing := h.importBook(h.writePDF("Missing.pdf", "%PDF-1.7\nmissing"))
 	h.saveSegments(missing.Book.ID, 3, pdfSegment(1, "one"))
-	require.NoError(t, os.Remove(missingPath))
+	require.NoError(t, os.Remove(missing.Book.SourcePath))
 
 	h.importBook(h.writePDF("Unopened.pdf", "%PDF-1.7\nunopened"))
 	h.importBook(newSampleEPUB(t))
