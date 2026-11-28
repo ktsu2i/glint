@@ -14,8 +14,6 @@
   <a href="#installation">Installation</a>
   ·
   <a href="https://github.com/ktsu2i/glint/releases/latest">Download</a>
-  ·
-  <a href="#roadmap">Roadmap</a>
 </p>
 
 <p align="center">
@@ -63,14 +61,3 @@ Glint checks for updates automatically and offers to install new versions. You c
 ## Privacy
 
 Your books, reading positions, highlights, and bookmarks are stored only on your Mac. The only network request Glint makes is the update check, which sends nothing about your books.
-
-## Roadmap
-
-Glint is heading toward connecting the book you're reading to your own code: point it at a local repository and jump from a chapter to the files and symbols it describes.
-
-|  #  | Step                                                              | Status |
-| :-: | ----------------------------------------------------------------- | :----: |
-|  1  | PDF reader and local library with full-text search                |   ✅   |
-|  2  | EPUB reader with highlights, bookmarks, and read aloud            |   ✅   |
-|  3  | Connect a local repository and index its files and symbols        |   🚧   |
-|  4  | Show the repo files and symbols related to a chapter, with reasons |   ❌   |
