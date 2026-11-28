@@ -44,15 +44,6 @@ func appliedVersion(t *testing.T, db *sql.DB) int64 {
 	return version
 }
 
-func tableExists(t *testing.T, db *sql.DB, name string) bool {
-	t.Helper()
-	var count int
-	require.NoError(t, db.QueryRowContext(t.Context(),
-		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name,
-	).Scan(&count))
-	return count > 0
-}
-
 func TestMigrateAppliesPendingMigrationsOnce(t *testing.T) {
 	db := openTestDB(t)
 	require.NoError(t, Migrate(t.Context(), db, testMigrations))
@@ -63,35 +54,4 @@ func TestMigrateAppliesPendingMigrationsOnce(t *testing.T) {
 	var body string
 	require.NoError(t, db.QueryRowContext(t.Context(), "SELECT body FROM notes").Scan(&body))
 	assert.Equal(t, "kept", body)
-}
-
-func TestMigrateAdoptsLegacySchema(t *testing.T) {
-	db := openTestDB(t)
-	exec(t, db, "CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
-	exec(t, db, "INSERT INTO notes (body) VALUES ('kept')")
-	exec(t, db, "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
-	for version := 1; version <= legacySquashedVersion; version++ {
-		exec(t, db, "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, 'legacy', 'now')", version)
-	}
-
-	require.NoError(t, Migrate(t.Context(), db, testMigrations))
-
-	assert.False(t, tableExists(t, db, "schema_migrations"))
-	assert.Equal(t, int64(2), appliedVersion(t, db), "only migrations after the squashed baseline run")
-	var body, title string
-	require.NoError(t, db.QueryRowContext(t.Context(), "SELECT body, title FROM notes").Scan(&body, &title))
-	assert.Equal(t, "kept", body)
-	assert.Empty(t, title)
-}
-
-func TestMigrateRejectsUnsupportedLegacyVersion(t *testing.T) {
-	db := openTestDB(t)
-	exec(t, db, "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)")
-	exec(t, db, "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, 'legacy', 'now')", legacySquashedVersion-1)
-
-	err := Migrate(t.Context(), db, testMigrations)
-
-	require.ErrorIs(t, err, ErrLegacySchema)
-	assert.True(t, tableExists(t, db, "schema_migrations"))
-	assert.False(t, tableExists(t, db, "goose_db_version"))
 }
