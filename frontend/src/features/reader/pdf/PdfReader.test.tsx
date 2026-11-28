@@ -22,13 +22,13 @@ const backend = vi.hoisted(() => ({
   setWindowControlsVisible: vi.fn(),
 }));
 
-vi.mock("../../shared/pdf/loadPdf", () => ({
+vi.mock("../../../shared/pdf/loadPdf", () => ({
   createPdfLoadingTask: loader.createPdfLoadingTask,
   createPdfTextLayer: loader.createPdfTextLayer,
   extractPdfPage: loader.extractPdfPage,
   loadPdfOutline: loader.loadPdfOutline,
 }));
-vi.mock("./api", () => ({
+vi.mock("../api", () => ({
   addBookmark: backend.addBookmark,
   addHighlight: backend.addHighlight,
   changeHighlightColor: backend.changeHighlightColor,
@@ -41,7 +41,7 @@ vi.mock("./api", () => ({
   searchBook: backend.searchBook,
   setWindowControlsVisible: backend.setWindowControlsVisible,
 }));
-vi.mock("../../shared/components/ToolButton", () => ({
+vi.mock("../../../shared/components/ToolButton", () => ({
   ToolButton: ({
     label,
     className = "",
@@ -70,14 +70,14 @@ vi.mock("../../shared/components/ToolButton", () => ({
 }));
 
 import { PdfReader } from "./PdfReader";
-import { I18nProvider } from "../../shared/i18n/i18n";
+import { I18nProvider } from "../../../shared/i18n/i18n";
 
 function render(ui: ReactNode) {
   return renderBase(ui, {
     wrapper: ({ children }) => <I18nProvider initialLanguage="ja">{children}</I18nProvider>,
   });
 }
-import type { BookFile } from "../../shared/api/books";
+import type { BookFile } from "../../../shared/api/books";
 
 type ResizeCallback = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
 

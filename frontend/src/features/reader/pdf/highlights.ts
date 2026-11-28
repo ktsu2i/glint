@@ -1,6 +1,4 @@
-import type { HighlightColor, HighlightRect } from "./api";
-
-export const highlightColors: HighlightColor[] = ["yellow", "green", "pink", "purple"];
+import type { HighlightRect } from "../api";
 
 export type PageSelection = {
   pageNumber: number;

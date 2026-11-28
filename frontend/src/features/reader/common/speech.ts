@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export function isSpeechSupported(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window;
@@ -44,4 +44,51 @@ export function pickVoiceForLang(
   }
   const sameLanguage = voices.find((voice) => voice.lang.toLowerCase().startsWith(prefix));
   return sameLanguage ?? null;
+}
+
+/** An utterance of the text in the language it is written in, with a voice for it. */
+export function createUtterance(
+  text: string,
+  uiLanguage: string,
+  voices: SpeechSynthesisVoice[],
+): SpeechSynthesisUtterance {
+  const lang = detectUtteranceLang(text, uiLanguage);
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = lang;
+  const voice = pickVoiceForLang(voices, lang);
+  if (voice) {
+    utterance.voice = voice;
+  }
+  return utterance;
+}
+
+/**
+ * Whether the reader is reading aloud. Stopping cancels what is being said,
+ * and so does leaving the reader.
+ */
+export function useReadAloud() {
+  const supported = isSpeechSupported();
+  const voices = useSpeechVoices(supported);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    if (!supported) {
+      return;
+    }
+    return () => window.speechSynthesis.cancel();
+  }, [supported]);
+
+  const toggle = useCallback(() => {
+    if (!supported) {
+      return;
+    }
+    setActive((current) => {
+      if (current) {
+        window.speechSynthesis.cancel();
+      }
+      return !current;
+    });
+  }, [supported]);
+
+  return { supported, voices, active, setActive, toggle };
 }

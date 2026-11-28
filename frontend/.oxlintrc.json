@@ -228,6 +228,129 @@
       }
     },
     {
+      "files": ["src/features/reader/common/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": [
+                  "../library",
+                  "../library/**",
+                  "../../library",
+                  "../../library/**",
+                  "**/features/library",
+                  "**/features/library/**",
+                  "../settings",
+                  "../settings/**",
+                  "../../settings",
+                  "../../settings/**",
+                  "**/features/settings",
+                  "**/features/settings/**"
+                ],
+                "message": "A feature must not import another feature; move what they share to src/shared."
+              },
+              {
+                "group": ["**/app/App", "../../app/**", "../../../app/**"],
+                "message": "A feature must not import src/app."
+              },
+              {
+                "group": ["../pdf", "../pdf/**", "../epub", "../epub/**"],
+                "message": "reader/common is shared by both readers and must not import pdf or epub."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/reader/pdf/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": [
+                  "../library",
+                  "../library/**",
+                  "../../library",
+                  "../../library/**",
+                  "**/features/library",
+                  "**/features/library/**",
+                  "../settings",
+                  "../settings/**",
+                  "../../settings",
+                  "../../settings/**",
+                  "**/features/settings",
+                  "**/features/settings/**"
+                ],
+                "message": "A feature must not import another feature; move what they share to src/shared."
+              },
+              {
+                "group": ["**/app/App", "../../app/**", "../../../app/**"],
+                "message": "A feature must not import src/app."
+              },
+              {
+                "group": ["../epub", "../epub/**"],
+                "message": "The PDF reader must not import the EPUB reader; share through reader/common."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/reader/epub/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/bindings/**"],
+                "message": "Call Wails bindings through the api.ts of a feature or src/shared/api."
+              },
+              {
+                "group": [
+                  "../library",
+                  "../library/**",
+                  "../../library",
+                  "../../library/**",
+                  "**/features/library",
+                  "**/features/library/**",
+                  "../settings",
+                  "../settings/**",
+                  "../../settings",
+                  "../../settings/**",
+                  "**/features/settings",
+                  "**/features/settings/**"
+                ],
+                "message": "A feature must not import another feature; move what they share to src/shared."
+              },
+              {
+                "group": ["**/app/App", "../../app/**", "../../../app/**"],
+                "message": "A feature must not import src/app."
+              },
+              {
+                "group": ["../pdf", "../pdf/**"],
+                "message": "The EPUB reader must not import the PDF reader; share through reader/common."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["src/features/*/api.ts", "src/shared/api/*.ts"],
       "rules": {
         "eslint/no-restricted-imports": "off",
