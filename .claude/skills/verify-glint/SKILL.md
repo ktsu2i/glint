@@ -1,28 +1,28 @@
 ---
 name: verify-glint
-description: "Glint を実際に動かして、変更が効いていることを証拠付きで確かめる。server モードのビルドを WebKit で操作し、a11y tree、スクリーンショット、SQLite の行、再起動後の状態を証拠にする。UI や永続化に関わる変更を確かめるとき、スクリーンショットや画面操作が要るとき、広い回帰確認をするときに使う。"
+description: "Run Glint and prove a change works with evidence. Drives a server-mode build in WebKit and uses the accessibility tree, screenshots, SQLite rows, and state after an app restart as evidence. Use to verify UI or persisted behavior, to take screenshots or drive the UI, and for broad regression sweeps."
 ---
 
 # Verify Glint
 
-Glint を `-tags 'server verify'` でビルドし、Playwright の WebKit で 1 手ずつ操作する。ユニットテストでは見えない、画面、Wails の境界、SQLite、再起動の組み合わせを確かめるためのもの。
+Build Glint with `-tags 'server verify'` and drive it one step at a time with Playwright WebKit. This checks what unit tests cannot see: the UI, the Wails boundary, SQLite, and restarts, all together.
 
-ドライバは `node frontend/scripts/glint-driver.mjs <command>` で、リポジトリのルートから実行する。`help` の出力が正しいコマンド一覧になる。
+The driver is `node frontend/scripts/glint-driver.mjs <command>`, run from the repository root. The output of `help` is the canonical command list.
 
-## 仕組み
+## How it works
 
-- アプリは GUI なしの HTTP サーバとして動き、WebKit のページがそこにつながる。本番と同じ `frontend/dist` を配るので、本番の CSP も効く。
-- `HOME` を一時ディレクトリに向けて起動する。データベースも本のコピーもそこにでき、普段使っているライブラリには触れない。`stop` で消える。
-- ネイティブのダイアログは出ない。`verify` タグのビルドでは、`dialog` コマンドで先に書いた答えを読む（`internal/app/dialogs_verify.go`）。答えは 1 回で消え、答えがなければキャンセル扱いになる。
-- host プロセスがアプリとページを持ち続けるので、コマンドの間でページの状態が残る。
-- 状態は `$TMPDIR/glint-verify-<リポジトリのパスのハッシュ>` に置く。worktree ごとに別のインスタンスになる。
+- The app runs as an HTTP server without a GUI, and a WebKit page connects to it. It serves the same `frontend/dist` as production, so the production CSP applies.
+- The app starts with `HOME` pointed at a temporary directory. The database and copied books live there, and the real library is never touched. `stop` deletes it.
+- Native dialogs do not appear. A `verify` build reads answers written beforehand with the `dialog` command (`internal/app/dialogs_verify.go`). Each answer is used once; with no answer, the dialog is cancelled.
+- A host process keeps the app and the page alive, so page state carries over between commands.
+- State lives in `$TMPDIR/glint-verify-<hash of the repository path>`, so each worktree gets its own instance.
 
-## クイックスタート
+## Quick start
 
 ```bash
-node frontend/scripts/glint-driver.mjs start      # ソースが新しければビルドしてから起動
-node frontend/scripts/glint-driver.mjs doctor     # 必ず確かめる
-node frontend/scripts/glint-driver.mjs snapshot   # 今の画面の a11y tree
+node frontend/scripts/glint-driver.mjs start      # rebuild if the sources are newer, then start
+node frontend/scripts/glint-driver.mjs doctor     # always check
+node frontend/scripts/glint-driver.mjs snapshot   # accessibility tree of the current screen
 
 node frontend/scripts/glint-driver.mjs dialog open-file frontend/testdata/generated-reader.pdf
 node frontend/scripts/glint-driver.mjs click button "Add Book"
@@ -32,45 +32,47 @@ node frontend/scripts/glint-driver.mjs screenshot /path/to/proof.png
 node frontend/scripts/glint-driver.mjs stop
 ```
 
-## コマンドの分類
+## Command surface
 
-- 起動と後片付け：`build`、`start`、`stop`、`doctor`、`info`、`restart-app`
-- 移動と入力：`open`、`reload`、`click`、`click-css`、`mouse-click`、`right-click`、`press`、`type`、`select-text`、`hover`
-- 確認と証拠：`snapshot`、`screenshot`、`wait`、`eval`、`console`、`sql`、`logs`
-- ダイアログ：`dialog open-file <path>`、`dialog confirm <accept|cancel>`、`dialog last`
+- Lifecycle: `build`, `start`, `stop`, `doctor`, `info`, `restart-app`
+- Navigation and input: `open`, `reload`, `click`, `click-css`, `mouse-click`, `right-click`, `press`, `type`, `select-text`, `hover`
+- Inspection and evidence: `snapshot`, `screenshot`, `wait`, `eval`, `console`, `sql`, `logs`
+- Dialogs: `dialog open-file <path>`, `dialog confirm <accept|cancel>`, `dialog last`
 
-## 証拠の基準
+## Proof bar
 
-「開いた」「表示された」だけの証拠は出さない。疑い深いレビュアーが納得する、ユーザーと同じ経路での結果を示す。
+Do not submit "it opened" or "it showed up" as evidence. Show the result of the same path a user takes, in a form a skeptical reviewer would accept.
 
-- 最初に `doctor` を実行する。`STALE BUILD`、`STALE DRIVER`、`STALE INSTANCE`、使われていないダイアログの答えが出たら、直してから進める。古いビルドでの結果は証拠にならない。
-- `references/features/` から変更に関係するファイルを読み、そこにある入口、モード、成功、キャンセル、エラー、空、永続化の経路のうち、変更が影響しうるものを全部通す。
-- 操作はユーザーと同じ経路で行う。ボタン、キー、メニュー、ダイアログを使う。`eval` は操作の後に状態を読むためだけに使い、アプリの関数を直接呼んで操作の代わりにしない。
-- 画面だけでなく副作用も確かめる。`sql` で行を見る、`dialog last` でダイアログが出たことを見る、`restart-app` の後も残っていることを見る。
-- 操作のきっかけと、落ち着いた後の最終状態を、同じ流れの中で記録する。
-- 届かない経路は、名前と理由（native UI、OS、ドライバの制約）を書き、確かめられた一番近い経路を示す。
+- Run `doctor` first. If it reports `STALE BUILD`, `STALE DRIVER`, `STALE INSTANCE`, or an unused dialog answer, fix that before going on. Results from a stale build are not evidence.
+- Read the relevant files under `references/features/`, and drive every entry point, mode, and success / cancel / error / empty / persistence path listed there that the change can affect.
+- Act through the user path: buttons, keys, menus, and dialogs. Use `eval` only to read state after the user path ran, never to call app functions in place of the user action.
+- Verify side effects, not just pixels: rows via `sql`, that a dialog was shown via `dialog last`, and that state survives `restart-app`.
+- Record the trigger and the settled end state in the same run.
+- When a path is unreachable, name it and the reason (native UI, OS, or driver limits), and cover the closest path that remains.
 
-## 操作の決まり
+## Driving conventions
 
-- 要素は ARIA の role と名前で探す（`click button "Add Book"`）。CSS セレクタは、role のない要素（`.text-layer`、`.highlight-mark` など）にだけ使う。
-- 名前が本のタイトルなどで変わるときは `/正規表現/` で指定する（`click button "/Continue generated-reader/"`）。
-- 固定の待ち時間で待たない。`wait` で、目に見える最終状態を待つ。
-- ページ送りなどは、座標クリックより登録されたキー（`press ArrowRight`）を優先する。
-- テスト用の本は `frontend/testdata/generated-reader.pdf`（3 ページ、目次付き）を使う。著作権のある本や個人の本を使わない。
-- ドライバや Go のコードを変えたら、`stop` してから `start` し直す。
-- `console` に出る次のメッセージは正常：Wails の「Browser Environment Detected」、PDF.js の「Setting up fake worker」、`restart-app` の後の WebSocket の切断と再接続。
+- Find elements by ARIA role and name (`click button "Add Book"`). Use CSS selectors only for elements without a role (`.text-layer`, `.highlight-mark`, and so on).
+- When a name contains something variable such as a book title, use a `/regex/` (`click button "/Continue generated-reader/"`).
+- Do not wait with fixed sleeps. Use `wait` on a visible end state.
+- Prefer registered keys (`press ArrowRight`) over coordinate clicks for things like page turns.
+- Use `frontend/testdata/generated-reader.pdf` (3 pages with an outline) as the book. Do not use copyrighted or personal books.
+- After changing the driver or Go code, `stop` and `start` again.
+- These `console` messages are expected: Wails "Browser Environment Detected", PDF.js "Setting up fake worker", and the WebSocket disconnect and reconnect after `restart-app`.
 
-## 届かないもの
+## Out of reach
 
-次はこのドライバでは確かめられない。必要なら gap として明記する。
+The driver cannot verify the following. Report them as gaps when relevant.
 
-- ネイティブのウィンドウ：タイトルバー、全画面、ウィンドウの位置と大きさの記憶、アプリケーションメニュー
-- 設定ウィンドウ：別ウィンドウとして開くため、未確認
-- Finder からのドラッグ&ドロップ
-- Sparkle の更新
-- 読み上げの音声そのもの（ボタンの状態は確かめられる）
-- WKWebView 固有の違い。Playwright の WebKit は近いが同じではない。描画やフォーカスの細かい違いが疑わしいときは、実機（`go tool wails3 dev`）でも見る。
+- The native window: title bar, full screen, remembered window position and size, the application menu
+- The settings window: it opens as a separate window and has not been checked yet
+- Drag and drop from Finder
+- Sparkle updates
+- Read-aloud audio itself (the button state can be checked)
+- WKWebView-specific differences. Playwright WebKit is close but not identical. When rendering or focus details are in doubt, also look at the real app (`go tool wails3 dev`).
 
 ## Feature map
 
-振る舞いの一覧は [`references/features/`](references/features/README.md) にある。1 機能 1 ファイルで、どれも「Sub-features / How to get to it (user POV) / Driving it with glint-driver / Gotchas」の 4 つの見出しを持つ。references は英語で書く。広い回帰確認では、README の順に上から回す。
+The behavior inventory lives in [`references/features/`](references/features/README.md): one file per feature, each with the same four H2s, `Sub-features`, `How to get to it (user POV)`, `Driving it with glint-driver`, and `Gotchas`. For broad regression sweeps, walk the README top to bottom.
+
+Write the skill and its references in English. Keep `README.md` and `README.ja.md` in this directory in sync; they are for humans.

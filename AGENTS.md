@@ -58,7 +58,7 @@ Run the same checks as CI for whatever you changed.
 - When the user explicitly asks for a change, implement it instead of stopping at a proposal.
 - Stay within the requested scope. Avoid unnecessary abstractions and large refactors.
 - Match the existing style of code and config files.
-- Write Markdown docs in Japanese, except this file and skill references (`.claude/skills/*/references/`), which are in English. When changing the README, update both `README.md` (English) and `README.ja.md` (Japanese).
+- Write Markdown docs in Japanese, except this file and skills under `.claude/skills/` (`SKILL.md` and references), which are in English. A skill's human-facing `README.md` (English) has a Japanese `README.ja.md`; update both together. When changing the README, update both `README.md` (English) and `README.ja.md` (Japanese).
 
 ### Git / PRs
 
