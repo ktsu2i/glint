@@ -6,7 +6,7 @@ Glint を実際に動かして、変更が効いていることを証拠付き�
 
 - `SKILL.md`：agent 向けの指示
 - `references/features/`：feature map。何を操作し、何を確かめるかを機能ごとにまとめた一覧
-- `frontend/scripts/glint-driver.mjs`：ドライバ
+- `bin/verify-glint`：ドライバのコマンド（中で `frontend/scripts/glint-driver.mjs` を実行する）
 
 ## 準備
 
@@ -36,26 +36,30 @@ agent は、変更に関係する feature ファイルを読み、`start` と `d
 
 ### 自分で動かす
 
-リポジトリのルートで実行する。
+リポジトリのルートで `bin/verify-glint <command>` を実行する。`verify-glint` だけで打ちたいときは、シェルの設定でリポジトリの `bin` を `PATH` に足す。
 
 ```bash
-alias gd='node frontend/scripts/glint-driver.mjs'
-
-gd start          # ソースが新しければビルドしてから起動。空のライブラリから始まる
-gd doctor         # doctor: ok になっているか
-gd snapshot       # 今の画面の a11y tree。押せるボタンの名前が分かる
-
-gd dialog open-file frontend/testdata/generated-reader.pdf   # 次のファイル選択ダイアログの答え
-gd click button "Add Book"
-gd wait ".text-layer[data-page='1'] span"
-gd screenshot /tmp/reader.png
-gd sql "select title, page_count from books"
-
-gd restart-app    # 同じデータのままアプリだけを再起動
-gd stop           # 全部止めてデータを消す
+export PATH="$HOME/path/to/glint/bin:$PATH"
 ```
 
-`snapshot` で名前を見る、`click` で操作する、`wait` で結果を待つ、`screenshot` や `sql` で確かめる、の繰り返しになる。`gd help` で全コマンドを見られる。
+どのディレクトリからでも動く。本のファイルなど、渡した相対パスは今いるディレクトリから解決される。
+
+```bash
+verify-glint start          # ソースが新しければビルドしてから起動。空のライブラリから始まる
+verify-glint doctor         # doctor: ok になっているか
+verify-glint snapshot       # 今の画面の a11y tree。押せるボタンの名前が分かる
+
+verify-glint dialog open-file frontend/testdata/generated-reader.pdf   # 次のファイル選択ダイアログの答え
+verify-glint click button "Add Book"
+verify-glint wait ".text-layer[data-page='1'] span"
+verify-glint screenshot /tmp/reader.png
+verify-glint sql "select title, page_count from books"
+
+verify-glint restart-app    # 同じデータのままアプリだけを再起動
+verify-glint stop           # 全部止めてデータを消す
+```
+
+`snapshot` で名前を見る、`click` で操作する、`wait` で結果を待つ、`screenshot` や `sql` で確かめる、の繰り返しになる。`verify-glint help` で全コマンドを見られる。
 
 ## 各コマンドで確かめられること
 

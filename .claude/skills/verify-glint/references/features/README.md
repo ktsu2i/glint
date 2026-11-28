@@ -34,5 +34,5 @@ Every feature file uses the same four H2s:
 
 1. `Sub-features`
 2. `How to get to it (user POV)`
-3. `Driving it with glint-driver`
+3. `Driving it with verify-glint`
 4. `Gotchas`

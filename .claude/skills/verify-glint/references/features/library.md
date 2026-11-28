@@ -16,34 +16,34 @@ The bookshelf screen: importing books, sorting, renaming, removing, covers, and 
 
 It is the first screen when the app starts. From the reader, "Library" at the top left goes back.
 
-## Driving it with glint-driver
+## Driving it with verify-glint
 
 ```bash
 # import (success)
-node frontend/scripts/glint-driver.mjs dialog open-file frontend/testdata/generated-reader.pdf
-node frontend/scripts/glint-driver.mjs click button "Add Book"
-node frontend/scripts/glint-driver.mjs wait ".text-layer[data-page='1'] span"
-node frontend/scripts/glint-driver.mjs dialog last          # open-file / Add a book to the library
-node frontend/scripts/glint-driver.mjs sql "select title, format, page_count, cover_thumbnail_status from books"
-node frontend/scripts/glint-driver.mjs sql "select count(*) from book_segments"
+bin/verify-glint dialog open-file frontend/testdata/generated-reader.pdf
+bin/verify-glint click button "Add Book"
+bin/verify-glint wait ".text-layer[data-page='1'] span"
+bin/verify-glint dialog last          # open-file / Add a book to the library
+bin/verify-glint sql "select title, format, page_count, cover_thumbnail_status from books"
+bin/verify-glint sql "select count(*) from book_segments"
 
 # import cancelled: click without writing an answer. No book is added
-node frontend/scripts/glint-driver.mjs click button "Add Book"
+bin/verify-glint click button "Add Book"
 
 # continue reading
-node frontend/scripts/glint-driver.mjs click button "Library"
-node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
+bin/verify-glint click button "Library"
+bin/verify-glint click button "/Continue generated-reader/"
 
 # remove (cancel first, then accept)
-node frontend/scripts/glint-driver.mjs right-click article
-node frontend/scripts/glint-driver.mjs dialog confirm cancel
-node frontend/scripts/glint-driver.mjs click menuitem "Remove from Library"
-node frontend/scripts/glint-driver.mjs sql "select count(*) from books"        # still 1
-node frontend/scripts/glint-driver.mjs right-click article
-node frontend/scripts/glint-driver.mjs dialog confirm accept
-node frontend/scripts/glint-driver.mjs click menuitem "Remove from Library"
-node frontend/scripts/glint-driver.mjs wait article detached
-node frontend/scripts/glint-driver.mjs sql "select (select count(*) from books), (select count(*) from book_highlights), (select count(*) from book_bookmarks)"
+bin/verify-glint right-click article
+bin/verify-glint dialog confirm cancel
+bin/verify-glint click menuitem "Remove from Library"
+bin/verify-glint sql "select count(*) from books"        # still 1
+bin/verify-glint right-click article
+bin/verify-glint dialog confirm accept
+bin/verify-glint click menuitem "Remove from Library"
+bin/verify-glint wait article detached
+bin/verify-glint sql "select (select count(*) from books), (select count(*) from book_highlights), (select count(*) from book_bookmarks)"
 ```
 
 To sort, click "Sort books: …", read the item names with `snapshot`, then pick one. Check the card order with `snapshot`.

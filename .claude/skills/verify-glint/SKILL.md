@@ -7,7 +7,7 @@ description: "Run Glint and prove a change works with evidence. Drives a server-
 
 Build Glint with `-tags 'server verify'` and drive it one step at a time with Playwright WebKit. This checks what unit tests cannot see: the UI, the Wails boundary, SQLite, and restarts, all together.
 
-The driver is `node frontend/scripts/glint-driver.mjs <command>`, run from the repository root. The output of `help` is the canonical command list.
+The driver is `bin/verify-glint <command>`, run from the repository root. It wraps `frontend/scripts/glint-driver.mjs`. The output of `help` is the canonical command list.
 
 ## How it works
 
@@ -20,16 +20,16 @@ The driver is `node frontend/scripts/glint-driver.mjs <command>`, run from the r
 ## Quick start
 
 ```bash
-node frontend/scripts/glint-driver.mjs start      # rebuild if the sources are newer, then start
-node frontend/scripts/glint-driver.mjs doctor     # always check
-node frontend/scripts/glint-driver.mjs snapshot   # accessibility tree of the current screen
+bin/verify-glint start      # rebuild if the sources are newer, then start
+bin/verify-glint doctor     # always check
+bin/verify-glint snapshot   # accessibility tree of the current screen
 
-node frontend/scripts/glint-driver.mjs dialog open-file frontend/testdata/generated-reader.pdf
-node frontend/scripts/glint-driver.mjs click button "Add Book"
-node frontend/scripts/glint-driver.mjs wait ".text-layer[data-page='1'] span"
-node frontend/scripts/glint-driver.mjs screenshot /path/to/proof.png
+bin/verify-glint dialog open-file frontend/testdata/generated-reader.pdf
+bin/verify-glint click button "Add Book"
+bin/verify-glint wait ".text-layer[data-page='1'] span"
+bin/verify-glint screenshot /path/to/proof.png
 
-node frontend/scripts/glint-driver.mjs stop
+bin/verify-glint stop
 ```
 
 ## Command surface
@@ -73,6 +73,6 @@ The driver cannot verify the following. Report them as gaps when relevant.
 
 ## Feature map
 
-The behavior inventory lives in [`references/features/`](references/features/README.md): one file per feature, each with the same four H2s, `Sub-features`, `How to get to it (user POV)`, `Driving it with glint-driver`, and `Gotchas`. For broad regression sweeps, walk the README top to bottom.
+The behavior inventory lives in [`references/features/`](references/features/README.md): one file per feature, each with the same four H2s, `Sub-features`, `How to get to it (user POV)`, `Driving it with verify-glint`, and `Gotchas`. For broad regression sweeps, walk the README top to bottom.
 
 Write the skill and its references in English. Keep `README.md` and `README.ja.md` in this directory in sync; they are for humans.

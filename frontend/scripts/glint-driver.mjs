@@ -1,6 +1,6 @@
 // Drives Glint for verification. A host process keeps the app (a server-mode
 // build with scripted dialogs) and one WebKit page alive between commands, so
-// an agent can act one step at a time. Run `node frontend/scripts/glint-driver.mjs help`.
+// an agent can act one step at a time. Run `bin/verify-glint help`.
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -47,7 +47,7 @@ const sources = [
 const viewport = { width: 1440, height: 900 };
 const actionTimeout = 10_000;
 
-const usage = `Usage: node frontend/scripts/glint-driver.mjs <command> [args]
+const usage = `Usage: bin/verify-glint <command> [args]
 
 Lifecycle
   build                       Build the frontend and a server-mode binary with scripted dialogs

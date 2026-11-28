@@ -6,7 +6,7 @@ A skill for running Glint and proving that a change works, with evidence. It dri
 
 - `SKILL.md`: instructions for agents
 - `references/features/`: the feature map, a behavior-level inventory of what to drive and what to check
-- `frontend/scripts/glint-driver.mjs`: the driver
+- `bin/verify-glint`: the driver command (it runs `frontend/scripts/glint-driver.mjs`)
 
 ## Setup
 
@@ -36,26 +36,30 @@ Examples:
 
 ### Run the driver yourself
 
-From the repository root:
+From the repository root, run `bin/verify-glint <command>`. To type just `verify-glint`, add the repository's `bin` to your `PATH`, for example in your shell profile:
 
 ```bash
-alias gd='node frontend/scripts/glint-driver.mjs'
-
-gd start          # rebuild if the sources are newer, then start on an empty library
-gd doctor         # check for "doctor: ok"
-gd snapshot       # accessibility tree; shows the names of buttons you can click
-
-gd dialog open-file frontend/testdata/generated-reader.pdf   # answer for the next file dialog
-gd click button "Add Book"
-gd wait ".text-layer[data-page='1'] span"
-gd screenshot /tmp/reader.png
-gd sql "select title, page_count from books"
-
-gd restart-app    # restart only the app on the same data
-gd stop           # stop everything and delete the data
+export PATH="$HOME/path/to/glint/bin:$PATH"
 ```
 
-The loop is: read names with `snapshot`, act with `click`, wait for the result with `wait`, and check it with `screenshot` or `sql`. `gd help` lists every command.
+The command works from any directory. Relative paths you pass, such as a book file, are resolved from the current directory.
+
+```bash
+verify-glint start          # rebuild if the sources are newer, then start on an empty library
+verify-glint doctor         # check for "doctor: ok"
+verify-glint snapshot       # accessibility tree; shows the names of buttons you can click
+
+verify-glint dialog open-file frontend/testdata/generated-reader.pdf   # answer for the next file dialog
+verify-glint click button "Add Book"
+verify-glint wait ".text-layer[data-page='1'] span"
+verify-glint screenshot /tmp/reader.png
+verify-glint sql "select title, page_count from books"
+
+verify-glint restart-app    # restart only the app on the same data
+verify-glint stop           # stop everything and delete the data
+```
+
+The loop is: read names with `snapshot`, act with `click`, wait for the result with `wait`, and check it with `screenshot` or `sql`. `verify-glint help` lists every command.
 
 ## What each command verifies
 

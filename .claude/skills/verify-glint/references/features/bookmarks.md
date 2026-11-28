@@ -14,28 +14,28 @@ Saving a page to come back to it. PDF bookmarks store the page number; EPUB book
 
 The bookmark button on the right of the reader's top bar. The list opens from "Open bookmarks" on the left.
 
-## Driving it with glint-driver
+## Driving it with verify-glint
 
 ```bash
-node frontend/scripts/glint-driver.mjs press ArrowRight
-node frontend/scripts/glint-driver.mjs click button "Save page 2"
-node frontend/scripts/glint-driver.mjs sql "select page_number, cfi, progress from book_bookmarks"     # 2||0.0
-node frontend/scripts/glint-driver.mjs snapshot          # the button becomes "Remove bookmark from page 2"
+bin/verify-glint press ArrowRight
+bin/verify-glint click button "Save page 2"
+bin/verify-glint sql "select page_number, cfi, progress from book_bookmarks"     # 2||0.0
+bin/verify-glint snapshot          # the button becomes "Remove bookmark from page 2"
 
 # jump from the list
-node frontend/scripts/glint-driver.mjs press ArrowLeft
-node frontend/scripts/glint-driver.mjs click button "Open bookmarks"
-node frontend/scripts/glint-driver.mjs click button "Go to bookmarked page 2"
+bin/verify-glint press ArrowLeft
+bin/verify-glint click button "Open bookmarks"
+bin/verify-glint click button "Go to bookmarked page 2"
 
 # remove
-node frontend/scripts/glint-driver.mjs click button "Remove bookmark from page 2"
-node frontend/scripts/glint-driver.mjs sql "select count(*) from book_bookmarks"
+bin/verify-glint click button "Remove bookmark from page 2"
+bin/verify-glint sql "select count(*) from book_bookmarks"
 
 # persistence
-node frontend/scripts/glint-driver.mjs restart-app
-node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
-node frontend/scripts/glint-driver.mjs click button "Open bookmarks"
-node frontend/scripts/glint-driver.mjs snapshot
+bin/verify-glint restart-app
+bin/verify-glint click button "/Continue generated-reader/"
+bin/verify-glint click button "Open bookmarks"
+bin/verify-glint snapshot
 ```
 
 ## Gotchas
