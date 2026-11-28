@@ -167,7 +167,7 @@ func (s *BooksService) AddBookmark(bookID string, input BookmarkInput) (BookBook
 	if errors.Is(err, library.ErrInvalidBookmark) {
 		return BookBookmark{}, s.text.error(s.context(),
 			"The bookmark is outside this book.",
-			"しおりの位置がこの本の範囲外です。",
+			"ブックマークの位置がこの本の範囲外です。",
 		)
 	}
 	if err != nil {
@@ -382,7 +382,7 @@ func (s *BooksService) bookError(err error) error {
 			"本の名前は1〜200文字で入力してください。",
 		)
 	case errors.Is(err, library.ErrInvalidBookmark):
-		return s.text.error(ctx, "The bookmark is invalid.", "しおりの内容が不正です。")
+		return s.text.error(ctx, "The bookmark is invalid.", "ブックマークの内容が不正です。")
 	case errors.Is(err, library.ErrInvalidHighlight):
 		return s.text.error(ctx,
 			"The highlight could not be saved. Select up to 10,000 characters.",

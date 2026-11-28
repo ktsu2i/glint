@@ -447,19 +447,23 @@ describe("EpubReader", () => {
     const { view } = await openReader();
     view.relocate(1, 0.42, "Chapter Two", { cfi: pageCFI });
 
-    fireEvent.click(screen.getByRole("button", { name: "このページをしおりに保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "このページをブックマークに保存" }));
     await waitFor(() => expect(backend.addBookmark).toHaveBeenCalledWith("epub-1", place, 3));
-    expect(await screen.findByRole("button", { name: "このページのしおりを削除" })).toBeTruthy();
-    const marker = screen.getByRole("button", { name: "セクション 2 · 42%のしおりへ移動" });
+    expect(
+      await screen.findByRole("button", { name: "このページのブックマークを削除" }),
+    ).toBeTruthy();
+    const marker = screen.getByRole("button", { name: "セクション 2 · 42%のブックマークへ移動" });
     expect(marker.getAttribute("aria-current")).toBe("page");
 
     view.relocate(1, 0.45, "Chapter Two", { cfi: "epubcfi(/6/4!/4,/10/1:5,/14/1:0)" });
-    expect(screen.getByRole("button", { name: "このページをしおりに保存" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "このページをブックマークに保存" })).toBeTruthy();
 
     view.relocate(1, 0.42, "Chapter Two", { cfi: pageCFI });
-    fireEvent.click(screen.getByRole("button", { name: "このページのしおりを削除" }));
+    fireEvent.click(screen.getByRole("button", { name: "このページのブックマークを削除" }));
     await waitFor(() => expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", place));
-    expect(await screen.findByRole("button", { name: "このページをしおりに保存" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "このページをブックマークに保存" }),
+    ).toBeTruthy();
   });
 
   it("lists saved bookmarks and goes to them", async () => {
@@ -470,13 +474,13 @@ describe("EpubReader", () => {
     const { view } = await openReader();
     view.relocate(0, 0.05);
 
-    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
-    const links = await screen.findAllByRole("button", { name: /Chapter Oneのしおりへ移動/ });
+    fireEvent.click(screen.getByRole("button", { name: "ブックマークを開く" }));
+    const links = await screen.findAllByRole("button", { name: /Chapter Oneのブックマークへ移動/ });
     expect(links.map((link) => link.textContent)).toEqual(["Chapter One10%", "Chapter One80%"]);
     fireEvent.click(links[1] as HTMLElement);
     expect(view.goTo).toHaveBeenCalledWith("epubcfi(/6/6!/4/2/1:0)");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Chapter Oneのしおりを削除" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Chapter Oneのブックマークを削除" })[0]!);
     await waitFor(() =>
       expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", {
         kind: "epub",
@@ -486,7 +490,9 @@ describe("EpubReader", () => {
       }),
     );
     await waitFor(() =>
-      expect(screen.getAllByRole("button", { name: /Chapter Oneのしおりへ移動/ })).toHaveLength(1),
+      expect(
+        screen.getAllByRole("button", { name: /Chapter Oneのブックマークへ移動/ }),
+      ).toHaveLength(1),
     );
   });
 

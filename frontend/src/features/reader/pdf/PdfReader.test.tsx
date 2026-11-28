@@ -367,12 +367,14 @@ describe("PdfReader", () => {
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
-    const pageFourMarker = await screen.findByRole("button", { name: "しおり付きの4ページへ移動" });
+    const pageFourMarker = await screen.findByRole("button", {
+      name: "ブックマーク付きの4ページへ移動",
+    });
     expect(pageFourMarker.parentElement?.className).toBe("reader-slider-bookmarks");
     expect(pageFourMarker.getAttribute("style")).toContain("27.2727");
     expect(pageFourMarker.querySelector("svg")).toBeNull();
     expect(pageFourMarker.querySelector(".reader-slider-bookmark-dot")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "しおり付きの10ページへ移動" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "ブックマーク付きの10ページへ移動" })).toBeTruthy();
 
     fireEvent.click(pageFourMarker);
 
@@ -391,8 +393,10 @@ describe("PdfReader", () => {
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 400, height: 300 } }]));
 
-    expect(await screen.findByRole("button", { name: "しおり付きの4ページへ移動" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "しおり付きの30ページへ移動" })).toBeNull();
+    expect(
+      await screen.findByRole("button", { name: "ブックマーク付きの4ページへ移動" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "ブックマーク付きの30ページへ移動" })).toBeNull();
   });
 
   it("resets the reader scroll position after button, page input, and TOC navigation", async () => {
@@ -893,9 +897,9 @@ describe("PdfReader", () => {
     expect(screen.queryByRole("complementary", { name: "目次" })).toBeNull();
     expect(reader.className).toContain("is-chrome-visible");
 
-    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "ブックマークを開く" }));
     fireEvent.click(stage);
-    expect(screen.queryByRole("complementary", { name: "しおり" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "ブックマーク" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "本の中を検索" }));
     fireEvent.click(screen.getByRole("button", { name: "パネルを閉じる" }));
     expect(screen.queryByRole("complementary", { name: "本文検索" })).toBeNull();
@@ -940,12 +944,12 @@ describe("PdfReader", () => {
     await waitFor(() => expect(backend.listBookmarks).toHaveBeenCalledWith("book-1", "pdf"));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "ブックマークを開く" }));
     expect(await screen.findByText("2ページ")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "しおりの2ページへ移動" }));
+    fireEvent.click(screen.getByRole("button", { name: "ブックマークの2ページへ移動" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "2ページのしおりを削除" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "2ページのブックマークを削除" })[0]!);
     await waitFor(() =>
       expect(backend.removeBookmark).toHaveBeenCalledWith("book-1", { kind: "pdf", page: 2 }),
     );
@@ -953,7 +957,7 @@ describe("PdfReader", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "前のページ" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1));
-    fireEvent.click(screen.getByRole("button", { name: "1ページをしおりに保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "1ページをブックマークに保存" }));
     await waitFor(() =>
       expect(backend.addBookmark).toHaveBeenCalledWith("book-1", { kind: "pdf", page: 1 }, 2),
     );
