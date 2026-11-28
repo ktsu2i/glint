@@ -12,7 +12,7 @@
         <key>CFBundleVersion</key>
         <string>0.0.0</string>
         <key>CFBundleGetInfoString</key>
-        <string>Read any PDF or EPUB comfortably</string>
+        <string>Makes PDFs and EPUBs easier to read</string>
         <key>CFBundleShortVersionString</key>
         <string>0.0.0</string>
         <key>CFBundleIconFile</key>

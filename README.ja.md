@@ -4,7 +4,7 @@
 </h1>
 
 <p align="center">
-  <strong>どんな PDF も EPUB も読みやすくする macOS アプリ</strong>
+  <strong>PDF と EPUB を読みやすくするための macOS アプリ</strong>
   <br>
   PDF と EPUB を手元の本棚に並べて読み、読んだ本をまとめて全文検索できます。
   <br>
