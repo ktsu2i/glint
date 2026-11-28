@@ -155,7 +155,7 @@ func start(ctx context.Context, p paths, args []string) error {
 	}
 	executable, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("resolve the verify-glint executable: %w", err)
+		return fmt.Errorf("resolve the go tool verify executable: %w", err)
 	}
 	// The host outlives this command, so it must not be tied to ctx.
 	host := exec.Command(executable, hostCommand) //nolint:noctx // the host is detached and stopped by `stop`
@@ -198,7 +198,7 @@ func hostLogHint(p paths) string {
 	}
 	log := string(data)
 	if strings.Contains(log, "install the driver") || strings.Contains(log, "Executable doesn't exist") {
-		log += "\nRun `go tool verify-glint install` first."
+		log += "\nRun `go tool verify install` first."
 	}
 	return ":\n" + log
 }
@@ -293,7 +293,7 @@ func doctor(ctx context.Context, p paths) error {
 		}
 		if executable, err := os.Executable(); err == nil && executable != state.Executable {
 			healthy = false
-			lines = append(lines, "STALE DRIVER  verify-glint changed after start. Run `stop`, then `start`.")
+			lines = append(lines, "STALE DRIVER  go tool verify changed after start. Run `stop`, then `start`.")
 		}
 		if binary, err := os.Stat(p.binary); err == nil && binary.ModTime().After(state.StartedAt) {
 			healthy = false

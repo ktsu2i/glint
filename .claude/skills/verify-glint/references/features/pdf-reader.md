@@ -16,30 +16,30 @@ The reader that renders PDFs with PDF.js: page turns, going to a page number, th
 
 Click a card or "Continue" in the library. A book also opens right after import.
 
-## Driving it with verify-glint
+## Driving it with go tool verify
 
 ```bash
-go tool verify-glint wait ".text-layer[data-page='1'] span"
-go tool verify-glint press ArrowRight
-go tool verify-glint eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"   # "2 / 3"
+go tool verify wait ".text-layer[data-page='1'] span"
+go tool verify press ArrowRight
+go tool verify eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"   # "2 / 3"
 
 # go to a page number
-go tool verify-glint click button "Go to page"
-go tool verify-glint click-css "input[aria-label='Page number']"
-go tool verify-glint press Meta+A
-go tool verify-glint type 3
-go tool verify-glint press Enter
+go tool verify click button "Go to page"
+go tool verify click-css "input[aria-label='Page number']"
+go tool verify press Meta+A
+go tool verify type 3
+go tool verify press Enter
 
 # right binding reverses the arrow keys
-go tool verify-glint click button "View"
-go tool verify-glint click button "Right binding"
-go tool verify-glint press Escape
-go tool verify-glint sql "select page_number, binding_direction from book_reading_states"
+go tool verify click button "View"
+go tool verify click button "Right binding"
+go tool verify press Escape
+go tool verify sql "select page_number, binding_direction from book_reading_states"
 
 # restore the reading position
-go tool verify-glint restart-app
-go tool verify-glint click button "/Continue generated-reader/"
-go tool verify-glint eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"
+go tool verify restart-app
+go tool verify click button "/Continue generated-reader/"
+go tool verify eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"
 ```
 
 For actions that change the rendering (zoom, spread, binding), also keep a `screenshot`.

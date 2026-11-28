@@ -15,29 +15,29 @@ Coloring selected text. PDF highlights are located by on-page rectangles (`rects
 
 Drag across text in the reader. The list opens from "Open highlights" in the top bar.
 
-## Driving it with verify-glint
+## Driving it with go tool verify
 
 ```bash
 # create
-go tool verify-glint select-text ".text-layer[data-page='1'] span"   # prints the selected text
-go tool verify-glint click button "Highlight in yellow"
-go tool verify-glint wait ".highlight-mark.is-yellow"
-go tool verify-glint sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
+go tool verify select-text ".text-layer[data-page='1'] span"   # prints the selected text
+go tool verify click button "Highlight in yellow"
+go tool verify wait ".highlight-mark.is-yellow"
+go tool verify sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
 
 # change color
-go tool verify-glint mouse-click ".highlight-mark.is-yellow"
-go tool verify-glint click button "Change to pink"
-go tool verify-glint wait ".highlight-mark.is-pink"
+go tool verify mouse-click ".highlight-mark.is-yellow"
+go tool verify click button "Change to pink"
+go tool verify wait ".highlight-mark.is-pink"
 
 # list
-go tool verify-glint click button "Open highlights"
-go tool verify-glint snapshot          # listitems inside complementary "Highlights"
-go tool verify-glint click button "Go to the highlight on page 1"
+go tool verify click button "Open highlights"
+go tool verify snapshot          # listitems inside complementary "Highlights"
+go tool verify click button "Go to the highlight on page 1"
 
 # persistence
-go tool verify-glint restart-app
-go tool verify-glint click button "/Continue generated-reader/"
-go tool verify-glint wait ".highlight-mark.is-pink"
+go tool verify restart-app
+go tool verify click button "/Continue generated-reader/"
+go tool verify wait ".highlight-mark.is-pink"
 ```
 
 ## Gotchas

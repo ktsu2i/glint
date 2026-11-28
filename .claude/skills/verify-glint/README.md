@@ -6,7 +6,7 @@ A skill for running Glint and proving that a change works, with evidence. It dri
 
 - `SKILL.md`: instructions for agents
 - `references/features/`: the feature map, a behavior-level inventory of what to drive and what to check
-- `cmd/verify-glint`: the driver, run as `go tool verify-glint`
+- `cmd/verify`: the driver, run as `go tool verify`
 
 ## Setup
 
@@ -14,7 +14,7 @@ Once:
 
 ```bash
 (cd frontend && pnpm install --frozen-lockfile)
-go tool verify-glint install    # downloads the Playwright driver and WebKit
+go tool verify install    # downloads the Playwright driver and WebKit
 ```
 
 `start` builds the app for you.
@@ -38,21 +38,21 @@ Examples:
 Run it from anywhere inside the repository. Relative paths you pass, such as a book file, are resolved from the current directory.
 
 ```bash
-go tool verify-glint start          # rebuild if the sources are newer, then start on an empty library
-go tool verify-glint doctor         # check for "doctor: ok"
-go tool verify-glint snapshot       # accessibility tree; shows the names of buttons you can click
+go tool verify start          # rebuild if the sources are newer, then start on an empty library
+go tool verify doctor         # check for "doctor: ok"
+go tool verify snapshot       # accessibility tree; shows the names of buttons you can click
 
-go tool verify-glint dialog open-file frontend/testdata/generated-reader.pdf   # answer for the next file dialog
-go tool verify-glint click button "Add Book"
-go tool verify-glint wait ".text-layer[data-page='1'] span"
-go tool verify-glint screenshot /tmp/reader.png
-go tool verify-glint sql "select title, page_count from books"
+go tool verify dialog open-file frontend/testdata/generated-reader.pdf   # answer for the next file dialog
+go tool verify click button "Add Book"
+go tool verify wait ".text-layer[data-page='1'] span"
+go tool verify screenshot /tmp/reader.png
+go tool verify sql "select title, page_count from books"
 
-go tool verify-glint restart-app    # restart only the app on the same data
-go tool verify-glint stop           # stop everything and delete the data
+go tool verify restart-app    # restart only the app on the same data
+go tool verify stop           # stop everything and delete the data
 ```
 
-The loop is: read names with `snapshot`, act with `click`, wait for the result with `wait`, and check it with `screenshot` or `sql`. `go tool verify-glint help` lists every command.
+The loop is: read names with `snapshot`, act with `click`, wait for the result with `wait`, and check it with `screenshot` or `sql`. `go tool verify help` lists every command.
 
 ## What each command verifies
 

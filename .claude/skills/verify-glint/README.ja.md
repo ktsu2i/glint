@@ -6,7 +6,7 @@ Glint を実際に動かして、変更が効いていることを証拠付き�
 
 - `SKILL.md`：agent 向けの指示
 - `references/features/`：feature map。何を操作し、何を確かめるかを機能ごとにまとめた一覧
-- `cmd/verify-glint`：ドライバ。`go tool verify-glint` で実行する
+- `cmd/verify`：ドライバ。`go tool verify` で実行する
 
 ## 準備
 
@@ -14,7 +14,7 @@ Glint を実際に動かして、変更が効いていることを証拠付き�
 
 ```bash
 (cd frontend && pnpm install --frozen-lockfile)
-go tool verify-glint install    # Playwright のドライバと WebKit をダウンロードする
+go tool verify install    # Playwright のドライバと WebKit をダウンロードする
 ```
 
 ビルドは `start` が自動でする。
@@ -38,21 +38,21 @@ agent は、変更に関係する feature ファイルを読み、`start` と `d
 リポジトリの中ならどのディレクトリからでも実行できる。本のファイルなど、渡した相対パスは今いるディレクトリから解決される。
 
 ```bash
-go tool verify-glint start          # ソースが新しければビルドしてから起動。空のライブラリから始まる
-go tool verify-glint doctor         # doctor: ok になっているか
-go tool verify-glint snapshot       # 今の画面の a11y tree。押せるボタンの名前が分かる
+go tool verify start          # ソースが新しければビルドしてから起動。空のライブラリから始まる
+go tool verify doctor         # doctor: ok になっているか
+go tool verify snapshot       # 今の画面の a11y tree。押せるボタンの名前が分かる
 
-go tool verify-glint dialog open-file frontend/testdata/generated-reader.pdf   # 次のファイル選択ダイアログの答え
-go tool verify-glint click button "Add Book"
-go tool verify-glint wait ".text-layer[data-page='1'] span"
-go tool verify-glint screenshot /tmp/reader.png
-go tool verify-glint sql "select title, page_count from books"
+go tool verify dialog open-file frontend/testdata/generated-reader.pdf   # 次のファイル選択ダイアログの答え
+go tool verify click button "Add Book"
+go tool verify wait ".text-layer[data-page='1'] span"
+go tool verify screenshot /tmp/reader.png
+go tool verify sql "select title, page_count from books"
 
-go tool verify-glint restart-app    # 同じデータのままアプリだけを再起動
-go tool verify-glint stop           # 全部止めてデータを消す
+go tool verify restart-app    # 同じデータのままアプリだけを再起動
+go tool verify stop           # 全部止めてデータを消す
 ```
 
-`snapshot` で名前を見る、`click` で操作する、`wait` で結果を待つ、`screenshot` や `sql` で確かめる、の繰り返しになる。`go tool verify-glint help` で全コマンドを見られる。
+`snapshot` で名前を見る、`click` で操作する、`wait` で結果を待つ、`screenshot` や `sql` で確かめる、の繰り返しになる。`go tool verify help` で全コマンドを見られる。
 
 ## 各コマンドで確かめられること
 

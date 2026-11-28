@@ -74,7 +74,7 @@ func findRepository() (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("run verify-glint inside the Glint repository")
+			return "", errors.New("run go tool verify inside the Glint repository")
 		}
 		dir = parent
 	}
@@ -99,7 +99,7 @@ func readInstance(p paths) (*instance, error) {
 	}
 	var state instance
 	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("%s is not a verify-glint state. Run `stop`: %w", p.file, err)
+		return nil, fmt.Errorf("%s is not a go tool verify state. Run `stop`: %w", p.file, err)
 	}
 	return &state, nil
 }

@@ -14,28 +14,28 @@ Saving a page to come back to it. PDF bookmarks store the page number; EPUB book
 
 The bookmark button on the right of the reader's top bar. The list opens from "Open bookmarks" on the left.
 
-## Driving it with verify-glint
+## Driving it with go tool verify
 
 ```bash
-go tool verify-glint press ArrowRight
-go tool verify-glint click button "Save page 2"
-go tool verify-glint sql "select page_number, cfi, progress from book_bookmarks"     # 2||0
-go tool verify-glint snapshot          # the button becomes "Remove bookmark from page 2"
+go tool verify press ArrowRight
+go tool verify click button "Save page 2"
+go tool verify sql "select page_number, cfi, progress from book_bookmarks"     # 2||0
+go tool verify snapshot          # the button becomes "Remove bookmark from page 2"
 
 # jump from the list
-go tool verify-glint press ArrowLeft
-go tool verify-glint click button "Open bookmarks"
-go tool verify-glint click button "Go to bookmarked page 2"
+go tool verify press ArrowLeft
+go tool verify click button "Open bookmarks"
+go tool verify click button "Go to bookmarked page 2"
 
 # remove
-go tool verify-glint click button "Remove bookmark from page 2"
-go tool verify-glint sql "select count(*) from book_bookmarks"
+go tool verify click button "Remove bookmark from page 2"
+go tool verify sql "select count(*) from book_bookmarks"
 
 # persistence
-go tool verify-glint restart-app
-go tool verify-glint click button "/Continue generated-reader/"
-go tool verify-glint click button "Open bookmarks"
-go tool verify-glint snapshot
+go tool verify restart-app
+go tool verify click button "/Continue generated-reader/"
+go tool verify click button "Open bookmarks"
+go tool verify snapshot
 ```
 
 ## Gotchas

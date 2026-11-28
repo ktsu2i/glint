@@ -1,8 +1,8 @@
-// Command verify-glint drives Glint for verification. A host process keeps the
+// Command verify drives Glint for verification. A host process keeps the
 // app (a server-mode build with scripted dialogs) and one WebKit page alive
 // between commands, so an agent can act one step at a time.
 //
-// Run it with `go tool verify-glint help`.
+// Run it with `go tool verify help`.
 package main
 
 import (
@@ -14,7 +14,7 @@ import (
 	"syscall"
 )
 
-const usage = `Usage: go tool verify-glint <command> [args]
+const usage = `Usage: go tool verify <command> [args]
 
 Setup
   install                     Download the Playwright driver and WebKit (once)
@@ -105,7 +105,7 @@ func run(ctx context.Context, args []string) error {
 		return runHost(ctx, paths)
 	}
 	if !isHostCommand(command) {
-		return fmt.Errorf("unknown command %q. Run `go tool verify-glint help`", command)
+		return fmt.Errorf("unknown command %q. Run `go tool verify help`", command)
 	}
 	output, err := sendToHost(ctx, paths, command, args)
 	if err != nil {
@@ -115,4 +115,4 @@ func run(ctx context.Context, args []string) error {
 	return nil
 }
 
-var errNotRunning = errors.New("glint is not running. Run `go tool verify-glint start` first")
+var errNotRunning = errors.New("glint is not running. Run `go tool verify start` first")

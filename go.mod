@@ -196,7 +196,7 @@ require (
 )
 
 tool (
-	github.com/ktsu2i/glint/cmd/verify-glint
+	github.com/ktsu2i/glint/cmd/verify
 	github.com/sqlc-dev/sqlc/cmd/sqlc
 	github.com/wailsapp/wails/v3/cmd/wails3
 )

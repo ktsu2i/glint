@@ -69,16 +69,16 @@ linters:
             - "!**/cmd/**"
           deny:
             - pkg: github.com/mxschmitt/playwright-go
-              desc: Playwright is only for cmd/verify-glint
+              desc: Playwright is only for cmd/verify
         verify-tool:
           list-mode: lax
           files:
-            - "**/cmd/verify-glint/**"
+            - "**/cmd/verify/**"
           deny:
             - pkg: github.com/ktsu2i/glint/internal
-              desc: verify-glint drives the app from outside and must not import its packages
+              desc: go tool verify drives the app from outside and must not import its packages
             - pkg: github.com/wailsapp/wails
-              desc: verify-glint drives the app from outside and must not import Wails
+              desc: go tool verify drives the app from outside and must not import Wails
         leaf-packages:
           list-mode: lax
           files:

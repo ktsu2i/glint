@@ -16,34 +16,34 @@ The bookshelf screen: importing books, sorting, renaming, removing, covers, and 
 
 It is the first screen when the app starts. From the reader, "Library" at the top left goes back.
 
-## Driving it with verify-glint
+## Driving it with go tool verify
 
 ```bash
 # import (success)
-go tool verify-glint dialog open-file frontend/testdata/generated-reader.pdf
-go tool verify-glint click button "Add Book"
-go tool verify-glint wait ".text-layer[data-page='1'] span"
-go tool verify-glint dialog last          # open-file / Add a book to the library
-go tool verify-glint sql "select title, format, page_count, cover_thumbnail_status from books"
-go tool verify-glint sql "select count(*) from book_segments"
+go tool verify dialog open-file frontend/testdata/generated-reader.pdf
+go tool verify click button "Add Book"
+go tool verify wait ".text-layer[data-page='1'] span"
+go tool verify dialog last          # open-file / Add a book to the library
+go tool verify sql "select title, format, page_count, cover_thumbnail_status from books"
+go tool verify sql "select count(*) from book_segments"
 
 # import cancelled: click without writing an answer. No book is added
-go tool verify-glint click button "Add Book"
+go tool verify click button "Add Book"
 
 # continue reading
-go tool verify-glint click button "Library"
-go tool verify-glint click button "/Continue generated-reader/"
+go tool verify click button "Library"
+go tool verify click button "/Continue generated-reader/"
 
 # remove (cancel first, then accept)
-go tool verify-glint right-click article
-go tool verify-glint dialog confirm cancel
-go tool verify-glint click menuitem "Remove from Library"
-go tool verify-glint sql "select count(*) from books"        # still 1
-go tool verify-glint right-click article
-go tool verify-glint dialog confirm accept
-go tool verify-glint click menuitem "Remove from Library"
-go tool verify-glint wait article detached
-go tool verify-glint sql "select (select count(*) from books), (select count(*) from book_highlights), (select count(*) from book_bookmarks)"
+go tool verify right-click article
+go tool verify dialog confirm cancel
+go tool verify click menuitem "Remove from Library"
+go tool verify sql "select count(*) from books"        # still 1
+go tool verify right-click article
+go tool verify dialog confirm accept
+go tool verify click menuitem "Remove from Library"
+go tool verify wait article detached
+go tool verify sql "select (select count(*) from books), (select count(*) from book_highlights), (select count(*) from book_bookmarks)"
 ```
 
 To sort, click "Sort books: …", read the item names with `snapshot`, then pick one. Check the card order with `snapshot`.
