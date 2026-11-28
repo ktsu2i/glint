@@ -132,4 +132,4 @@ go tool verify stop           # 全部止めてデータを消す
 ## feature map の育て方
 
 - 機能を足したり UI を変えたりしたら、同じ PR で該当する feature ファイルも直す。英語で書き、4 つの見出しを揃える。
-- まだないファイル（ライブラリ全体の検索、read-aloud、settings、journeys）は、その機能を確かめる必要が出たときに足す。
+- まだないファイル（read-aloud、settings、journeys）は、その機能を確かめる必要が出たときに足す。
