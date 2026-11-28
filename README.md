@@ -6,6 +6,8 @@ A macOS reader for technical books. Open PDFs and EPUBs, keep them on a local sh
 
 ![Glint library](assets/library-en.png)
 
+![Opening and reading a book in Glint](assets/demo.gif)
+
 ## Features
 
 - **Local library** — Add PDFs and EPUBs and pick up where you left off.

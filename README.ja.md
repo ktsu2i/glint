@@ -6,6 +6,8 @@
 
 ![Glint の本棚](assets/library-ja.png)
 
+![Glint で本を開いて読む様子](assets/demo.gif)
+
 ## 主な機能
 
 - **ローカルの本棚** — PDF / EPUB を追加し、前回読んでいたページから再開できます。
