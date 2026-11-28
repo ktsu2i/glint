@@ -146,6 +146,12 @@ function contentSecurityPolicyPlugin(): Plugin {
 export default defineConfig({
   plugins: [react(), pdfjsAssetsPlugin(), foliateWithoutPdfPlugin(), contentSecurityPolicyPlugin()],
   clearScreen: false,
+  build: {
+    // The largest chunk is PDF.js's prebuilt worker (about 1.2 MB), which
+    // cannot be split and loads only when a PDF is opened. Everything else
+    // stays well under Vite's default 500 kB.
+    chunkSizeWarningLimit: 1300,
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
 import { LibraryScreen } from "../features/library/LibraryScreen";
 import { useLibrarySortOrder } from "../features/library/librarySort";
@@ -6,12 +6,19 @@ import { useBookIndexing, useCoverGeneration } from "../features/library/useBook
 import { useLibraryActions } from "../features/library/useLibraryActions";
 import { useLibraryBooks } from "../features/library/useLibraryBooks";
 import { useLibrarySearch } from "../features/library/useLibrarySearch";
-import { EpubReader } from "../features/reader/epub/EpubReader";
-import { PdfReader } from "../features/reader/pdf/PdfReader";
 import { useReadingPosition } from "../features/reader/useReadingPosition";
 import type { BookFile, BookSummary } from "../shared/api/books";
 import { I18nProvider } from "../shared/i18n/i18n";
 import { useAppTheme } from "./useAppTheme";
+
+// The readers, and PDF.js and foliate-js behind them, load when a book is
+// first opened so the library starts without them.
+const EpubReader = lazy(async () => ({
+  default: (await import("../features/reader/epub/EpubReader")).EpubReader,
+}));
+const PdfReader = lazy(async () => ({
+  default: (await import("../features/reader/pdf/PdfReader")).PdfReader,
+}));
 
 type View = "library" | "search" | "reader";
 
@@ -85,23 +92,25 @@ function AppContent() {
       <main className="app-shell">
         {view === "reader" ? (
           <div className="workspace">
-            {book?.format === "epub" ? (
-              <EpubReader
-                key={`${book.id}:${book.initialPage}`}
-                book={book}
-                initialSection={book.initialPage}
-                onPageChange={position.save}
-                onBack={showLibrary}
-              />
-            ) : (
-              <PdfReader
-                key={book ? `${book.id}:${book.url}:${book.initialPage}` : "none"}
-                book={book}
-                initialPage={book?.initialPage ?? 1}
-                onPageChange={position.save}
-                onBack={showLibrary}
-              />
-            )}
+            <Suspense fallback={null}>
+              {book?.format === "epub" ? (
+                <EpubReader
+                  key={`${book.id}:${book.initialPage}`}
+                  book={book}
+                  initialSection={book.initialPage}
+                  onPageChange={position.save}
+                  onBack={showLibrary}
+                />
+              ) : (
+                <PdfReader
+                  key={book ? `${book.id}:${book.url}:${book.initialPage}` : "none"}
+                  book={book}
+                  initialPage={book?.initialPage ?? 1}
+                  onPageChange={position.save}
+                  onBack={showLibrary}
+                />
+              )}
+            </Suspense>
           </div>
         ) : (
           <LibraryScreen
