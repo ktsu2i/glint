@@ -1,7 +1,6 @@
 package library
 
 import (
-	"database/sql"
 	"io/fs"
 	"path/filepath"
 	"strconv"
@@ -35,7 +34,7 @@ func TestStorePersistsLibraryAndReadingPosition(t *testing.T) {
 	store, err := Open(path)
 	require.NoError(t, err)
 	var version int
-	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version) FROM schema_migrations").Scan(&version))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version_id) FROM goose_db_version").Scan(&version))
 	assert.Equal(t, latestMigrationVersion(t), version)
 
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Go Guide.pdf", "hash-1", "pdf", 120, now)
@@ -81,47 +80,6 @@ func TestStorePersistsNonSecretAppSettings(t *testing.T) {
 	value, err = store.Setting(t.Context(), "appearance.theme")
 	require.NoError(t, err)
 	assert.Equal(t, "dark", value)
-}
-
-func TestStoreUpgradesLegacyMigrationTable(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "library.sqlite3")
-	db, err := sql.Open("sqlite", path)
-	require.NoError(t, err)
-	execSQL(t, db, `CREATE TABLE books (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        file_name TEXT NOT NULL,
-        source_path TEXT NOT NULL,
-        file_hash TEXT NOT NULL UNIQUE,
-        size_bytes INTEGER NOT NULL,
-        page_count INTEGER NOT NULL DEFAULT 0,
-        cover_thumbnail_path TEXT NOT NULL DEFAULT '',
-        cover_thumbnail_status TEXT NOT NULL DEFAULT 'pending',
-        imported_at TEXT NOT NULL,
-        last_opened_at TEXT NOT NULL DEFAULT '',
-        updated_at TEXT NOT NULL
-    )`)
-	execSQL(t, db, `CREATE TABLE book_reading_states (
-        book_id TEXT PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
-        page_number INTEGER NOT NULL DEFAULT 1,
-        updated_at TEXT NOT NULL
-    )`)
-	execSQL(t, db, `CREATE TABLE schema_migrations (
-        version INTEGER NOT NULL PRIMARY KEY,
-        dirty BOOLEAN NOT NULL
-    )`)
-	execSQL(t, db, "INSERT INTO schema_migrations (version, dirty) VALUES (1, 0)")
-	require.NoError(t, db.Close())
-
-	store, err := Open(path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = store.Close() })
-	var version int
-	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version) FROM schema_migrations").Scan(&version))
-	assert.Equal(t, latestMigrationVersion(t), version)
-	var settingsTable string
-	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'").Scan(&settingsTable))
-	assert.Equal(t, "app_settings", settingsTable)
 }
 
 func TestStoreDeduplicatesByFileHashAndUpdatesLocation(t *testing.T) {
@@ -403,7 +361,7 @@ func TestStoreReopeningAppliesFormatMigrationIdempotently(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	var version int
-	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version) FROM schema_migrations").Scan(&version))
+	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT MAX(version_id) FROM goose_db_version").Scan(&version))
 	assert.Equal(t, latestMigrationVersion(t), version)
 
 	var defaultValue string

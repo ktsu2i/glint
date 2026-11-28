@@ -61,6 +61,26 @@
       "algorithm": "sha256"
     },
     {
+      "id": "github_release/github.com/pressly/goose/v3.30.2/goose_darwin_arm64",
+      "checksum": "3254EAC36EB103683F097594974AF043033FC2E63553C745678B327FBF26E892",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/pressly/goose/v3.30.2/goose_darwin_x86_64",
+      "checksum": "28340A6E48349B6178D23C3F6B7E7A53BB3FA4442741B9C5B0BD73C5E5D22B9E",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/pressly/goose/v3.30.2/goose_linux_arm64",
+      "checksum": "405956E6AF9CFC4D585423EADCCDCE74C337B51D632986C83BBEEB763D235730",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/pressly/goose/v3.30.2/goose_linux_x86_64",
+      "checksum": "82D5818C1F33A28396822CE6BBAA18D05EE1C4591ED4B2257A2395743F2D12B5",
+      "algorithm": "sha256"
+    },
+    {
       "id": "github_release/github.com/rhysd/actionlint/v1.7.12/actionlint_1.7.12_darwin_amd64.tar.gz",
       "checksum": "5B44C3BC2255115C9B69E30EFC0FECDF498FDB63C5D58E17084FD5F16324C644",
       "algorithm": "sha256"

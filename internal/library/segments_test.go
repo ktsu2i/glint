@@ -2,10 +2,8 @@ package library
 
 import (
 	"database/sql"
-	"io/fs"
 	"path/filepath"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -207,7 +205,7 @@ func TestCaseVariantsExpandOnlyNonASCIIRunes(t *testing.T) {
 
 func TestOpenNormalizesSegmentsSavedBeforeNFKC(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.sqlite3")
-	db, closeDB := migrateBefore(t, path, "9999")
+	db, closeDB := migrateOnly(t, path)
 	execSQL(t, db, `INSERT INTO books (id, title, file_name, source_path, file_hash, size_bytes, imported_at, updated_at)
         VALUES ('book-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 10, 'now', 'now')`)
 	execSQL(t, db, `INSERT INTO book_segments (book_id, ordinal, kind, location, text, updated_at)
@@ -233,94 +231,13 @@ func TestOpenNormalizesSegmentsSavedBeforeNFKC(t *testing.T) {
 	requireFTSInSync(t, reopened)
 }
 
-func migrateBefore(t *testing.T, path, firstSkipped string) (*sql.DB, func()) {
+// migrateOnly applies the migrations without the data fixes Open runs after them.
+func migrateOnly(t *testing.T, path string) (*sql.DB, func()) {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
 	require.NoError(t, err)
-	before := fstest.MapFS{}
-	names, err := fs.Glob(migrations.FS, "*.sql")
-	require.NoError(t, err)
-	for _, name := range names {
-		if name >= firstSkipped {
-			continue
-		}
-		body, err := fs.ReadFile(migrations.FS, name)
-		require.NoError(t, err)
-		before[name] = &fstest.MapFile{Data: body}
-	}
-	require.NoError(t, (&sqlite.Migrator{DB: db, FS: before}).Up(t.Context()))
+	require.NoError(t, sqlite.Migrate(t.Context(), db, migrations.FS))
 	return db, func() { require.NoError(t, db.Close()) }
-}
-
-func TestFTSMigrationIndexesExistingPages(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "library.sqlite3")
-	db, closeDB := migrateBefore(t, path, "0009")
-	execSQL(t, db, `INSERT INTO books (id, title, file_name, source_path, file_hash, size_bytes, imported_at, updated_at)
-        VALUES ('book-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 10, 'now', 'now')`)
-	execSQL(t, db, `INSERT INTO book_pages (id, book_id, page_number, text, updated_at)
-        VALUES ('book-1:1', 'book-1', 1, 'Context builder trims prompts', 'now'),
-               ('book-1:2', 'book-1', 2, 'Unrelated page', 'now')`)
-	closeDB()
-
-	store, err := Open(path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = store.Close() })
-	requireFTSInSync(t, store)
-	results, err := store.SearchBookSegments(t.Context(), "book-1", "context builder", 20)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, 1, results[0].Ordinal)
-
-	_, err = store.SaveBookSegments(t.Context(), "book-1", []BookSegment{pageSegment(3, "Context again")}, 3, time.Now())
-	require.NoError(t, err)
-	count, err := store.BookSegmentCount(t.Context(), "book-1")
-	require.NoError(t, err)
-	assert.Equal(t, 3, count)
-}
-
-func TestSegmentMigrationMapsPDFPagesAndEPUBSpineItems(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "library.sqlite3")
-	db, closeDB := migrateBefore(t, path, "0010")
-	execSQL(t, db, `INSERT INTO books (id, title, file_name, source_path, file_hash, format, size_bytes, imported_at, updated_at)
-        VALUES ('pdf-1', 'Guide', 'Guide.pdf', '/tmp/Guide.pdf', 'hash-1', 'pdf', 10, 'now', 'now'),
-               ('epub-1', 'Novel', 'Novel.epub', '/tmp/Novel.epub', 'hash-2', 'epub', 10, 'now', 'now')`)
-	execSQL(t, db, `INSERT INTO book_pages (id, book_id, page_number, text, updated_at)
-        VALUES ('pdf-1:4', 'pdf-1', 4, 'Channels on page four', 'now'),
-               ('epub-1:1', 'epub-1', 1, 'Opening chapter about channels', 'now'),
-               ('epub-1:2', 'epub-1', 2, 'Second chapter', 'now')`)
-	closeDB()
-
-	store, err := Open(path)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = store.Close() })
-	requireFTSInSync(t, store)
-
-	type row struct {
-		BookID, Kind, Location string
-		Ordinal                int
-	}
-	rows, err := store.db.QueryContext(t.Context(),
-		"SELECT book_id, kind, location, ordinal FROM book_segments ORDER BY book_id, ordinal")
-	require.NoError(t, err)
-	defer func() { _ = rows.Close() }()
-	var got []row
-	for rows.Next() {
-		var r row
-		require.NoError(t, rows.Scan(&r.BookID, &r.Kind, &r.Location, &r.Ordinal))
-		got = append(got, r)
-	}
-	require.NoError(t, rows.Err())
-	assert.Equal(t, []row{
-		{BookID: "epub-1", Kind: SegmentKindSection, Location: "spine:0", Ordinal: 1},
-		{BookID: "epub-1", Kind: SegmentKindSection, Location: "spine:1", Ordinal: 2},
-		{BookID: "pdf-1", Kind: SegmentKindPage, Location: "page:4", Ordinal: 4},
-	}, got)
-
-	hits, err := store.SearchLibrarySegments(t.Context(), "channels", 3, 10)
-	require.NoError(t, err)
-	require.Len(t, hits, 2)
-	locations := []string{hits[0].Segments[0].Location, hits[1].Segments[0].Location}
-	assert.ElementsMatch(t, []string{"spine:0", "page:4"}, locations)
 }
 
 func TestSaveBookSegmentsRejectsInvalidSegments(t *testing.T) {
