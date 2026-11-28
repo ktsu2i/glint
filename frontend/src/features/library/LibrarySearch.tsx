@@ -11,8 +11,6 @@ function foldForTitleMatch(text: string): string {
   return text.normalize("NFKC").toLocaleLowerCase();
 }
 
-// matchBooksByTitle keeps the books whose title contains every
-// whitespace-separated term of the query, ignoring case and width.
 export function matchBooksByTitle(books: BookSummary[], query: string): BookSummary[] {
   const terms = foldForTitleMatch(query).split(/\s+/).filter(Boolean);
   if (terms.length === 0) {
@@ -35,7 +33,6 @@ type LibrarySearchFieldProps = {
   onClose: () => void;
 };
 
-// LibrarySearchField turns the library top bar into the search box.
 export function LibrarySearchField({
   searchInput,
   searchStatus,
@@ -119,9 +116,6 @@ type LibrarySearchResultsProps = {
   onRelinkBook: (book: BookSummary) => Promise<void>;
 };
 
-// LibrarySearchResults lays the hits out where the shelf usually is. Books
-// whose title matches show up while typing; the full-text hits follow once
-// the query is submitted.
 export function LibrarySearchResults({
   books,
   busyBookId,
@@ -137,8 +131,6 @@ export function LibrarySearchResults({
   const { t } = useTranslation();
   const isSearching = searchStatus === "loading";
   const hasSubmitted = searchStatus !== "idle";
-  // Keep the previous hits on screen while the next query runs, so typing
-  // does not make the results flicker.
   const hasResults = (searchStatus === "ready" || isSearching) && searchResults.length > 0;
   const titleQuery = searchInput.trim();
   const titleMatches = matchBooksByTitle(books, titleQuery);

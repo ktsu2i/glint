@@ -1,4 +1,3 @@
-/* Settings window, opened with Command-comma. */
 body:has(.settings-window) {
   min-width: 0;
 }

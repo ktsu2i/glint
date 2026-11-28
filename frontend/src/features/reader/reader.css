@@ -92,7 +92,6 @@
   line-height: 1.85;
 }
 
-/* The draggable strip keeps the window movable while the bars are hidden. */
 .reader-drag-region {
   position: absolute;
   z-index: 1;
@@ -133,7 +132,6 @@
   gap: 4px;
   opacity: 0;
   transform: translateY(var(--chrome-offset));
-  /* windowControlsFadeSeconds in internal/app fades the traffic lights to match. */
   transition:
     opacity 180ms ease,
     transform 180ms ease;
@@ -239,7 +237,6 @@
   transform: translateX(-50%);
 }
 
-/* The view menu holds the page layout, binding, and zoom. */
 .reader-view-menu {
   position: absolute;
   z-index: 7;
@@ -320,7 +317,6 @@
   box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
 }
 
-/* Side sheet for the table of contents, search, and bookmarks. */
 .reader-sheet {
   position: absolute;
   z-index: 6;
@@ -619,7 +615,6 @@
   opacity: 0.3;
 }
 
-/* Highlights: the list in the side sheet and the floating color picker. */
 .reader-highlight-list {
   display: flex;
   flex-direction: column;
@@ -720,7 +715,6 @@
   transform: scale(1.12);
 }
 
-/* The current color of a highlight carries a ring. */
 .reader-highlight-swatch[aria-pressed="true"] {
   outline: 2px solid var(--glass-ink);
   outline-offset: 2px;
@@ -766,7 +760,6 @@
   opacity: 0.5;
 }
 
-/* Bottom bar: page turning, page number, and the page slider. */
 .page-count {
   min-width: 82px;
   height: 30px;
@@ -993,10 +986,6 @@ button.page-count:disabled {
   outline-offset: 1px;
 }
 
-/*
- * foliate-js lays an EPUB out in pages. The whole window is the sheet of
- * paper, as on an e-reader; the bars float over its margins.
- */
 .epub-stage {
   position: relative;
   min-height: 0;
@@ -1020,7 +1009,6 @@ button.page-count:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-/* The page sits in the middle of the ambient backdrop. */
 .pdf-stage {
   position: relative;
   min-height: 0;

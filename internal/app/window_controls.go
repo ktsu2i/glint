@@ -1,13 +1,9 @@
 package app
 
-// windowControls shows and hides the macOS traffic-light buttons of the main
-// window. Tests replace it with a fake.
 type windowControls interface {
 	SetVisible(visible bool)
 }
 
-// WindowService is bound to the frontend so the reader can hide the window
-// controls together with its own toolbars.
 type WindowService struct {
 	controls windowControls
 }

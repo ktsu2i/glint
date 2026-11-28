@@ -19,19 +19,15 @@ var (
 	ErrHighlightNotFound = errors.New("highlight not found")
 )
 
-// HighlightColors lists the colors a highlight can take.
 var HighlightColors = []string{"yellow", "green", "pink", "purple"}
 
 const (
 	MaxHighlightTextRunes = 10_000
 	MaxHighlightRects     = 1_000
 	MaxHighlightCFIBytes  = 4_096
-	// rectTolerance absorbs rounding where the selection touches a page edge.
-	rectTolerance = 0.01
+	rectTolerance         = 0.01
 )
 
-// HighlightRect is a rectangle on the page, in fractions of the page width and
-// height, so the highlight lines up at any zoom level.
 type HighlightRect struct {
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
@@ -39,8 +35,6 @@ type HighlightRect struct {
 	Height float64 `json:"height"`
 }
 
-// BookHighlight is placed on a PDF page by Rects, or in an EPUB by CFI; the
-// other is empty. For an EPUB, PageNumber is the section, counted from 1.
 type BookHighlight struct {
 	ID         int64
 	PageNumber int
@@ -199,7 +193,6 @@ func validHighlight(input NewHighlight, text string) bool {
 		return false
 	}
 	if input.CFI != "" {
-		// An EPUB highlight is placed by its CFI alone.
 		return len(input.Rects) == 0 && validCFI(input.CFI)
 	}
 	if len(input.Rects) == 0 || len(input.Rects) > MaxHighlightRects {

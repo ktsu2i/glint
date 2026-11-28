@@ -11,12 +11,6 @@ export type EpubTheme = "light" | "dark";
 const markupTypes = new Set(["application/xhtml+xml", "text/html", "image/svg+xml"]);
 const activeElements = "script, iframe, object, embed, frame, frameset, meta[http-equiv]";
 
-/**
- * Removes what could run code from a section: script and embedding elements,
- * event handler attributes, and javascript: links. The production build also
- * blocks scripts with a Content Security Policy; this keeps them out in
- * development too, and from books that rely on neither.
- */
 export function stripActiveContent(markup: string, type: string): string {
   const parser = new DOMParser();
   let documentType: DOMParserSupportedType =
@@ -58,7 +52,6 @@ function eventDetail(event: Event): object | null {
   return typeof detail === "object" && detail !== null ? detail : null;
 }
 
-/** Keeps a book's scripts from loading, and strips active content from its sections. */
 export function guardEpubContent(target: EventTarget) {
   target.addEventListener("load", (event) => {
     const detail = eventDetail(event);
@@ -85,11 +78,6 @@ export function guardEpubContent(target: EventTarget) {
   });
 }
 
-/**
- * The styles laid over every section: the reader's text size, code that wraps
- * instead of running off the page, and in the dark theme the reader's colors
- * in place of the book's. The page background is left to the reader.
- */
 export function epubStyles(fontScale: number, theme: EpubTheme): string {
   const base = `
 html {
@@ -128,7 +116,6 @@ export type EpubTocLine = {
   depth: number;
 };
 
-/** Flattens the nested table of contents into indented lines. */
 export function flattenToc(
   items: FoliateTocItem[] | null | undefined,
   depth = 0,
@@ -147,10 +134,6 @@ export function flattenToc(
 
 export const defaultReaderSettings: ReaderSettings = { epubFontScale: 100, epubLayout: "spread" };
 
-/**
- * The fill of each highlight color. foliate-js draws it at the opacity the
- * reader sets, under the text, so it reads in both themes.
- */
 export const epubHighlightFills: Record<HighlightColor, string> = {
   yellow: "#ffd000",
   green: "#4cc552",
@@ -158,7 +141,6 @@ export const epubHighlightFills: Record<HighlightColor, string> = {
   purple: "#9664ff",
 };
 
-/** Orders highlights as they appear in the book. */
 export function sortEpubHighlights(highlights: BookHighlight[]): BookHighlight[] {
   return highlights.toSorted((a, b) => {
     if (a.pageNumber !== b.pageNumber) {
@@ -172,7 +154,6 @@ export function sortEpubHighlights(highlights: BookHighlight[]): BookHighlight[]
   });
 }
 
-/** Orders bookmarks as they appear in the book. */
 export function sortEpubBookmarks(bookmarks: BookBookmark[]): BookBookmark[] {
   return bookmarks.toSorted((a, b) => {
     if (a.pageNumber !== b.pageNumber) {
@@ -186,7 +167,6 @@ export function sortEpubBookmarks(bookmarks: BookBookmark[]): BookBookmark[] {
   });
 }
 
-/** The place a page starts, from the CFI of the range the page shows. */
 export function pageStartCFI(pageCFI: string): string {
   try {
     return collapseCFI(pageCFI);
@@ -195,10 +175,6 @@ export function pageStartCFI(pageCFI: string): string {
   }
 }
 
-/**
- * Whether a place falls on the page that shows the given range. The page ends
- * where the next one starts, so that place belongs to the next page.
- */
 export function isCFIOnPage(cfi: string, pageCFI: string): boolean {
   try {
     const start = collapseCFI(pageCFI);
@@ -221,10 +197,6 @@ function isDocument(node: Node): node is Document {
   return node.nodeType === 9;
 }
 
-/**
- * The text a range shows, for reading aloud. Blocks are kept on lines of
- * their own, so a heading does not run into the paragraph after it.
- */
 export function rangeSpeechText(range: Range): string {
   const root = range.commonAncestorContainer;
   const doc = root.ownerDocument ?? (isDocument(root) ? root : null);

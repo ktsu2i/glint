@@ -7,7 +7,6 @@ type TurnButton = { label: string; disabled: boolean; onClick: () => void };
 
 export type SliderMarker = {
   key: string | number;
-  /** Where the marker sits on the rail, from 0 to 100. */
   position: number;
   current: boolean;
   label: string;
@@ -18,15 +17,12 @@ export type SliderMarker = {
 type ReaderBottomBarProps = {
   left: TurnButton;
   right: TurnButton;
-  /** The page number or progress between the turn buttons. */
   counter: ReactNode;
   rtl: boolean;
-  /** The range input of the rail. */
   slider: ReactNode;
   markers: SliderMarker[];
 };
 
-/** Page turning, where the reader is, and the slider with bookmarks on it. */
 export function ReaderBottomBar({
   left,
   right,

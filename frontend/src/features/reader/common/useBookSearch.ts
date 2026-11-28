@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { searchBook } from "../api";
 import type { BookSearchResult } from "../../../shared/api/books";
 
-/** The text search within one book. A newer search wins over an older one. */
 export function useBookSearch(bookId: string | undefined) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -46,7 +45,6 @@ export function useBookSearch(bookId: string | undefined) {
     }
   }, [bookId, query, t]);
 
-  /** Forgets the search, and drops the answer to one still running. */
   const reset = useCallback(() => {
     requestRef.current += 1;
     setQuery("");

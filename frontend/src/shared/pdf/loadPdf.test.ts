@@ -106,7 +106,6 @@ describe("createPdfLoadingTask", () => {
     });
   });
 
-  // oxlint-disable-next-line vitest/expect-expect -- document global が無い環境でも例外なく解決できることを確認する。
   it("resolves asset URLs without a document global", async () => {
     vi.stubGlobal("document", undefined);
     const pdf = createOnePagePdf();
@@ -116,6 +115,7 @@ describe("createPdfLoadingTask", () => {
     );
 
     const task = await createPdfLoadingTask("/book/token", new AbortController().signal);
+    await expect(task.promise).resolves.toHaveProperty("numPages", 1);
     await task.destroy();
   });
 });

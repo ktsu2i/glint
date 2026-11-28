@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/glebarez/go-sqlite" // registers the pure Go "sqlite" database/sql driver
+	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/ktsu2i/glint/internal/library/librarydb"
 	"github.com/ktsu2i/glint/internal/sqlite"
@@ -44,13 +44,10 @@ type Book struct {
 	ImportedAt           string
 	LastOpenedAt         string
 	LastPage             int
-	// LastCFI is the place in the LastPage section where an EPUB was left.
-	// It is empty for a PDF.
-	LastCFI          string
-	BindingDirection string
+	LastCFI              string
+	BindingDirection     string
 }
 
-// A PDF spread reads left to right, or right to left for a book bound on the right.
 const (
 	BindingLeftToRight = "ltr"
 	BindingRightToLeft = "rtl"
@@ -170,7 +167,6 @@ func (store *Store) Close() error {
 	return store.db.Close()
 }
 
-// inTx runs fn in a transaction and rolls back when fn returns an error.
 func (store *Store) inTx(ctx context.Context, fn func(queries *librarydb.Queries) error) error {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -254,8 +250,6 @@ func (store *Store) MarkOpened(ctx context.Context, id string, now time.Time) er
 	return requireChanged(affected, err, "mark book opened")
 }
 
-// SaveReadingPosition keeps the page a book was left on. For an EPUB, the page
-// is the section and cfi the place in it; a PDF passes an empty cfi.
 func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumber, pageCount int, cfi string, now time.Time) error {
 	if pageNumber < 1 || pageCount < 1 || pageNumber > pageCount || (cfi != "" && !validCFI(cfi)) {
 		return ErrInvalidReadingPosition
@@ -282,7 +276,6 @@ func (store *Store) SaveReadingPosition(ctx context.Context, id string, pageNumb
 	})
 }
 
-// SaveBindingDirection keeps which side a book is bound on.
 func (store *Store) SaveBindingDirection(ctx context.Context, id, direction string, now time.Time) error {
 	if direction != BindingLeftToRight && direction != BindingRightToLeft {
 		return ErrInvalidBindingDirection

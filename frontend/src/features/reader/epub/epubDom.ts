@@ -6,7 +6,6 @@ function currentTheme(): EpubTheme {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
-/** Follows the app theme, which the settings window can change at any time. */
 export function useDocumentTheme(): EpubTheme {
   const [theme, setTheme] = useState<EpubTheme>(currentTheme);
   useEffect(() => {
@@ -37,10 +36,6 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-/**
- * Places a range from a section in the reader's coordinates. The section is in
- * a frame, so its position is added to the range's.
- */
 export function rangeAnchor(range: Range, reader: HTMLElement | null): FloatingAnchor | null {
   const frame = range.startContainer.ownerDocument?.defaultView?.frameElement;
   if (!reader || !frame) {

@@ -15,13 +15,10 @@ import (
 
 const maxCoverBytes = 4 << 20
 
-// MaxCoverBytes caps the size of a cover image rendered by the frontend.
 const MaxCoverBytes = maxCoverBytes
 
-// ErrInvalidCover reports cover image data that is not an acceptable PNG.
 var ErrInvalidCover = errors.New("cover image must be a PNG")
 
-// SaveCover stores a PNG cover rendered by the frontend.
 func (s *Service) SaveCover(ctx context.Context, bookID string, png []byte) error {
 	if len(png) > maxCoverBytes {
 		return fmt.Errorf("%w: image is too large", ErrInvalidCover)

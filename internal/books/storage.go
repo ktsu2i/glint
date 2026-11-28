@@ -13,8 +13,6 @@ import (
 	"github.com/ktsu2i/glint/internal/library"
 )
 
-// booksDirectory is where the library keeps its own copy of every book file,
-// so a book stays readable after the file it was added from is moved or deleted.
 func (s *Service) booksDirectory() string {
 	return filepath.Join(s.dataDirectory, "books")
 }
@@ -23,7 +21,6 @@ func (s *Service) bookDirectory(id string) string {
 	return filepath.Join(s.booksDirectory(), id)
 }
 
-// isStored reports whether path is a copy the library manages.
 func (s *Service) isStored(path string) bool {
 	rel, err := filepath.Rel(s.booksDirectory(), path)
 	if err != nil {
@@ -32,8 +29,6 @@ func (s *Service) isStored(path string) bool {
 	return rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
 }
 
-// storeCopy copies the file at sourcePath into the library under the book id,
-// keeping its file name and modification time. It returns the copy's path.
 func (s *Service) storeCopy(id, sourcePath string) (string, error) {
 	if id == "" {
 		return "", errors.New("store book file: empty book id")
@@ -86,8 +81,6 @@ func (s *Service) storeCopy(id, sourcePath string) (string, error) {
 	return destination, nil
 }
 
-// removeOtherCopies deletes files in the book's directory other than keep,
-// such as the copy of a file the book was linked to before.
 func (s *Service) removeOtherCopies(id, keep string) {
 	entries, err := os.ReadDir(s.bookDirectory(id))
 	if err != nil {
@@ -101,9 +94,6 @@ func (s *Service) removeOtherCopies(id, keep string) {
 	}
 }
 
-// adoptSource moves a book that still points at a file outside the library
-// onto a library copy. It is best effort: when the file is gone or cannot be
-// copied, the book is returned unchanged.
 func (s *Service) adoptSource(ctx context.Context, book library.Book) (library.Book, error) {
 	if s.isStored(book.SourcePath) || !fileExists(book.SourcePath) {
 		return book, nil
@@ -112,8 +102,6 @@ func (s *Service) adoptSource(ctx context.Context, book library.Book) (library.B
 	if err != nil {
 		return book, nil
 	}
-	// Relink clears the recorded mod time, so the next Open hashes the copy and
-	// catches a file that changed since it was last read.
 	adopted, err := s.library.Relink(ctx, book.ID, stored, book.FileHash, book.SizeBytes, time.Now())
 	if err != nil {
 		_ = os.Remove(stored)

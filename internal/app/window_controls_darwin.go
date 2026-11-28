@@ -51,8 +51,6 @@ import "C"
 
 import "github.com/wailsapp/wails/v3/pkg/application"
 
-// windowControlsFadeSeconds matches the opacity transition of .reader-topbar
-// in frontend/src/styles.css.
 const windowControlsFadeSeconds = 0.18
 
 // NativeWindowControls fades the traffic lights of a window through AppKit,

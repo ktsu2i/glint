@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import type { BookSummary } from "../../shared/api/books";
 import { listBooks } from "./api";
 
-/** The books on the shelf, loaded when the app starts and refreshed on demand. */
 export function useLibraryBooks() {
   const { t } = useTranslation();
   const [books, setBooks] = useState<BookSummary[]>([]);

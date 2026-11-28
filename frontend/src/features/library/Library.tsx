@@ -19,7 +19,6 @@ function formatBadgeLabel(format: BookFormat | undefined): string {
   return format === "epub" ? "EPUB" : "PDF";
 }
 
-// The hero offers to continue the available book the user opened most recently.
 function mostRecentBook(books: BookSummary[]): BookSummary | null {
   let recent: BookSummary | null = null;
   let recentTime = Number.NEGATIVE_INFINITY;

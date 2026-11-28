@@ -14,9 +14,6 @@ type LibraryTopBarProps = {
   onSortOrderChange: (order: LibrarySortOrder) => void;
 };
 
-// LibraryTopBar is the floating glass bar of the library. The shelf speaks for
-// itself, so the title is only for assistive technology. While searching, the
-// search and sort buttons give way to the search field.
 export function LibraryTopBar({
   title,
   opening,

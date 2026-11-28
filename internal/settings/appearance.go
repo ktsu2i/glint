@@ -9,7 +9,6 @@ import (
 
 const appearanceThemeSettingKey = "appearance.theme"
 
-// ErrInvalidTheme reports a theme other than light, dark or system.
 var ErrInvalidTheme = errors.New("theme must be light, dark or system")
 
 type Theme string

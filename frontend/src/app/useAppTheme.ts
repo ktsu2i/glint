@@ -4,7 +4,6 @@ import { syncDocumentTheme } from "../features/settings/theme";
 import { onAppearanceChanged } from "../shared/api/events";
 import { getAppearanceSettings, type ThemePreference } from "../shared/api/settings";
 
-/** Applies the saved theme to the main window and follows the settings window. */
 export function useAppTheme() {
   const { t } = useTranslation();
   const [theme, setTheme] = useState<ThemePreference>("system");
@@ -27,6 +26,5 @@ export function useAppTheme() {
     };
   }, [t]);
 
-  // The settings window saves the theme; follow it here as well.
   useEffect(() => onAppearanceChanged(setTheme), []);
 }

@@ -3,13 +3,8 @@ import { useTranslation } from "react-i18next";
 import { searchLibrary, type LibrarySearchHit } from "./api";
 import type { LibrarySearchStatus } from "./LibrarySearch";
 
-// Long enough to skip the keystrokes in a word, short enough to feel live.
 const LIBRARY_SEARCH_DEBOUNCE_MS = 250;
 
-/**
- * The search across the text of every book. While active, it searches as the
- * query is typed, once typing pauses. A newer search wins over an older one.
- */
 export function useLibrarySearch(active: boolean) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");

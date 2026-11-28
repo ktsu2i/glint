@@ -23,7 +23,6 @@ function errorMessage(reason: unknown, fallback: string): string {
   return fallback;
 }
 
-// SettingsWindow is the content of the separate window opened with Command-comma.
 export function SettingsWindow() {
   const { t } = useTranslation();
   const {
@@ -84,7 +83,6 @@ export function SettingsWindow() {
     try {
       await changeLanguage(next);
     } catch {
-      // useLanguageSettings keeps the error to show it below.
     } finally {
       setSavingLanguage(false);
     }

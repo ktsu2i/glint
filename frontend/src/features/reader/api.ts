@@ -17,11 +17,6 @@ import {
 import { SetWindowControlsVisible } from "../../../bindings/github.com/ktsu2i/glint/internal/app/windowservice";
 import type { BindingDirection, BookSearchResult } from "../../shared/api/books";
 
-/**
- * A bookmark marks a PDF page, or a place in an EPUB by its CFI. For an EPUB,
- * pageNumber is the section, counted from 1, and progress is where the place
- * sits in the book, from 0 to 1. A PDF bookmark has an empty CFI and progress 0.
- */
 export type BookBookmark = {
   pageNumber: number;
   cfi: string;
@@ -29,7 +24,6 @@ export type BookBookmark = {
   createdAt: string;
 };
 
-/** Where an EPUB bookmark sits; a PDF bookmark has none. */
 type BookmarkPlace = {
   cfi: string;
   progress: number;
@@ -37,7 +31,6 @@ type BookmarkPlace = {
 
 export type HighlightColor = "yellow" | "green" | "pink" | "purple";
 
-/** A rectangle on the page, in fractions of the page width and height. */
 export type HighlightRect = {
   x: number;
   y: number;
@@ -45,10 +38,6 @@ export type HighlightRect = {
   height: number;
 };
 
-/**
- * A highlight sits on a PDF page by its rectangles, or in an EPUB by its CFI.
- * For an EPUB, pageNumber is the section, counted from 1.
- */
 export type BookHighlight = {
   id: number;
   pageNumber: number;
@@ -70,7 +59,6 @@ type HighlightInput = {
 
 export type EpubLayout = "single" | "spread";
 
-/** How the reader shows books. Every book shares them. */
 export type ReaderSettings = {
   epubFontScale: number;
   epubLayout: EpubLayout;

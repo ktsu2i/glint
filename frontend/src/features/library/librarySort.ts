@@ -21,7 +21,6 @@ function time(value: string): number {
   return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
 }
 
-// compareNewest puts the later time first.
 function compareNewest(a: number, b: number): number {
   if (a === b) {
     return 0;
@@ -29,8 +28,6 @@ function compareNewest(a: number, b: number): number {
   return a < b ? 1 : -1;
 }
 
-// Books never opened go after the opened ones, newest import first, which
-// matches the order the backend lists them in.
 function compareRecent(a: BookSummary, b: BookSummary): number {
   return (
     compareNewest(time(a.lastOpenedAt), time(b.lastOpenedAt)) ||
@@ -38,7 +35,6 @@ function compareRecent(a: BookSummary, b: BookSummary): number {
   );
 }
 
-// sortBooks returns a new array; it never reorders the books it was given.
 export function sortBooks(
   books: readonly BookSummary[],
   order: LibrarySortOrder,
@@ -74,10 +70,8 @@ async function loadSortOrder(): Promise<LibrarySortOrder> {
   return isSortOrder(saved.sortOrder) ? saved.sortOrder : "recent";
 }
 
-// useLibrarySortOrder remembers the shelf order in the library between launches.
 export function useLibrarySortOrder(): [LibrarySortOrder, (order: LibrarySortOrder) => void] {
   const [order, setOrder] = useState<LibrarySortOrder>("recent");
-  // A choice made while the saved order loads wins over it.
   const chosenRef = useRef(false);
 
   useEffect(() => {

@@ -7,12 +7,8 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// settingsWindowURL tells the frontend to render the settings window
-// instead of the library and the reader.
 const settingsWindowURL = "/#settings"
 
-// SettingsWindow opens the settings window from the application menu and
-// keeps at most one of them open.
 type SettingsWindow struct {
 	app    *application.App
 	mu     sync.Mutex
@@ -23,7 +19,6 @@ func NewSettingsWindow(desktop *application.App) *SettingsWindow {
 	return &SettingsWindow{app: desktop}
 }
 
-// Show opens the settings window, or brings the open one to the front.
 func (w *SettingsWindow) Show() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -56,8 +51,6 @@ func (w *SettingsWindow) Show() {
 	w.window = window
 }
 
-// ApplicationMenu builds the macOS menu bar. Settings… opens the settings
-// window with Command-comma, as in other Mac apps.
 func ApplicationMenu(name string, openSettings func()) *application.Menu {
 	menu := application.NewMenu()
 	appMenu := menu.AddSubmenu(name)

@@ -8,15 +8,10 @@ import { createPdfLoadingTask } from "../../../shared/pdf/loadPdf";
 const loadTimeoutMilliseconds = 60_000;
 
 type PdfDocumentCallbacks = {
-  /** Runs when another book is given, before it starts loading. */
-  onBookChange: (book: BookFile | null) => void;
-  onLoaded: (document: PDFDocumentProxy) => void;
+  onBookChange: (opened: boolean) => void;
+  onLoaded: (document: PDFDocumentProxy, startPage: number) => void;
 };
 
-/**
- * Loads the PDF of the book, and gives up after a minute. A new book, or a
- * new page to open it at, loads it again.
- */
 export function usePdfDocument(
   book: BookFile | null,
   initialPage: number,
@@ -25,16 +20,22 @@ export function usePdfDocument(
   const { t } = useTranslation();
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState("");
+  const bookUrl = book?.url;
+  const loadKey = `${bookUrl ?? ""}#${initialPage}`;
+  const [shownKey, setShownKey] = useState(loadKey);
+  if (shownKey !== loadKey) {
+    setShownKey(loadKey);
+    setDocument(null);
+    setError("");
+  }
   const callbacksRef = useRef(callbacks);
   useEffect(() => {
     callbacksRef.current = callbacks;
   });
 
   useEffect(() => {
-    callbacksRef.current.onBookChange(book);
-    setDocument(null);
-    setError("");
-    if (!book) {
+    callbacksRef.current.onBookChange(bookUrl !== undefined);
+    if (bookUrl === undefined) {
       return;
     }
 
@@ -42,7 +43,6 @@ export function usePdfDocument(
     let loadingTask: PDFDocumentLoadingTask | undefined;
     let timedOut = false;
     const abortController = new AbortController();
-    const bookUrl = book.url;
 
     let timeout = 0;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -54,18 +54,21 @@ export function usePdfDocument(
       }, loadTimeoutMilliseconds);
     });
 
-    async function loadDocument() {
+    async function loadDocument(url: string) {
       try {
         const loadedDocument = await Promise.race([
           (async () => {
-            loadingTask = await createPdfLoadingTask(bookUrl, abortController.signal);
+            loadingTask = await createPdfLoadingTask(url, abortController.signal);
             return loadingTask.promise;
           })(),
           timeoutPromise,
         ]);
         if (active) {
           setDocument(loadedDocument);
-          callbacksRef.current.onLoaded(loadedDocument);
+          callbacksRef.current.onLoaded(
+            loadedDocument,
+            Math.min(loadedDocument.numPages, Math.max(1, initialPage)),
+          );
         }
       } catch (reason: unknown) {
         if (active) {
@@ -73,7 +76,7 @@ export function usePdfDocument(
             timedOut
               ? t("error.pdfTimeout")
               : reason instanceof LocalizedError
-                ? translateLocalizedError(reason, t)
+                ? translateLocalizedError(reason, (key, values) => t(key, values ?? {}))
                 : reason instanceof Error
                   ? reason.message
                   : t("error.openPdf"),
@@ -84,7 +87,7 @@ export function usePdfDocument(
       }
     }
 
-    void loadDocument();
+    void loadDocument(bookUrl);
 
     return () => {
       active = false;
@@ -92,8 +95,7 @@ export function usePdfDocument(
       abortController.abort();
       void loadingTask?.destroy();
     };
-    // oxlint-disable-next-line react/exhaustive-deps -- book の id / url が変わった時だけ再読み込みする。
-  }, [book?.id, book?.url, initialPage, t]);
+  }, [bookUrl, initialPage, t]);
 
   return { document, error, setError };
 }

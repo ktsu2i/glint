@@ -79,7 +79,6 @@ describe("reader api", () => {
     await addBookmark("book-2", 3, 9, { cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.4 });
     await removeBookmark("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
 
-    // A PDF position goes out with an empty CFI.
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10, "");
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith(
       "book-2",
@@ -129,7 +128,6 @@ describe("reader api", () => {
     });
     await removeHighlight("book-1", 3);
 
-    // A PDF highlight goes out with an empty CFI.
     expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", { ...input, cfi: "" });
     expect(bindings.changeHighlightColor).toHaveBeenCalledWith("book-1", 3, "purple");
     expect(bindings.removeHighlight).toHaveBeenCalledWith("book-1", 3);

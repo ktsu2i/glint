@@ -9,17 +9,14 @@ type BookSearchPanelProps = {
   query: string;
   onQueryChange: (query: string) => void;
   onSubmit: () => void;
-  /** The query whose results are shown. */
   submittedQuery: string;
   searching: boolean;
   error: string;
   results: BookSearchResult[];
-  /** How a result is named in the list and to assistive technology. */
   describeResult: (result: BookSearchResult) => { title: string; label: string; active: boolean };
   onSelectResult: (result: BookSearchResult) => void;
 };
 
-/** The search form and results inside the side sheet. */
 export function BookSearchPanel({
   inputRef,
   query,

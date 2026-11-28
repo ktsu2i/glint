@@ -20,7 +20,6 @@ function domRect(left: number, top: number, width: number, height: number): DOMR
   };
 }
 
-// Builds a page like the reader's: a .pdf-page holding a text layer of spans.
 function makePage(pageNumber: number, lines: string[][], box: DOMRect): HTMLElement {
   const page = document.createElement("div");
   page.className = "pdf-page";

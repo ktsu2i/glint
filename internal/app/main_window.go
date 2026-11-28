@@ -11,20 +11,14 @@ import (
 	"github.com/ktsu2i/glint/internal/settings"
 )
 
-// mainWindowStore keeps the size, position and state of the main window
-// between launches. Tests replace it with a fake.
 type mainWindowStore interface {
 	GetMainWindowState(ctx context.Context) (settings.WindowState, bool, error)
 	SaveMainWindowState(ctx context.Context, state settings.WindowState) error
 }
 
-// MainWindowState opens the main window where it was when Glint quit, the
-// way Mac apps do, and remembers where it is when Glint quits again.
 type MainWindowState struct {
 	store mainWindowStore
 
-	// saved is the state read at launch. It is kept apart from state, which
-	// already follows the window while it opens.
 	saved    settings.WindowState
 	hasSaved bool
 
@@ -39,8 +33,6 @@ func NewMainWindowState(store mainWindowStore) *MainWindowState {
 	return &MainWindowState{store: store}
 }
 
-// Options sets the size and position the main window opens with. Without a
-// saved state, or with a broken one, the defaults in options are kept.
 func (s *MainWindowState) Options(ctx context.Context, options application.WebviewWindowOptions) application.WebviewWindowOptions {
 	state, ok, err := s.store.GetMainWindowState(ctx)
 	if err != nil {
@@ -65,10 +57,6 @@ func applyWindowBounds(options application.WebviewWindowOptions, bounds settings
 	return options
 }
 
-// Track follows the main window. Once the window is up, it is moved back on
-// screen if its display is gone and maximised or put in full screen as it
-// was. Moves and resizes are recorded so that a maximised or full screen
-// window still remembers its normal frame.
 func (s *MainWindowState) Track(window *application.WebviewWindow, screens func() []*application.Screen) {
 	s.mu.Lock()
 	s.window = window
@@ -88,8 +76,6 @@ func (s *MainWindowState) restoreOnScreen(window *application.WebviewWindow, scr
 	}
 	state := s.saved
 	workAreas := make([]settings.WindowBounds, 0, len(screens))
-	// The primary screen goes first so that a window whose display is gone
-	// is centred on it.
 	for _, primaryFirst := range []bool{true, false} {
 		for _, screen := range screens {
 			if screen != nil && screen.IsPrimary == primaryFirst {
@@ -117,9 +103,6 @@ func (s *MainWindowState) restoreOnScreen(window *application.WebviewWindow, scr
 	}
 }
 
-// capture records the current state of the main window. The frame is only
-// taken while the window is neither maximised, full screen nor minimised,
-// so that the window can return to it.
 func (s *MainWindowState) capture() {
 	s.mu.Lock()
 	window := s.window
@@ -129,7 +112,6 @@ func (s *MainWindowState) capture() {
 	}
 	bounds := window.Bounds()
 	if bounds.Width <= 0 || bounds.Height <= 0 {
-		// The window is already gone.
 		return
 	}
 	fullscreen := window.IsFullscreen()
@@ -148,8 +130,6 @@ func (s *MainWindowState) capture() {
 	}
 }
 
-// Save stores the last state of the main window. It is called while Glint
-// shuts down, before the store is closed.
 func (s *MainWindowState) Save(ctx context.Context) {
 	s.capture()
 	s.mu.Lock()

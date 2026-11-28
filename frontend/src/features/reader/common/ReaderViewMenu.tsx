@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { BookOpenIcon, FileIcon, MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 
-/** The popover the view button opens. */
 export function ReaderViewMenu({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   return (
@@ -18,7 +17,6 @@ export function ReaderViewMenu({ children }: { children: ReactNode }) {
 
 type Layout = "single" | "spread";
 
-/** Chooses between one page and two facing pages. */
 export function LayoutSection({
   layout,
   note,
@@ -49,7 +47,6 @@ export function LayoutSection({
 
 type StepButton = { label: string; disabled?: boolean; onClick: () => void };
 
-/** A size with smaller and larger buttons, and a button that resets it. */
 export function ScaleSection({
   heading,
   value,

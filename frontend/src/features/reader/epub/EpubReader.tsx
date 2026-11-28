@@ -43,7 +43,6 @@ function progressPercent(bookmark: BookBookmark): number {
   return Math.round(bookmark.progress * 100);
 }
 
-// A trackpad swipe or a wheel turn longer than this turns one page.
 const wheelTurnThreshold = 60;
 const wheelCooldownMilliseconds = 450;
 const sliderSteps = 1000;
@@ -57,9 +56,7 @@ const keyDirections: Partial<Record<string, TurnDirection>> = {
 
 type EpubReaderProps = {
   book: BookFile;
-  /** The section to open, counted from 1. */
   initialSection?: number;
-  /** Reports the section on screen and the CFI of the page in it. */
   onPageChange: (section: number, sectionCount: number, cfi: string) => void;
   onBack?: () => void;
 };
@@ -68,13 +65,10 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const initialCfi = book.initialCfi ?? "";
   const { t } = useTranslation();
   const stageRef = useRef<HTMLDivElement>(null);
-  // Listeners on the stage and inside each section are attached once, so they
-  // call through this ref, which always holds the current handlers.
   const handlersRef = useRef<FoliateHandlers | null>(null);
   // foliate-js asks for highlights while it draws a section, outside React's
   // render, so it reads them here.
   const highlightsRef = useRef<BookHighlight[]>([]);
-  // The text on the page, read aloud from here.
   const pageRangeRef = useRef<Range | null>(null);
   const pageChangeCallbackRef = useRef(onPageChange);
   useEffect(() => {
@@ -112,7 +106,6 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const readAloud = useReadAloud();
 
   const readerRef = useRef<HTMLElement>(null);
-  // A click on a highlight also reaches the page's click handler first.
   const annotationHitRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -296,7 +289,6 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
     }
   }, [openPanel]);
 
-  /** Opens a section from the search, on the first match foliate-js finds in it. */
   async function openSearchResult(section: number) {
     if (!view) {
       return;
@@ -501,7 +493,6 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
           {openPanel === "highlights" && (
             <HighlightList
               loaded={highlights.loaded}
-              // The error shows above the page; the list stays as it was.
               error=""
               busy={highlights.busy}
               entries={highlights.highlights.map((highlight) => ({

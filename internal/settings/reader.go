@@ -13,17 +13,14 @@ const (
 	readerEPUBLayoutSettingKey    = "reader.epubLayout"
 )
 
-// The EPUB text size, in percent of the book's own size.
 const (
 	MinEPUBFontScale     = 80
 	MaxEPUBFontScale     = 200
 	DefaultEPUBFontScale = 100
 )
 
-// ErrInvalidReaderSettings reports a text size out of range or an unknown layout.
 var ErrInvalidReaderSettings = errors.New("invalid reader settings")
 
-// EPUBLayout is how many pages an EPUB shows at once.
 type EPUBLayout string
 
 const (

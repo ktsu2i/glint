@@ -37,7 +37,6 @@ export type LibrarySearchHit = {
   pages: BookSearchResult[];
 };
 
-/** How the library shows the shelf. The order is checked where it is used. */
 type LibrarySettings = {
   sortOrder: string;
 };

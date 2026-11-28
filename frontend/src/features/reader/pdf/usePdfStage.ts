@@ -6,18 +6,12 @@ export const maxScale = 3;
 export type ZoomMode = { kind: "fit-page" } | { kind: "manual"; value: number };
 
 type StageOptions = {
-  /** Scrolls back to the start whenever it changes to a value other than null. */
   scrollResetKey: number | null;
   onClick: (event: MouseEvent) => void;
   onMouseUp: () => void;
   onScroll: () => void;
 };
 
-/**
- * The scrolling area that holds the pages: its size, and the zoom. Pinching
- * zooms in and out. The handlers are read when the events arrive, so they
- * can change on every render.
- */
 export function usePdfStage({ scrollResetKey, ...handlers }: StageOptions) {
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [zoomMode, setZoomMode] = useState<ZoomMode>({ kind: "fit-page" });
@@ -69,11 +63,8 @@ export function usePdfStage({ scrollResetKey, ...handlers }: StageOptions) {
         return { kind: "manual", value: next };
       });
     };
-    // Clicking the page toggles the floating controls; Escape does the same from the keyboard.
     const handleClick = (event: MouseEvent) => handlersRef.current.onClick(event);
-    // Releasing a text selection offers the highlight colors.
     const handleMouseUp = () => handlersRef.current.onMouseUp();
-    // Floating controls are placed for one scroll position, so scrolling dismisses them.
     const handleScroll = () => handlersRef.current.onScroll();
     node.addEventListener("wheel", handleWheel, { passive: false });
     node.addEventListener("click", handleClick);

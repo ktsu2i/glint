@@ -400,7 +400,6 @@ func TestStoreKeepsEPUBPlaceAndBindingDirection(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, BindingLeftToRight, book.BindingDirection)
 
-	// The binding direction is kept before the book has a reading position.
 	require.NoError(t, store.SaveBindingDirection(t.Context(), book.ID, BindingRightToLeft, now))
 	book, err = store.Get(t.Context(), book.ID)
 	require.NoError(t, err)
@@ -417,7 +416,6 @@ func TestStoreKeepsEPUBPlaceAndBindingDirection(t *testing.T) {
 	assert.ErrorIs(t, store.SaveReadingPosition(t.Context(), book.ID, 3, 9, "not a cfi", now), ErrInvalidReadingPosition)
 	assert.ErrorIs(t, store.SaveBindingDirection(t.Context(), book.ID, "ttb", now), ErrInvalidBindingDirection)
 
-	// Removing the book removes its reading state.
 	require.NoError(t, store.Remove(t.Context(), book.ID))
 	var states int
 	require.NoError(t, store.db.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM book_reading_states").Scan(&states))

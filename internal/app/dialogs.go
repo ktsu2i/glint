@@ -7,7 +7,6 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// dialogs opens native dialogs. Tests replace it with a fake.
 type dialogs interface {
 	chooseBookFile(ctx context.Context, title string) (string, error)
 	confirm(ctx context.Context, request confirmation) (bool, error)

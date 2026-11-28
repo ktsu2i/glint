@@ -41,7 +41,6 @@ import { I18nProvider } from "../../../shared/i18n/i18n";
 import type { BookBookmark, BookHighlight } from "../api";
 import type { BookFile } from "../../../shared/api/books";
 
-/** Stands in for foliate-js's <foliate-view>, recording what the reader asks of it. */
 class FakeView extends HTMLElement {
   renderer = Object.assign(document.createElement("div"), { setStyles: vi.fn(), atEnd: false });
   book = {
@@ -65,7 +64,6 @@ class FakeView extends HTMLElement {
   clearSearch = vi.fn();
   getCFI = vi.fn((_index: number, _range: Range) => "epubcfi(/6/2!/4/2,/1:0,/1:4)");
   getTOCItemOf = vi.fn(async (_target: string) => ({ label: "Chapter One" }));
-  // Draws like foliate-js does: it asks the reader how to draw each annotation.
   addAnnotation = vi.fn(async (annotation: { value: string }) => {
     this.dispatchEvent(
       new CustomEvent("draw-annotation", {
@@ -185,7 +183,6 @@ describe("EpubReader", () => {
     expect(screen.getByText("Chapter One · 42%")).toBeTruthy();
     expect(window.localStorage.length).toBe(0);
 
-    // A report before the pages are counted keeps the last progress.
     view.relocate(1, Number.NaN);
     expect(screen.getByText("Chapter One · 42%")).toBeTruthy();
   });
@@ -243,7 +240,6 @@ describe("EpubReader", () => {
     const doc = view.loadSection();
     await waitFor(() => expect(view.drawn.has(saved.cfi)).toBe(true));
 
-    // foliate-js reports the highlight after the page's own click handler runs.
     act(() => {
       doc.querySelector("#text")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       view.dispatchEvent(
@@ -456,7 +452,6 @@ describe("EpubReader", () => {
     const marker = screen.getByRole("button", { name: "セクション 2 · 42%のしおりへ移動" });
     expect(marker.getAttribute("aria-current")).toBe("page");
 
-    // The page after it carries no bookmark.
     view.relocate(1, 0.45, "Chapter Two", { cfi: "epubcfi(/6/4!/4,/10/1:5,/14/1:0)" });
     expect(screen.getByRole("button", { name: "このページをしおりに保存" })).toBeTruthy();
 
@@ -506,7 +501,6 @@ describe("EpubReader", () => {
     act(() => speech.spoken[0]!.finish());
     expect(view.next).toHaveBeenCalledTimes(1);
 
-    // The last page ends the reading.
     view.renderer.atEnd = true;
     view.relocate(2, 1, "Chapter Two", { cfi: "epubcfi(/6/6!/4/2)", range });
     await waitFor(() => expect(speech.spoken).toHaveLength(2));
@@ -544,7 +538,6 @@ function bookmark(overrides: Partial<BookBookmark>): BookBookmark {
 
 type FakeUtterance = { text: string; lang: string; finish: () => void };
 
-/** Stands in for the system's speech, recording each utterance it is given. */
 function stubSpeech() {
   const spoken: FakeUtterance[] = [];
   const cancel = vi.fn();
@@ -586,7 +579,6 @@ function highlight(overrides: Partial<BookHighlight>): BookHighlight {
   };
 }
 
-/** Selects the section's text as if it sat in a frame of the reader. */
 function selectInFrame(doc: Document): Range {
   const frame = document.createElement("iframe");
   Object.defineProperty(doc, "defaultView", { configurable: true, value: { frameElement: frame } });

@@ -13,9 +13,6 @@ import (
 
 var ErrInvalidBookmark = errors.New("invalid bookmark")
 
-// BookBookmark marks a PDF page, or a place in an EPUB by CFI. For an EPUB,
-// PageNumber is the section, counted from 1, and Progress is where the place
-// sits in the book, from 0 to 1. A PDF bookmark has an empty CFI and Progress 0.
 type BookBookmark struct {
 	PageNumber int
 	CFI        string
@@ -86,8 +83,6 @@ func (store *Store) ListBookmarks(ctx context.Context, bookID string) ([]BookBoo
 	return bookmarks, nil
 }
 
-// DeleteBookmark removes the bookmark on a PDF page, or at a CFI in an EPUB
-// section. A PDF bookmark is removed with an empty CFI.
 func (store *Store) DeleteBookmark(ctx context.Context, bookID string, pageNumber int, cfi string) error {
 	bookID = strings.TrimSpace(bookID)
 	if bookID == "" || pageNumber < 1 || (cfi != "" && !validCFI(cfi)) {
@@ -123,7 +118,6 @@ func validBookmark(input NewBookmark) bool {
 		return false
 	}
 	if input.CFI == "" {
-		// A PDF bookmark marks the whole page.
 		return input.Progress == 0
 	}
 	return validCFI(input.CFI)

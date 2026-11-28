@@ -9,7 +9,6 @@ import (
 
 const languageSettingKey = "application.language"
 
-// ErrInvalidLanguage reports a language other than en or ja.
 var ErrInvalidLanguage = errors.New("language must be en or ja")
 
 type Language string

@@ -7,7 +7,6 @@ import { maxScale, minScale, type ZoomMode } from "./usePdfStage";
 
 export type ViewMode = "single" | "spread";
 
-/** The text of the pages on screen, to read aloud. */
 export type ReadableText = { pageNumber: number; text: string };
 
 const noText: ReadableText = { pageNumber: 0, text: "" };
@@ -20,18 +19,11 @@ type PdfPageRenderOptions = {
   stageSize: { width: number; height: number };
   canvases: [RefObject<HTMLCanvasElement | null>, RefObject<HTMLCanvasElement | null>];
   textLayers: [RefObject<HTMLDivElement | null>, RefObject<HTMLDivElement | null>];
-  /** Runs once the pages are on screen, with the scale they were drawn at. */
   onDrawn: (scale: number) => void;
-  /** Runs once the text of the pages is known. */
   onTextReady: (pageCount: number) => void;
   onError: (message: string) => void;
 };
 
-/**
- * Draws the page, or two pages for a spread, and lays their text over them
- * so it can be selected. Pages are drawn off screen first, so a new page
- * replaces the old one at once.
- */
 export function usePdfPageRender({
   document,
   pageNumber,
@@ -45,7 +37,6 @@ export function usePdfPageRender({
   onError,
 }: PdfPageRenderOptions) {
   const { t } = useTranslation();
-  // The pages whose canvases are on screen; highlights follow them, not the requested page.
   const [renderedPages, setRenderedPages] = useState<number[]>([]);
   const [readableText, setReadableText] = useState<ReadableText>(noText);
   const callbacksRef = useRef({ onDrawn, onTextReady, onError });
@@ -223,9 +214,18 @@ export function usePdfPageRender({
       renderTasks.forEach((task) => task.cancel());
       textLayers.forEach((layer) => layer.cancel());
     };
-    // The refs hold the same elements for the life of the reader.
-    // oxlint-disable-next-line react/exhaustive-deps
-  }, [document, pageNumber, stageSize, t, viewMode, zoomMode]);
+  }, [
+    canvasLeftRef,
+    canvasRightRef,
+    document,
+    pageNumber,
+    stageSize,
+    t,
+    textLayerLeftRef,
+    textLayerRightRef,
+    viewMode,
+    zoomMode,
+  ]);
 
   const reset = useCallback(() => {
     setRenderedPages([]);

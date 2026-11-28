@@ -13,7 +13,6 @@ import { ToolButton } from "../../../shared/components/ToolButton";
 
 export type ReaderPanel = "toc" | "search" | "bookmarks" | "highlights";
 
-/** Which side sheet is open, if any. Toggling the open one closes it. */
 export function useReaderPanel() {
   const [openPanel, setOpenPanel] = useState<ReaderPanel | null>(null);
   const togglePanel = useCallback((panel: ReaderPanel) => {
@@ -23,10 +22,8 @@ export function useReaderPanel() {
 }
 
 type ReaderTopBarProps = {
-  /** Whether the book is loaded, which the panels and read aloud need. */
   ready: boolean;
   title: string;
-  /** Shown under the title unless null. */
   subtitle: ReactNode;
   openPanel: ReaderPanel | null;
   onTogglePanel: (panel: ReaderPanel) => void;

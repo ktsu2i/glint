@@ -46,7 +46,6 @@ export function pickVoiceForLang(
   return sameLanguage ?? null;
 }
 
-/** An utterance of the text in the language it is written in, with a voice for it. */
 export function createUtterance(
   text: string,
   uiLanguage: string,
@@ -62,10 +61,6 @@ export function createUtterance(
   return utterance;
 }
 
-/**
- * Whether the reader is reading aloud. Stopping cancels what is being said,
- * and so does leaving the reader.
- */
 export function useReadAloud() {
   const supported = isSpeechSupported();
   const voices = useSpeechVoices(supported);

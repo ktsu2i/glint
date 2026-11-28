@@ -231,7 +231,6 @@ func TestOpenNormalizesSegmentsSavedBeforeNFKC(t *testing.T) {
 	requireFTSInSync(t, reopened)
 }
 
-// migrateOnly applies the migrations without the data fixes Open runs after them.
 func migrateOnly(t *testing.T, path string) (*sql.DB, func()) {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
