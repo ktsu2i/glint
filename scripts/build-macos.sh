@@ -17,7 +17,7 @@ if [[ "${GLINT_DEV:-false}" == true ]]; then
   name=Glint.dev
   plist=build/darwin/Info.dev.plist
   tags=dev
-  flags=(-gcflags='all=-l')
+  flags=(-gcflags='all=-l' -ldflags="-X main.dataDirectoryName=$name")
 fi
 if [[ -n "${EXTRA_TAGS:-}" ]]; then
   tags="$tags,$EXTRA_TAGS"

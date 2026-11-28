@@ -23,6 +23,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// dataDirectoryName is overridden for dev builds by scripts/build-macos.sh.
+var dataDirectoryName = "Glint"
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -90,5 +93,5 @@ func resolveDataDirectory() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve user config directory: %w", err)
 	}
-	return filepath.Join(base, "Glint"), nil
+	return filepath.Join(base, dataDirectoryName), nil
 }
