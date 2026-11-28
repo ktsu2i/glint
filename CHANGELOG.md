@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.6.0](https://github.com/ktsu2i/glint/compare/v0.5.2...v0.6.0) - 2026-11-28
+
+### New Features
+- feat: copy imported books into the library by @ktsu2i in https://github.com/ktsu2i/glint/pull/75
+### Other Changes
+- chore: position Glint as a general PDF / EPUB reader by @ktsu2i in https://github.com/ktsu2i/glint/pull/72
+- chore: use a plain tagline for Glint by @ktsu2i in https://github.com/ktsu2i/glint/pull/74
+- fix: separate the dev data directory from production by @ktsu2i in https://github.com/ktsu2i/glint/pull/76
+- refactor: change module path to github.com/ktsu2i/glint by @ktsu2i in https://github.com/ktsu2i/glint/pull/77
+- refactor: migrate the library schema with goose by @ktsu2i in https://github.com/ktsu2i/glint/pull/78
+
 ## [v0.5.2](https://github.com/ktsu2i/glint/compare/v0.5.1...v0.5.2) - 2026-11-28
 
 ### Other Changes
