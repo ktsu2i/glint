@@ -304,3 +304,20 @@ func TestFirstMissingOrdinalFindsTheEarliestGap(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchTreatsNULAsATermSeparator(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "library.sqlite3"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Now()
+	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.pdf", "hash-1", "pdf", 1, now)
+	require.NoError(t, err)
+	_, err = store.SaveBookSegments(t.Context(), book.ID, []BookSegment{pageSegment(1, "Goroutines and channels")}, 1, now)
+	require.NoError(t, err)
+
+	results, err := store.SearchBookSegments(t.Context(), book.ID, "goroutines\x00channels", 20)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	_, err = store.SearchBookSegments(t.Context(), book.ID, "\x00", 20)
+	assert.ErrorIs(t, err, ErrInvalidBookSearchQuery)
+}
