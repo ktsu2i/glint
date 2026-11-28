@@ -4,6 +4,7 @@ linters:
   enable:
     - bodyclose
     - copyloopvar
+    - depguard
     - errname
     - errorlint
     - forbidigo
@@ -23,6 +24,52 @@ linters:
     - usetesting
     - wastedassign
   settings:
+    depguard:
+      # Enforce the dependency direction described in AGENTS.md:
+      # main.go -> internal/app -> feature packages -> internal/library -> internal/sqlite
+      rules:
+        wails-boundary:
+          list-mode: lax
+          files:
+            - "**/internal/**"
+            - "**/migrations/**"
+            - "!**/internal/app/**"
+          deny:
+            - pkg: github.com/ktsu2i/glint/internal/app
+              desc: only main.go may import internal/app
+            - pkg: github.com/wailsapp/wails/v3/pkg/application
+              desc: only main.go and internal/app may import Wails application
+            - pkg: github.com/wailsapp/wails/v3/pkg/events
+              desc: only main.go and internal/app may import Wails events
+        features:
+          list-mode: lax
+          files:
+            - "**/internal/books/**"
+            - "**/internal/settings/**"
+          deny:
+            - pkg: github.com/wailsapp/wails
+              desc: feature packages must not depend on Wails
+            - pkg: github.com/ktsu2i/glint/internal/assetserver
+              desc: feature packages must not depend on the asset server
+        library:
+          list-mode: lax
+          files:
+            - "**/internal/library/**"
+          allow:
+            - github.com/ktsu2i/glint/internal/library
+            - github.com/ktsu2i/glint/internal/sqlite
+          deny:
+            - pkg: github.com/ktsu2i/glint/internal
+              desc: internal/library is the store and may only import internal/sqlite
+        leaf-packages:
+          list-mode: lax
+          files:
+            - "**/internal/assetserver/**"
+            - "**/internal/sqlite/**"
+            - "**/internal/update/**"
+          deny:
+            - pkg: github.com/ktsu2i/glint/internal
+              desc: platform adapters and infrastructure must not import other internal packages
     forbidigo:
       forbid:
         - pattern: ^(t|b|tb)\.(Error|Errorf|Fatal|Fatalf|Fail|FailNow)$
