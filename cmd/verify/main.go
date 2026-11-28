@@ -30,6 +30,7 @@ Lifecycle
 Navigation and input
   open [path]                 Load a path of the app (default /)
   reload                      Reload the page
+  color-scheme <light|dark>   Emulate the OS appearance that the System theme follows (default light)
   click <role> <name>         Click by ARIA role and accessible name (/regex/ allowed)
   click-css <selector>        Click the first element matching a CSS selector
   mouse-click <selector>      Click the center of an element with the mouse, even under overlays

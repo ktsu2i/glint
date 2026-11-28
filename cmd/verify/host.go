@@ -28,7 +28,7 @@ var hostCommands = map[string]bool{
 	"open": true, "reload": true, "click": true, "click-css": true, "mouse-click": true,
 	"right-click": true, "press": true, "type": true, "select-text": true, "hover": true,
 	"snapshot": true, "screenshot": true, "wait": true, "eval": true, "console": true,
-	"restart-app": true,
+	"restart-app": true, "color-scheme": true,
 }
 
 func isHostCommand(name string) bool { return hostCommands[name] }
@@ -413,6 +413,19 @@ func (h *host) run(ctx context.Context, name string, args []string) (string, err
 			return "(no console messages)", nil
 		}
 		return strings.Join(lines, "\n"), nil
+	case "color-scheme":
+		schemes := map[string]*playwright.ColorScheme{
+			"light": playwright.ColorSchemeLight,
+			"dark":  playwright.ColorSchemeDark,
+		}
+		scheme, ok := schemes[arg(0)]
+		if !ok {
+			return "", errors.New("usage: color-scheme <light|dark>")
+		}
+		if err := page.EmulateMedia(playwright.PageEmulateMediaOptions{ColorScheme: scheme}); err != nil {
+			return "", err
+		}
+		return "the OS color scheme is now " + arg(0), nil
 	case "restart-app":
 		h.app.stop()
 		if err := h.startApp(ctx); err != nil {
