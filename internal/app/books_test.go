@@ -165,12 +165,13 @@ func TestSaveBookCoverRejectsInvalidDataURL(t *testing.T) {
 func TestOpenBookReportsMissingSourceWithoutExposingPath(t *testing.T) {
 	h := newHarness(t)
 	book := h.importPDF("Moved.pdf")
-	require.NoError(t, os.Remove(h.dialogs.path))
+	stored := filepath.Join(h.root, "data", "books", book.ID, "Moved.pdf")
+	require.NoError(t, os.Remove(stored))
 
 	_, err := h.service.OpenBook(book.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not be found")
-	assert.NotContains(t, err.Error(), h.dialogs.path)
+	assert.NotContains(t, err.Error(), stored)
 
 	h.useJapanese()
 	_, err = h.service.OpenBook(book.ID)

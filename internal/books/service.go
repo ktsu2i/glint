@@ -56,23 +56,33 @@ func New(lib *library.Store, dataDirectory string) *Service {
 	return &Service{library: lib, dataDirectory: dataDirectory}
 }
 
-// Import adds the file at filePath to the library and opens it.
+// Import copies the file at filePath into the library, records it, and opens it.
 func (s *Service) Import(ctx context.Context, filePath string) (OpenedBook, error) {
 	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
 		return OpenedBook{}, err
 	}
-	id, err := randomToken()
-	if err != nil {
-		return OpenedBook{}, fmt.Errorf("create book id: %w", err)
-	}
-	book, err := s.library.Import(
-		ctx, id, filePath, inspection.FileHash,
-		inspection.Format, inspection.SizeBytes, time.Now(),
-	)
+	id, existingPath, err := s.importID(ctx, inspection.FileHash)
 	if err != nil {
 		return OpenedBook{}, err
 	}
+	stored, err := s.storeCopy(id, filePath)
+	if err != nil {
+		return OpenedBook{}, err
+	}
+	book, err := s.library.Import(
+		ctx, id, stored, inspection.FileHash,
+		inspection.Format, inspection.SizeBytes, time.Now(),
+	)
+	if err != nil {
+		if existingPath == "" {
+			_ = os.RemoveAll(s.bookDirectory(id))
+		} else if stored != existingPath {
+			_ = os.Remove(stored)
+		}
+		return OpenedBook{}, err
+	}
+	s.removeOtherCopies(id, stored)
 	if err := s.afterImport(ctx, book, pkg); err != nil {
 		return OpenedBook{}, err
 	}
@@ -92,6 +102,10 @@ func (s *Service) Import(ctx context.Context, filePath string) (OpenedBook, erro
 // Open loads a library book, refreshing its record if the source file changed.
 func (s *Service) Open(ctx context.Context, id string) (OpenedBook, error) {
 	book, err := s.library.Get(ctx, id)
+	if err != nil {
+		return OpenedBook{}, err
+	}
+	book, err = s.adoptSource(ctx, book)
 	if err != nil {
 		return OpenedBook{}, err
 	}
@@ -171,7 +185,7 @@ func (s *Service) recordSourceStat(ctx context.Context, book *library.Book, insp
 	return nil
 }
 
-// Relink points a library entry at a new source file and opens it.
+// Relink replaces a library entry's file with a copy of the file at filePath and opens it.
 func (s *Service) Relink(ctx context.Context, id, filePath string) (OpenedBook, error) {
 	inspection, pkg, err := inspectBook(filePath)
 	if err != nil {
@@ -184,10 +198,15 @@ func (s *Service) Relink(ctx context.Context, id, filePath string) (OpenedBook, 
 	if inspection.Format != oldBook.Format {
 		return OpenedBook{}, ErrFormatMismatch
 	}
-	book, err := s.library.Relink(ctx, id, filePath, inspection.FileHash, inspection.SizeBytes, time.Now())
+	stored, err := s.storeCopy(id, filePath)
 	if err != nil {
 		return OpenedBook{}, err
 	}
+	book, err := s.library.Relink(ctx, id, stored, inspection.FileHash, inspection.SizeBytes, time.Now())
+	if err != nil {
+		return OpenedBook{}, err
+	}
+	s.removeOtherCopies(id, stored)
 	if oldBook.FileHash != inspection.FileHash {
 		if oldBook.CoverThumbnailPath != "" {
 			_ = os.Remove(oldBook.CoverThumbnailPath)
@@ -218,7 +237,8 @@ func (s *Service) Rename(ctx context.Context, id, name string) (Entry, error) {
 	return s.entry(ctx, book)
 }
 
-// Remove deletes the library entry and its cover cache. The source file is kept.
+// Remove deletes the library entry, its copy of the book file, and its cover
+// cache. The file the book was added from is left alone.
 func (s *Service) Remove(ctx context.Context, id string) error {
 	book, err := s.library.Get(ctx, id)
 	if err != nil {
@@ -230,9 +250,12 @@ func (s *Service) Remove(ctx context.Context, id string) error {
 	if book.CoverThumbnailPath != "" {
 		_ = os.Remove(book.CoverThumbnailPath)
 	}
+	_ = os.RemoveAll(s.bookDirectory(book.ID))
 	return nil
 }
 
+// List returns the library, first moving books still read from outside the
+// library onto library copies while their files are there.
 func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	books, err := s.library.List(ctx)
 	if err != nil {
@@ -240,6 +263,10 @@ func (s *Service) List(ctx context.Context) ([]Entry, error) {
 	}
 	entries := make([]Entry, 0, len(books))
 	for _, book := range books {
+		book, err := s.adoptSource(ctx, book)
+		if err != nil {
+			return nil, err
+		}
 		entry, err := s.entry(ctx, book)
 		if err != nil {
 			return nil, err
@@ -414,6 +441,24 @@ func (s *Service) opened(ctx context.Context, book library.Book, pkg *epubPackag
 		opened.Spine = pkg.Spine
 	}
 	return opened, nil
+}
+
+// importID reuses the id of a book already in the library with the same
+// content, so importing it again refreshes that entry and its copy. It also
+// returns the existing entry's file path, or "" for a new book.
+func (s *Service) importID(ctx context.Context, fileHash string) (id, existingPath string, err error) {
+	existing, err := s.library.ByHash(ctx, fileHash)
+	if err == nil {
+		return existing.ID, existing.SourcePath, nil
+	}
+	if !errors.Is(err, library.ErrBookNotFound) {
+		return "", "", err
+	}
+	id, err = randomToken()
+	if err != nil {
+		return "", "", fmt.Errorf("create book id: %w", err)
+	}
+	return id, "", nil
 }
 
 func randomToken() (string, error) {
