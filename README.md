@@ -32,8 +32,6 @@
 
 ## Features
 
-![Glint library](assets/library-en.png)
-
 - **Local library** — Add PDFs and EPUBs and pick up where you left off.
 - **Comfortable reading** — Single pages or two-page spreads, left or right binding, zoom, and light / dark mode.
 - **Full-text search** — Search inside a book or across your whole library with `⌘F`.
