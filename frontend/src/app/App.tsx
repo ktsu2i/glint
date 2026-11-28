@@ -1,151 +1,38 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
-import { useTranslation } from "react-i18next";
-import { generateCoverThumbnail } from "../features/library/generateCover";
-import { indexBookPages, isAbortError, type IndexableBook } from "../features/library/indexer";
-import { Library } from "../features/library/Library";
-import { LibraryTopBar } from "../features/library/LibraryTopBar";
-import { sortBooks, useLibrarySortOrder } from "../features/library/librarySort";
-import {
-  LibrarySearchField,
-  LibrarySearchResults,
-  type LibrarySearchStatus,
-} from "../features/library/LibrarySearch";
+import { LibraryScreen } from "../features/library/LibraryScreen";
+import { useLibrarySortOrder } from "../features/library/librarySort";
+import { useBookIndexing, useCoverGeneration } from "../features/library/useBookPreparation";
+import { useLibraryActions } from "../features/library/useLibraryActions";
+import { useLibraryBooks } from "../features/library/useLibraryBooks";
+import { useLibrarySearch } from "../features/library/useLibrarySearch";
 import { EpubReader } from "../features/reader/EpubReader";
 import { PdfReader } from "../features/reader/PdfReader";
-import { syncDocumentTheme } from "../features/settings/theme";
-import { onAppearanceChanged } from "../shared/api/events";
-import { I18nProvider } from "../shared/i18n/i18n";
-import { getAppearanceSettings, type ThemePreference } from "../shared/api/settings";
-import {
-  listBooks,
-  markBookCoverFailed,
-  openBook,
-  openBookFile,
-  pendingIndexBooks,
-  relinkBook,
-  removeBook,
-  renameBook,
-  saveBookCover,
-  searchLibrary,
-  type LibrarySearchHit,
-} from "../features/library/api";
-import { saveReadingPosition } from "../features/reader/api";
+import { useReadingPosition } from "../features/reader/useReadingPosition";
 import type { BookFile, BookSummary } from "../shared/api/books";
+import { I18nProvider } from "../shared/i18n/i18n";
+import { useAppTheme } from "./useAppTheme";
 
-// Long enough to skip the keystrokes in a word, short enough to feel live.
-const LIBRARY_SEARCH_DEBOUNCE_MS = 250;
+type View = "library" | "search" | "reader";
 
 function AppContent() {
-  const { t, i18n } = useTranslation();
-  const [view, setView] = useState<"library" | "search" | "reader">("library");
-  const [books, setBooks] = useState<BookSummary[]>([]);
-  const [sortOrder, setSortOrder] = useLibrarySortOrder();
-  const shelfBooks = useMemo(
-    () => sortBooks(books, sortOrder, i18n.language),
-    [books, sortOrder, i18n.language],
-  );
-  const [libraryLoading, setLibraryLoading] = useState(true);
-  const [libraryError, setLibraryError] = useState("");
-  const [busyBookId, setBusyBookId] = useState("");
+  const [view, setView] = useState<View>("library");
   const [book, setBook] = useState<BookFile | null>(null);
-  const [opening, setOpening] = useState(false);
-  const [theme, setTheme] = useState<ThemePreference>("system");
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<LibrarySearchHit[]>([]);
-  const [searchStatus, setSearchStatus] = useState<LibrarySearchStatus>("idle");
-  const [searchError, setSearchError] = useState("");
-  const [searchFocusSignal, setSearchFocusSignal] = useState(0);
-  const indexAbortersRef = useRef<Map<string, AbortController>>(new Map());
-  const searchRequestRef = useRef(0);
-  const generatingCovers = useRef(new Set<string>());
-  const lastSavedPosition = useRef("");
+  useAppTheme();
 
-  const refreshLibrary = useCallback(
-    async (showLoading = false) => {
-      if (showLoading) {
-        setLibraryLoading(true);
-      }
-      try {
-        setBooks(await listBooks());
-        setLibraryError("");
-      } catch (reason) {
-        setLibraryError(reason instanceof Error ? reason.message : t("error.loadLibrary"));
-      } finally {
-        setLibraryLoading(false);
-      }
-    },
-    [t],
-  );
+  // Library state lives here so it survives reading a book.
+  const library = useLibraryBooks();
+  const sort = useLibrarySortOrder();
+  const search = useLibrarySearch(view === "search");
+  const position = useReadingPosition(book);
+  const { refresh } = library;
 
-  useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- 初回 load。loading の初期値は true で、setState は await 後に行われる。
-    void refreshLibrary();
-  }, [refreshLibrary]);
-
-  useLayoutEffect(() => syncDocumentTheme(theme), [theme]);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        const loaded = await getAppearanceSettings();
-        if (active) setTheme(loaded.theme);
-      } catch (reason) {
-        console.warn(reason instanceof Error ? reason.message : t("error.loadAppearance"));
-      }
-    };
-    void load();
-    return () => {
-      active = false;
-    };
-  }, [t]);
-
-  // The settings window saves the theme; follow it here as well.
-  useEffect(() => onAppearanceChanged(setTheme), []);
-
-  const ensureCover = useCallback(
-    async (selected: BookFile) => {
-      if (selected.coverStatus !== "pending" || generatingCovers.current.has(selected.id)) {
-        return;
-      }
-      generatingCovers.current.add(selected.id);
-      try {
-        const cover = await generateCoverThumbnail(selected.url);
-        await saveBookCover(selected.id, cover);
-      } catch {
-        try {
-          await markBookCoverFailed(selected.id);
-        } catch {}
-      } finally {
-        generatingCovers.current.delete(selected.id);
-        await refreshLibrary();
-      }
-    },
-    [refreshLibrary],
-  );
-
-  const ensureBookIndexed = useCallback(
-    async (target: IndexableBook) => {
-      if (!target.url || !target.id) {
-        return;
-      }
-      if (target.format === "epub") {
-        return;
-      }
-      if (indexAbortersRef.current.has(target.id)) {
-        return;
-      }
-      const controller = new AbortController();
-      indexAbortersRef.current.set(target.id, controller);
-      try {
-        const result = await indexBookPages(
-          { id: target.id, url: target.url, nextSegment: target.nextSegment },
-          { signal: controller.signal },
-        );
+  const ensureCover = useCoverGeneration(refresh);
+  const ensureBookIndexed = useBookIndexing(
+    useCallback(
+      (bookId: string, result: { persistedCount: number; pageCount: number }) => {
         setBook((current) =>
-          current && current.id === target.id
+          current?.id === bookId
             ? {
                 ...current,
                 indexedPageCount: result.persistedCount,
@@ -153,52 +40,16 @@ function AppContent() {
               }
             : current,
         );
-        void refreshLibrary();
-      } catch (reason: unknown) {
-        if (isAbortError(reason)) {
-          return;
-        }
-        console.warn("Book indexing failed", reason);
-      } finally {
-        indexAbortersRef.current.delete(target.id);
-      }
-    },
-    [refreshLibrary],
+        void refresh();
+      },
+      [refresh],
+    ),
   );
 
-  const resumedPendingIndex = useRef(false);
-  useEffect(() => {
-    if (resumedPendingIndex.current) {
-      return;
-    }
-    resumedPendingIndex.current = true;
-    const resume = async () => {
-      let targets;
-      try {
-        targets = await pendingIndexBooks();
-      } catch (reason: unknown) {
-        console.warn("Listing books to index failed", reason);
-        return;
-      }
-      for (const target of targets) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- 裏で1冊ずつ順番に index する。
-        await ensureBookIndexed(target);
-      }
-    };
-    void resume();
-  }, [ensureBookIndexed]);
-
-  useEffect(() => {
-    const aborters = indexAbortersRef.current;
-    return () => {
-      aborters.forEach((controller) => controller.abort());
-      aborters.clear();
-    };
-  }, []);
-
+  const { reset: resetPosition } = position;
   const showReader = useCallback(
     (selected: BookFile) => {
-      lastSavedPosition.current = "";
+      resetPosition();
       setBook(selected);
       setView("reader");
       if (selected.format !== "epub") {
@@ -206,238 +57,29 @@ function AppContent() {
       }
       void ensureBookIndexed(selected);
     },
-    [ensureCover, ensureBookIndexed],
+    [ensureCover, ensureBookIndexed, resetPosition],
   );
 
-  async function handleImportBook() {
-    setOpening(true);
-    setLibraryError("");
-    try {
-      const selected = await openBookFile();
-      if (selected.url) {
-        showReader(selected);
-        await refreshLibrary();
-      }
-    } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.addBook"));
-    } finally {
-      setOpening(false);
-    }
-  }
-
-  async function handleOpenBook(summary: BookSummary) {
-    if (!summary.available) {
-      return;
-    }
-    setBusyBookId(summary.id);
-    setLibraryError("");
-    try {
-      showReader(await openBook(summary.id));
-      await refreshLibrary();
-    } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.openBook"));
-      await refreshLibrary();
-    } finally {
-      setBusyBookId("");
-    }
-  }
-
-  async function handleOpenBookAtPage(summary: BookSummary, pageNumber: number) {
-    if (!summary.available) {
-      return;
-    }
-    setBusyBookId(summary.id);
-    setLibraryError("");
-    try {
-      const opened = await openBook(summary.id);
-      // The saved place belongs to the section the book was left on.
-      showReader({ ...opened, initialPage: pageNumber, initialCfi: "" });
-      await refreshLibrary();
-    } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.openBook"));
-      await refreshLibrary();
-    } finally {
-      setBusyBookId("");
-    }
-  }
-
-  const runLibrarySearch = useCallback(
-    async (input: string) => {
-      const query = input.trim();
-      if (!query) {
-        return;
-      }
-      const request = searchRequestRef.current + 1;
-      searchRequestRef.current = request;
-      setSearchQuery(query);
-      setSearchStatus("loading");
-      setSearchError("");
-      try {
-        const hits = await searchLibrary(query);
-        if (searchRequestRef.current !== request) {
-          return;
-        }
-        setSearchResults(hits);
-        setSearchStatus("ready");
-      } catch (reason) {
-        if (searchRequestRef.current !== request) {
-          return;
-        }
-        setSearchResults([]);
-        setSearchStatus("error");
-        setSearchError(reason instanceof Error ? reason.message : t("error.searchLibrary"));
-      }
-    },
-    [t],
-  );
-
-  const handleLibrarySearchSubmit = useCallback(
-    () => runLibrarySearch(searchInput),
-    [runLibrarySearch, searchInput],
-  );
-
-  const handleLibrarySearchClear = useCallback(() => {
-    searchRequestRef.current += 1;
-    setSearchInput("");
-    setSearchQuery("");
-    setSearchResults([]);
-    setSearchStatus("idle");
-    setSearchError("");
-  }, []);
-
-  // Search the text of every book as the query is typed, once typing pauses.
-  useEffect(() => {
-    if (view !== "search") {
-      return;
-    }
-    const query = searchInput.trim();
-    if (!query || query === searchQuery) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      void runLibrarySearch(query);
-    }, LIBRARY_SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [runLibrarySearch, searchInput, searchQuery, view]);
-
-  const handleLibrarySearchInputChange = useCallback(
-    (value: string) => {
-      if (!value.trim()) {
-        handleLibrarySearchClear();
-      }
-      setSearchInput(value);
-    },
-    [handleLibrarySearchClear],
-  );
-
-  async function handleRemoveBook(summary: BookSummary) {
-    setBusyBookId(summary.id);
-    setLibraryError("");
-    try {
-      const removed = await removeBook(summary.id);
-      if (removed) {
-        await refreshLibrary();
-      }
-    } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.removeBook"));
-    } finally {
-      setBusyBookId("");
-    }
-  }
-
-  async function handleRenameBook(summary: BookSummary, name: string) {
-    setBusyBookId(summary.id);
-    setLibraryError("");
-    try {
-      const renamed = await renameBook(summary.id, name);
-      setBooks((current) => current.map((entry) => (entry.id === renamed.id ? renamed : entry)));
+  const actions = useLibraryActions(library, {
+    onOpen: showReader,
+    onRenamed: (renamed: BookSummary) =>
       setBook((current) =>
-        current && current.id === renamed.id ? { ...current, title: renamed.title } : current,
-      );
-    } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.renameBook"));
-    } finally {
-      setBusyBookId("");
-    }
-  }
-
-  async function handleRelinkBook(summary: BookSummary) {
-    setBusyBookId(summary.id);
-    setLibraryError("");
-    try {
-      const selected = await relinkBook(summary.id);
-      if (selected.url) {
-        showReader(selected);
-        await refreshLibrary();
-      }
-    } catch (reason) {
-      setLibraryError(reason instanceof Error ? reason.message : t("error.relinkBook"));
-    } finally {
-      setBusyBookId("");
-    }
-  }
-
-  const handlePageChange = useCallback(
-    (pageNumber: number, pageCount: number, cfi = "") => {
-      if (!book || pageNumber < 1 || pageCount < 1) {
-        return;
-      }
-      const positionKey = `${book.id}:${pageNumber}:${pageCount}:${cfi}`;
-      if (lastSavedPosition.current === positionKey) {
-        return;
-      }
-      lastSavedPosition.current = positionKey;
-      void saveReadingPosition(book.id, pageNumber, pageCount, cfi).catch((reason) => {
-        console.warn(reason instanceof Error ? reason.message : t("error.savePosition"));
-      });
-    },
-    [book, t],
-  );
+        current?.id === renamed.id ? { ...current, title: renamed.title } : current,
+      ),
+  });
 
   const showLibrary = useCallback(() => {
     setView("library");
-    void refreshLibrary();
-  }, [refreshLibrary]);
+    void refresh();
+  }, [refresh]);
 
-  const showSearch = useCallback(() => {
-    setView("search");
-    setSearchFocusSignal((current) => current + 1);
-  }, []);
+  const openSearch = useCallback(() => setView("search"), []);
 
+  const { clear: clearSearch } = search;
   const closeSearch = useCallback(() => {
-    handleLibrarySearchClear();
+    clearSearch();
     setView("library");
-  }, [handleLibrarySearchClear]);
-
-  useEffect(() => {
-    if (view !== "library" && view !== "search") {
-      return;
-    }
-    function openLibrarySearch(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        showSearch();
-      }
-    }
-    window.addEventListener("keydown", openLibrarySearch);
-    return () => window.removeEventListener("keydown", openLibrarySearch);
-  }, [showSearch, view]);
-
-  // Escape closes the library search wherever the focus is, not only in the field.
-  useEffect(() => {
-    if (view !== "search") {
-      return;
-    }
-    function closeLibrarySearch(event: KeyboardEvent) {
-      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) {
-        return;
-      }
-      event.preventDefault();
-      closeSearch();
-    }
-    window.addEventListener("keydown", closeLibrarySearch);
-    return () => window.removeEventListener("keydown", closeLibrarySearch);
-  }, [closeSearch, view]);
+  }, [clearSearch]);
 
   return (
     <Tooltip.Provider delay={500} closeDelay={80}>
@@ -449,71 +91,28 @@ function AppContent() {
                 key={`${book.id}:${book.initialPage}`}
                 book={book}
                 initialSection={book.initialPage}
-                onPageChange={handlePageChange}
+                onPageChange={position.save}
                 onBack={showLibrary}
               />
             ) : (
               <PdfReader
                 book={book}
                 initialPage={book?.initialPage ?? 1}
-                onPageChange={handlePageChange}
+                onPageChange={position.save}
                 onBack={showLibrary}
               />
             )}
           </div>
         ) : (
-          <div className="library-screen ambient">
-            <LibraryTopBar
-              title={t("app.library")}
-              opening={opening}
-              search={
-                view === "search" ? (
-                  <LibrarySearchField
-                    key={searchFocusSignal}
-                    searchInput={searchInput}
-                    searchStatus={searchStatus}
-                    resultCount={searchResults.length}
-                    onSearchInputChange={handleLibrarySearchInputChange}
-                    onSearchSubmit={handleLibrarySearchSubmit}
-                    onClose={closeSearch}
-                  />
-                ) : null
-              }
-              sortOrder={sortOrder}
-              onImport={() => void handleImportBook()}
-              onSearch={showSearch}
-              onSortOrderChange={setSortOrder}
-            />
-            <div className="library-content">
-              {view === "search" ? (
-                <LibrarySearchResults
-                  books={books}
-                  busyBookId={busyBookId}
-                  searchQuery={searchQuery}
-                  searchInput={searchInput}
-                  searchResults={searchResults}
-                  searchStatus={searchStatus}
-                  searchError={searchError}
-                  onOpenAtPage={handleOpenBookAtPage}
-                  onOpenBook={handleOpenBook}
-                  onRelinkBook={handleRelinkBook}
-                />
-              ) : (
-                <Library
-                  books={shelfBooks}
-                  loading={libraryLoading}
-                  error={libraryError}
-                  busyBookId={busyBookId}
-                  opening={opening}
-                  onImport={handleImportBook}
-                  onOpen={handleOpenBook}
-                  onRelink={handleRelinkBook}
-                  onRemove={handleRemoveBook}
-                  onRename={handleRenameBook}
-                />
-              )}
-            </div>
-          </div>
+          <LibraryScreen
+            mode={view === "search" ? "search" : "shelf"}
+            library={library}
+            search={search}
+            actions={actions}
+            sort={sort}
+            onOpenSearch={openSearch}
+            onCloseSearch={closeSearch}
+          />
         )}
       </main>
     </Tooltip.Provider>
