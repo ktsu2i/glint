@@ -1,4 +1,4 @@
-# verify-glint
+# verify
 
 [English](README.md)
 
@@ -23,15 +23,15 @@ go tool verify install    # Playwright のドライバと WebKit をダウンロ
 
 ### agent に頼む
 
-UI や保存される動作を変えたら、「verify-glint で確かめて」と頼むか、Claude Code なら `/verify-glint` を使う。AGENTS.md にも書いてあるので、頼まなくても agent が自分で使うことがある。Claude 以外の agent 向けに、`.agents/skills/verify-glint` からこのディレクトリへ symlink を張ってある。
+UI や保存される動作を変えたら、「verify skill で確かめて」と頼むか、Claude Code なら `/verify` を使う。AGENTS.md にも書いてあるので、頼まなくても agent が自分で使うことがある。Claude 以外の agent 向けに、`.agents/skills/verify` からこのディレクトリへ symlink を張ってある。
 
 agent は、変更に関係する feature ファイルを読み、`start` と `doctor` を実行し、そこにある入口と経路を操作して証拠を集める。届かなかった経路は理由と一緒に報告し、最後に `stop` する。
 
 頼み方の例：
 
-- 「ハイライトの色変更を直したので、verify-glint で再起動後まで確かめて」
-- 「verify-glint の feature map を上から全部回して、回帰がないか見て」
-- 「verify-glint の feature map に epub-reader を足して。手順は実際に動かして確かめて」
+- 「ハイライトの色変更を直したので、verify skill で再起動後まで確かめて」
+- 「verify の feature map を上から全部回して、回帰がないか見て」
+- 「verify の feature map に epub-reader を足して。手順は実際に動かして確かめて」
 
 ### 自分で動かす
 

@@ -1,5 +1,5 @@
 ---
-name: verify-glint
+name: verify
 description: "Run Glint and prove a change works with evidence. Drives a server-mode build in WebKit and uses the accessibility tree, screenshots, SQLite rows, and state after an app restart as evidence. Use to verify UI or persisted behavior, to take screenshots or drive the UI, and for broad regression sweeps."
 ---
 

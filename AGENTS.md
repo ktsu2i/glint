@@ -34,7 +34,7 @@ pnpm run build
 # App
 go tool wails3 dev     # run with live reload
 go tool wails3 build   # build build/bin/Glint.app
-go tool verify help   # drive a server-mode build for verification (see the verify-glint skill)
+go tool verify help   # drive a server-mode build for verification (see the verify skill in .claude/skills/verify)
 ```
 
 - `frontend/bindings` is generated and not committed. In a fresh checkout, generate bindings before running frontend tests or checks.
@@ -51,7 +51,7 @@ Run the same checks as CI for whatever you changed.
 - Frontend: `pnpm check`, `pnpm test`, `pnpm run build`
 - `.github/workflows`: `actionlint`, `jactionlint`, `ghalint run`, `zizmor .` (versions pinned in `aqua.yaml`)
 - Dialogs in `internal/app`: also `go test -tags verify ./internal/app/...` (the `verify` build answers dialogs from files)
-- UI or persisted behavior: drive the running app with the `verify-glint` skill (`.claude/skills/verify-glint/SKILL.md`) and report the evidence: screenshots, SQL rows, and state after `restart-app`
+- UI or persisted behavior: drive the running app with the `verify` skill (`.claude/skills/verify/SKILL.md`) and report the evidence: screenshots, SQL rows, and state after `restart-app`
 
 ## Working conventions
 
@@ -77,7 +77,7 @@ Run the same checks as CI for whatever you changed.
 
 ```text
 main.go                    Starts the Wails app, wires dependencies, binds services
-cmd/verify           CLI that drives a server-mode build in WebKit for verification (`go tool verify`)
+cmd/verify                 CLI that drives a server-mode build in WebKit for verification (`go tool verify`)
 internal/app               Services bound to Wails (BooksService, SettingsService), DTOs, native dialogs, error i18n
 internal/books             Book usecases (import, open, relink, search, covers, highlights, bookmarks) and PDF / EPUB parsing
 internal/library           SQLite store (books, reading position, book segments and full-text search, highlights, bookmarks, app settings)

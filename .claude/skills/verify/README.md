@@ -1,4 +1,4 @@
-# verify-glint
+# verify
 
 [日本語](README.ja.md)
 
@@ -23,15 +23,15 @@ go tool verify install    # downloads the Playwright driver and WebKit
 
 ### Ask an agent
 
-After changing UI or persisted behavior, ask "verify this with verify-glint", or use `/verify-glint` in Claude Code. The skill is also listed in AGENTS.md, so agents may use it on their own. `.agents/skills/verify-glint` links to this directory for other agents.
+After changing UI or persisted behavior, ask "check this with the verify skill", or use `/verify` in Claude Code. The skill is also listed in AGENTS.md, so agents may use it on their own. `.agents/skills/verify` links to this directory for other agents.
 
 The agent reads the relevant feature file, runs `start` and `doctor`, drives the entry points and paths listed there, collects evidence, reports anything unreachable with the reason, and runs `stop`.
 
 Examples:
 
-- "I fixed changing a highlight's color. Verify it with verify-glint, including after a restart."
-- "Walk the whole verify-glint feature map and check for regressions."
-- "Add epub-reader to the verify-glint feature map, and check each step against the running app."
+- "I fixed changing a highlight's color. Verify it with the verify skill, including after a restart."
+- "Walk the whole verify feature map and check for regressions."
+- "Add epub-reader to the verify feature map, and check each step against the running app."
 
 ### Run the driver yourself
 
