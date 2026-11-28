@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.6.1](https://github.com/ktsu2i/glint/compare/v0.6.0...v0.6.1) - 2026-11-28
+
+### Other Changes
+- refactor: drop the legacy migration adoption by @ktsu2i in https://github.com/ktsu2i/glint/pull/79
+- chore: remove code comments and fix the lint suppressions they hid by @ktsu2i in https://github.com/ktsu2i/glint/pull/81
+- refactor: pass the primary screen to PlaceWindow explicitly by @ktsu2i in https://github.com/ktsu2i/glint/pull/82
+- refactor: remount PdfReader per book instead of resetting its state by @ktsu2i in https://github.com/ktsu2i/glint/pull/83
+- refactor: model bookmark and highlight locations as a union by @ktsu2i in https://github.com/ktsu2i/glint/pull/84
+- fix: use ブックマーク instead of しおり in Japanese UI by @ktsu2i in https://github.com/ktsu2i/glint/pull/86
+- feat: show page and preview when hovering the reader slider by @ktsu2i in https://github.com/ktsu2i/glint/pull/87
+- perf: lazy-load PDF.js worker and readers to shrink the entry chunk by @ktsu2i in https://github.com/ktsu2i/glint/pull/88
+- chore: enforce backend dependency direction with depguard by @ktsu2i in https://github.com/ktsu2i/glint/pull/90
+- test: add property-based tests with rapid and fast-check by @ktsu2i in https://github.com/ktsu2i/glint/pull/91
+- chore: add the verify skill and go tool verify to collect evidence by @ktsu2i in https://github.com/ktsu2i/glint/pull/92
+
 ## [v0.6.0](https://github.com/ktsu2i/glint/compare/v0.5.2...v0.6.0) - 2026-11-28
 
 ### New Features
