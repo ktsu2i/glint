@@ -1,5 +1,5 @@
 import "./pdfPolyfills";
-import "pdfjs-dist/build/pdf.worker.min.mjs";
+import type * as Pdfjs from "pdfjs-dist";
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
@@ -59,6 +59,21 @@ export type PdfTextLayer = {
   cancel: () => void;
 };
 
+// PDF.js runs its worker on the main thread (the bundled WebKit needs the
+// polyfills above), so the worker module is loaded with PDF.js itself rather
+// than in the app's entry chunk. It must be evaluated before a document opens.
+let pdfjsPromise: Promise<typeof Pdfjs> | undefined;
+
+function loadPdfjs(): Promise<typeof Pdfjs> {
+  pdfjsPromise ??= import("pdfjs-dist/build/pdf.worker.min.mjs")
+    .then(() => import("pdfjs-dist"))
+    .catch((error: unknown) => {
+      pdfjsPromise = undefined;
+      throw error;
+    });
+  return pdfjsPromise;
+}
+
 function hasPdfHeader(data: Uint8Array): boolean {
   return pdfHeader.every((byte, index) => data[index] === byte);
 }
@@ -74,7 +89,7 @@ export async function createPdfLoadingTask(
 ): Promise<PDFDocumentLoadingTask> {
   const [response, pdfjs] = await Promise.all([
     fetch(url, { cache: "no-store", signal }),
-    import("pdfjs-dist"),
+    loadPdfjs(),
   ]);
 
   if (!response.ok) {
@@ -99,7 +114,7 @@ export async function createPdfTextLayer(params: {
   container: HTMLElement;
   viewport: PageViewport;
 }): Promise<PdfTextLayer> {
-  const pdfjs = await import("pdfjs-dist");
+  const pdfjs = await loadPdfjs();
   return new pdfjs.TextLayer(params);
 }
 
