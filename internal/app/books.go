@@ -27,7 +27,7 @@ func NewBooksService(bookService *books.Service, assets *assetserver.Server, set
 	return &BooksService{
 		books:   bookService,
 		assets:  assets,
-		dialogs: wailsDialogs{app: desktop},
+		dialogs: newDialogs(desktop),
 		text:    localizer{settings: settingsManager},
 	}
 }
