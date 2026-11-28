@@ -15,21 +15,32 @@ import {
   SaveReaderSettings,
 } from "../../../bindings/github.com/ktsu2i/glint/internal/app/settingsservice";
 import { SetWindowControlsVisible } from "../../../bindings/github.com/ktsu2i/glint/internal/app/windowservice";
+import type {
+  BookHighlight as BookHighlightDto,
+  BookmarkLocation as BookmarkLocationDto,
+  HighlightLocation as HighlightLocationDto,
+} from "../../../bindings/github.com/ktsu2i/glint/internal/app/models";
 import type { BindingDirection, BookSearchResult } from "../../shared/api/books";
 
-export type BookBookmark = {
-  pageNumber: number;
+export type PdfBookmarkLocation = { kind: "pdf"; page: number };
+
+export type EpubBookmarkLocation = {
+  kind: "epub";
+  section: number;
   cfi: string;
   progress: number;
+};
+
+type BookmarkLocation = PdfBookmarkLocation | EpubBookmarkLocation;
+
+export type BookBookmark<L extends BookmarkLocation = BookmarkLocation> = {
+  location: L;
   createdAt: string;
 };
 
-type BookmarkPlace = {
-  cfi: string;
-  progress: number;
-};
+const highlightColors = ["yellow", "green", "pink", "purple"] as const;
 
-export type HighlightColor = "yellow" | "green" | "pink" | "purple";
+export type HighlightColor = (typeof highlightColors)[number];
 
 export type HighlightRect = {
   x: number;
@@ -38,24 +49,33 @@ export type HighlightRect = {
   height: number;
 };
 
-export type BookHighlight = {
+export type PdfHighlightLocation = { kind: "pdf"; page: number; rects: HighlightRect[] };
+
+export type EpubHighlightLocation = { kind: "epub"; section: number; cfi: string };
+
+type HighlightLocation = PdfHighlightLocation | EpubHighlightLocation;
+
+export type BookHighlight<L extends HighlightLocation = HighlightLocation> = {
   id: number;
-  pageNumber: number;
   color: HighlightColor;
   text: string;
-  rects: HighlightRect[];
-  cfi: string;
+  location: L;
   createdAt: string;
 };
 
-type HighlightInput = {
-  pageNumber: number;
+type HighlightInput<L extends HighlightLocation> = {
+  location: L;
   pageCount: number;
   color: HighlightColor;
   text: string;
-  rects: HighlightRect[];
-  cfi?: string;
 };
+
+export type PdfBookmark = BookBookmark<PdfBookmarkLocation>;
+export type EpubBookmark = BookBookmark<EpubBookmarkLocation>;
+export type PdfHighlight = BookHighlight<PdfHighlightLocation>;
+export type EpubHighlight = BookHighlight<EpubHighlightLocation>;
+
+type LocationKind = BookmarkLocation["kind"];
 
 export type EpubLayout = "single" | "spread";
 
@@ -80,42 +100,113 @@ export async function saveBindingDirection(
   await SaveBindingDirection(bookId, direction);
 }
 
-export async function listBookmarks(bookId: string): Promise<BookBookmark[]> {
-  return (await ListBookmarks(bookId)) ?? [];
+function toBookmarkLocation(dto: BookmarkLocationDto): BookmarkLocation {
+  if (dto.pdf) {
+    return { kind: "pdf", page: dto.pdf.page };
+  }
+  if (dto.epub) {
+    return { kind: "epub", ...dto.epub };
+  }
+  throw new Error("A bookmark has no location.");
 }
 
-export async function addBookmark(
+function fromBookmarkLocation(location: BookmarkLocation): BookmarkLocationDto {
+  if (location.kind === "pdf") {
+    return { pdf: { page: location.page } };
+  }
+  return { epub: { section: location.section, cfi: location.cfi, progress: location.progress } };
+}
+
+function toHighlightLocation(dto: HighlightLocationDto): HighlightLocation {
+  if (dto.pdf) {
+    return { kind: "pdf", page: dto.pdf.page, rects: dto.pdf.rects ?? [] };
+  }
+  if (dto.epub) {
+    return { kind: "epub", ...dto.epub };
+  }
+  throw new Error("A highlight has no location.");
+}
+
+function fromHighlightLocation(location: HighlightLocation): HighlightLocationDto {
+  if (location.kind === "pdf") {
+    return { pdf: { page: location.page, rects: location.rects } };
+  }
+  return { epub: { section: location.section, cfi: location.cfi } };
+}
+
+function toHighlightColor(color: string): HighlightColor {
+  const known = highlightColors.find((entry) => entry === color);
+  if (known === undefined) {
+    throw new Error(`Unknown highlight color: ${color}`);
+  }
+  return known;
+}
+
+function toBookHighlight(dto: BookHighlightDto): BookHighlight {
+  return {
+    id: dto.id,
+    color: toHighlightColor(dto.color),
+    text: dto.text,
+    location: toHighlightLocation(dto.location),
+    createdAt: dto.createdAt,
+  };
+}
+
+function hasKind<K extends LocationKind>(kind: K) {
+  return <T extends { location: { kind: LocationKind } }>(
+    entry: T,
+  ): entry is T & { location: Extract<T["location"], { kind: K }> } => entry.location.kind === kind;
+}
+
+export async function listBookmarks<K extends LocationKind>(
   bookId: string,
-  pageNumber: number,
+  kind: K,
+): Promise<BookBookmark<Extract<BookmarkLocation, { kind: K }>>[]> {
+  const bookmarks = ((await ListBookmarks(bookId)) ?? []).map((dto): BookBookmark => ({
+    location: toBookmarkLocation(dto.location),
+    createdAt: dto.createdAt,
+  }));
+  return bookmarks.filter(hasKind(kind));
+}
+
+export async function addBookmark<L extends BookmarkLocation>(
+  bookId: string,
+  location: L,
   pageCount: number,
-  place?: BookmarkPlace,
-): Promise<BookBookmark> {
-  return AddBookmark(bookId, {
-    pageNumber,
-    pageCount,
-    cfi: place?.cfi ?? "",
-    progress: place?.progress ?? 0,
-  });
+): Promise<BookBookmark<L>> {
+  const saved = await AddBookmark(bookId, { location: fromBookmarkLocation(location), pageCount });
+  return { location, createdAt: saved.createdAt };
 }
 
-export async function removeBookmark(bookId: string, pageNumber: number, cfi = ""): Promise<void> {
-  await RemoveBookmark(bookId, pageNumber, cfi);
+export async function removeBookmark(bookId: string, location: BookmarkLocation): Promise<void> {
+  await RemoveBookmark(bookId, fromBookmarkLocation(location));
 }
 
-export async function listHighlights(bookId: string): Promise<BookHighlight[]> {
-  return ((await ListHighlights(bookId)) ?? []) as BookHighlight[];
+export async function listHighlights<K extends LocationKind>(
+  bookId: string,
+  kind: K,
+): Promise<BookHighlight<Extract<HighlightLocation, { kind: K }>>[]> {
+  return ((await ListHighlights(bookId)) ?? [])
+    .map((dto) => toBookHighlight(dto))
+    .filter(hasKind(kind));
 }
 
-export async function addHighlight(bookId: string, input: HighlightInput): Promise<BookHighlight> {
-  return (await AddHighlight(bookId, { ...input, cfi: input.cfi ?? "" })) as BookHighlight;
+export async function addHighlight<L extends HighlightLocation>(
+  bookId: string,
+  input: HighlightInput<L>,
+): Promise<BookHighlight<L>> {
+  const saved = toBookHighlight(
+    await AddHighlight(bookId, { ...input, location: fromHighlightLocation(input.location) }),
+  );
+  return { ...saved, location: input.location };
 }
 
 export async function changeHighlightColor(
   bookId: string,
   id: number,
   color: HighlightColor,
-): Promise<BookHighlight> {
-  return (await ChangeHighlightColor(bookId, id, color)) as BookHighlight;
+): Promise<HighlightColor> {
+  return toHighlightColor((await ChangeHighlightColor(bookId, id, color)).color);
 }
 
 export async function removeHighlight(bookId: string, id: number): Promise<void> {

@@ -8,19 +8,24 @@ import {
   listHighlights,
   removeBookmark,
   removeHighlight,
-  type BookHighlight,
   type HighlightColor,
+  type PdfBookmark,
+  type PdfHighlight,
 } from "../api";
 import type { BookFile } from "../../../shared/api/books";
 import { useSavedList } from "../common/useSavedList";
 import type { PageSelection } from "./highlights";
 
-async function loadSortedHighlights(bookId: string): Promise<BookHighlight[]> {
-  return sortHighlights(await listHighlights(bookId));
+async function loadPdfBookmarks(bookId: string): Promise<PdfBookmark[]> {
+  return listBookmarks(bookId, "pdf");
 }
 
-function sortHighlights(highlights: BookHighlight[]): BookHighlight[] {
-  return highlights.toSorted((a, b) => a.pageNumber - b.pageNumber || a.id - b.id);
+async function loadSortedHighlights(bookId: string): Promise<PdfHighlight[]> {
+  return sortHighlights(await listHighlights(bookId, "pdf"));
+}
+
+function sortHighlights(highlights: PdfHighlight[]): PdfHighlight[] {
+  return highlights.toSorted((a, b) => a.location.page - b.location.page || a.id - b.id);
 }
 
 export function usePdfBookmarks(
@@ -29,14 +34,14 @@ export function usePdfBookmarks(
   pageNumber: number,
 ) {
   const list = useSavedList(book?.id, {
-    load: listBookmarks,
+    load: loadPdfBookmarks,
     loadErrorKey: "error.loadBookmarks",
   });
   const { entries: bookmarks, setEntries: setBookmarks, change } = list;
   const numPages = document?.numPages ?? 0;
   const pageBookmarks =
-    numPages > 0 ? bookmarks.filter((bookmark) => bookmark.pageNumber <= numPages) : bookmarks;
-  const currentPageBookmarked = bookmarks.some((bookmark) => bookmark.pageNumber === pageNumber);
+    numPages > 0 ? bookmarks.filter((bookmark) => bookmark.location.page <= numPages) : bookmarks;
+  const currentPageBookmarked = bookmarks.some((bookmark) => bookmark.location.page === pageNumber);
 
   async function remove(page: number) {
     if (!book) {
@@ -44,8 +49,8 @@ export function usePdfBookmarks(
     }
     const bookId = book.id;
     await change(async () => {
-      await removeBookmark(bookId, page);
-      setBookmarks((current) => current.filter((entry) => entry.pageNumber !== page));
+      await removeBookmark(bookId, { kind: "pdf", page });
+      setBookmarks((current) => current.filter((entry) => entry.location.page !== page));
     }, "error.saveBookmark");
   }
 
@@ -60,9 +65,9 @@ export function usePdfBookmarks(
     const bookId = book.id;
     const pageCount = document.numPages;
     await change(async () => {
-      const saved = await addBookmark(bookId, pageNumber, pageCount);
+      const saved = await addBookmark(bookId, { kind: "pdf", page: pageNumber }, pageCount);
       setBookmarks((current) =>
-        [...current, saved].toSorted((a, b) => a.pageNumber - b.pageNumber),
+        [...current, saved].toSorted((a, b) => a.location.page - b.location.page),
       );
     }, "error.saveBookmark");
   }
@@ -87,7 +92,9 @@ export function usePdfHighlights(book: BookFile | null, document: PDFDocumentPro
   const { entries: highlights, setEntries: setHighlights, busy, setBusy, setError, change } = list;
   const numPages = document?.numPages ?? 0;
   const pageHighlights =
-    numPages > 0 ? highlights.filter((highlight) => highlight.pageNumber <= numPages) : highlights;
+    numPages > 0
+      ? highlights.filter((highlight) => highlight.location.page <= numPages)
+      : highlights;
 
   async function saveSelection(parts: PageSelection[], color: HighlightColor): Promise<boolean> {
     if (!book || !document || busy) {
@@ -98,7 +105,14 @@ export function usePdfHighlights(book: BookFile | null, document: PDFDocumentPro
     setBusy(true);
     setError("");
     const results = await Promise.allSettled(
-      parts.map((part) => addHighlight(bookId, { ...part, color, pageCount })),
+      parts.map((part) =>
+        addHighlight(bookId, {
+          location: { kind: "pdf", page: part.pageNumber, rects: part.rects },
+          pageCount,
+          color,
+          text: part.text,
+        }),
+      ),
     );
     const saved = results.flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : [],
@@ -119,9 +133,11 @@ export function usePdfHighlights(book: BookFile | null, document: PDFDocumentPro
     }
     const bookId = book.id;
     await change(async () => {
-      const updated = await changeHighlightColor(bookId, id, color);
+      const changed = await changeHighlightColor(bookId, id, color);
       setHighlights((current) =>
-        current.map((highlight) => (highlight.id === id ? updated : highlight)),
+        current.map((highlight) =>
+          highlight.id === id ? { ...highlight, color: changed } : highlight,
+        ),
       );
     }, "error.saveHighlight");
   }

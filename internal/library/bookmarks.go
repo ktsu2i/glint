@@ -13,23 +13,58 @@ import (
 
 var ErrInvalidBookmark = errors.New("invalid bookmark")
 
+type BookmarkLocation interface {
+	bookmarkLocation()
+}
+
+type PDFBookmarkLocation struct {
+	Page int
+}
+
+type EPUBBookmarkLocation struct {
+	Section  int
+	CFI      string
+	Progress float64
+}
+
+func (PDFBookmarkLocation) bookmarkLocation()  {}
+func (EPUBBookmarkLocation) bookmarkLocation() {}
+
 type BookBookmark struct {
-	PageNumber int
-	CFI        string
-	Progress   float64
-	CreatedAt  string
+	Location  BookmarkLocation
+	CreatedAt string
 }
 
 type NewBookmark struct {
-	PageNumber int
-	PageCount  int
-	CFI        string
-	Progress   float64
+	Location  BookmarkLocation
+	PageCount int
+}
+
+type bookmarkKey struct {
+	pageNumber int
+	cfi        string
+	progress   float64
+}
+
+func keyOfBookmark(location BookmarkLocation) (bookmarkKey, bool) {
+	switch location := location.(type) {
+	case PDFBookmarkLocation:
+		return bookmarkKey{pageNumber: location.Page}, true
+	case EPUBBookmarkLocation:
+		if !validCFI(location.CFI) || math.IsNaN(location.Progress) ||
+			location.Progress < 0 || location.Progress > 1 {
+			return bookmarkKey{}, false
+		}
+		return bookmarkKey{pageNumber: location.Section, cfi: location.CFI, progress: location.Progress}, true
+	default:
+		return bookmarkKey{}, false
+	}
 }
 
 func (store *Store) SaveBookmark(ctx context.Context, bookID string, input NewBookmark, now time.Time) (BookBookmark, error) {
 	bookID = strings.TrimSpace(bookID)
-	if bookID == "" || !validBookmark(input) {
+	key, ok := keyOfBookmark(input.Location)
+	if bookID == "" || !ok || input.PageCount < 1 || key.pageNumber < 1 || key.pageNumber > input.PageCount {
 		return BookBookmark{}, ErrInvalidBookmark
 	}
 	timestamp := now.UTC().Format(time.RFC3339Nano)
@@ -44,9 +79,9 @@ func (store *Store) SaveBookmark(ctx context.Context, bookID string, input NewBo
 		}
 		return queries.InsertBookmark(ctx, librarydb.InsertBookmarkParams{
 			BookID:     bookID,
-			PageNumber: int64(input.PageNumber),
-			Cfi:        input.CFI,
-			Progress:   input.Progress,
+			PageNumber: int64(key.pageNumber),
+			Cfi:        key.cfi,
+			Progress:   key.progress,
 			CreatedAt:  timestamp,
 		})
 	})
@@ -55,8 +90,8 @@ func (store *Store) SaveBookmark(ctx context.Context, bookID string, input NewBo
 	}
 	saved, err := store.queries.GetBookmark(ctx, librarydb.GetBookmarkParams{
 		BookID:     bookID,
-		PageNumber: int64(input.PageNumber),
-		Cfi:        input.CFI,
+		PageNumber: int64(key.pageNumber),
+		Cfi:        key.cfi,
 	})
 	if err != nil {
 		return BookBookmark{}, fmt.Errorf("read saved bookmark: %w", err)
@@ -83,9 +118,10 @@ func (store *Store) ListBookmarks(ctx context.Context, bookID string) ([]BookBoo
 	return bookmarks, nil
 }
 
-func (store *Store) DeleteBookmark(ctx context.Context, bookID string, pageNumber int, cfi string) error {
+func (store *Store) DeleteBookmark(ctx context.Context, bookID string, location BookmarkLocation) error {
 	bookID = strings.TrimSpace(bookID)
-	if bookID == "" || pageNumber < 1 || (cfi != "" && !validCFI(cfi)) {
+	key, ok := keyOfBookmark(location)
+	if bookID == "" || !ok || key.pageNumber < 1 {
 		return ErrInvalidBookmark
 	}
 	if _, err := store.Get(ctx, bookID); err != nil {
@@ -93,8 +129,8 @@ func (store *Store) DeleteBookmark(ctx context.Context, bookID string, pageNumbe
 	}
 	if err := store.queries.DeleteBookmark(ctx, librarydb.DeleteBookmarkParams{
 		BookID:     bookID,
-		PageNumber: int64(pageNumber),
-		Cfi:        cfi,
+		PageNumber: int64(key.pageNumber),
+		Cfi:        key.cfi,
 	}); err != nil {
 		return fmt.Errorf("delete bookmark: %w", err)
 	}
@@ -102,23 +138,9 @@ func (store *Store) DeleteBookmark(ctx context.Context, bookID string, pageNumbe
 }
 
 func bookmarkFromRow(row librarydb.ListBookmarksRow) BookBookmark {
-	return BookBookmark{
-		PageNumber: int(row.PageNumber),
-		CFI:        row.Cfi,
-		Progress:   row.Progress,
-		CreatedAt:  row.CreatedAt,
+	var location BookmarkLocation = PDFBookmarkLocation{Page: int(row.PageNumber)}
+	if row.Cfi != "" {
+		location = EPUBBookmarkLocation{Section: int(row.PageNumber), CFI: row.Cfi, Progress: row.Progress}
 	}
-}
-
-func validBookmark(input NewBookmark) bool {
-	if input.PageCount < 1 || input.PageNumber < 1 || input.PageNumber > input.PageCount {
-		return false
-	}
-	if math.IsNaN(input.Progress) || input.Progress < 0 || input.Progress > 1 {
-		return false
-	}
-	if input.CFI == "" {
-		return input.Progress == 0
-	}
-	return validCFI(input.CFI)
+	return BookBookmark{Location: location, CreatedAt: row.CreatedAt}
 }

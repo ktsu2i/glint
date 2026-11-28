@@ -289,14 +289,15 @@ func (s *Service) AddBookmark(ctx context.Context, bookID string, input library.
 	if err != nil {
 		return library.BookBookmark{}, err
 	}
-	if (book.Format == BookFormatEPUB) != (input.CFI != "") {
+	_, epub := input.Location.(library.EPUBBookmarkLocation)
+	if (book.Format == BookFormatEPUB) != epub {
 		return library.BookBookmark{}, library.ErrInvalidBookmark
 	}
 	return s.library.SaveBookmark(ctx, bookID, input, time.Now())
 }
 
-func (s *Service) RemoveBookmark(ctx context.Context, bookID string, pageNumber int, cfi string) error {
-	return s.library.DeleteBookmark(ctx, bookID, pageNumber, cfi)
+func (s *Service) RemoveBookmark(ctx context.Context, bookID string, location library.BookmarkLocation) error {
+	return s.library.DeleteBookmark(ctx, bookID, location)
 }
 
 func (s *Service) ListHighlights(ctx context.Context, bookID string) ([]library.BookHighlight, error) {
@@ -308,7 +309,8 @@ func (s *Service) AddHighlight(ctx context.Context, bookID string, input library
 	if err != nil {
 		return library.BookHighlight{}, err
 	}
-	if (book.Format == BookFormatEPUB) != (input.CFI != "") {
+	_, epub := input.Location.(library.EPUBHighlightLocation)
+	if (book.Format == BookFormatEPUB) != epub {
 		return library.BookHighlight{}, library.ErrInvalidHighlight
 	}
 	return s.library.SaveHighlight(ctx, bookID, input, time.Now())

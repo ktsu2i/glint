@@ -8,8 +8,8 @@ import {
   listHighlights,
   removeBookmark,
   removeHighlight,
-  type BookBookmark,
-  type BookHighlight,
+  type EpubBookmark,
+  type EpubHighlight,
   type HighlightColor,
 } from "../api";
 import { useSavedList } from "../common/useSavedList";
@@ -26,19 +26,19 @@ export type ReaderLocation = {
 
 type HighlightSelection = { cfi: string; text: string; section: number };
 
-async function loadHighlights(bookId: string): Promise<BookHighlight[]> {
-  return sortEpubHighlights(await listHighlights(bookId));
+async function loadHighlights(bookId: string): Promise<EpubHighlight[]> {
+  return sortEpubHighlights(await listHighlights(bookId, "epub"));
 }
 
-async function loadBookmarks(bookId: string): Promise<BookBookmark[]> {
-  return sortEpubBookmarks(await listBookmarks(bookId));
+async function loadBookmarks(bookId: string): Promise<EpubBookmark[]> {
+  return sortEpubBookmarks(await listBookmarks(bookId, "epub"));
 }
 
 export function useEpubHighlights(
   bookId: string,
   view: View | null,
   location: ReaderLocation | null,
-  highlightsRef: RefObject<BookHighlight[]>,
+  highlightsRef: RefObject<EpubHighlight[]>,
 ) {
   const list = useSavedList(bookId, {
     load: loadHighlights,
@@ -58,14 +58,12 @@ export function useEpubHighlights(
       return;
     }
     for (const highlight of highlightsRef.current) {
-      if (highlight.cfi) {
-        view.addAnnotation({ value: highlight.cfi }).catch(() => {});
-      }
+      view.addAnnotation({ value: highlight.location.cfi }).catch(() => {});
     }
   }, [view, loaded, highlightsRef]);
 
   const store = useCallback(
-    (next: BookHighlight[]) => {
+    (next: EpubHighlight[]) => {
       highlightsRef.current = next;
       setEntries(next);
     },
@@ -78,15 +76,13 @@ export function useEpubHighlights(
     }
     return change(async () => {
       const saved = await addHighlight(bookId, {
-        pageNumber: selection.section,
+        location: { kind: "epub", section: selection.section, cfi: selection.cfi },
         pageCount: Math.max(selection.section, location?.sectionCount ?? 0),
         color,
         text: selection.text,
-        rects: [],
-        cfi: selection.cfi,
       });
       store(sortEpubHighlights([...highlightsRef.current, saved]));
-      await view.addAnnotation({ value: saved.cfi });
+      await view.addAnnotation({ value: saved.location.cfi });
     }, "error.saveHighlight");
   }
 
@@ -94,11 +90,19 @@ export function useEpubHighlights(
     if (!view || busy) {
       return;
     }
+    const highlight = highlightsRef.current.find((entry) => entry.id === id);
+    if (!highlight) {
+      return;
+    }
     await change(async () => {
       const changed = await changeHighlightColor(bookId, id, color);
-      store(highlightsRef.current.map((entry) => (entry.id === id ? changed : entry)));
+      store(
+        highlightsRef.current.map((entry) =>
+          entry.id === id ? { ...entry, color: changed } : entry,
+        ),
+      );
       // Adding it again redraws it in the new color.
-      await view.addAnnotation({ value: changed.cfi });
+      await view.addAnnotation({ value: highlight.location.cfi });
     }, "error.saveHighlight");
   }
 
@@ -111,7 +115,7 @@ export function useEpubHighlights(
       await removeHighlight(bookId, id);
       store(highlightsRef.current.filter((entry) => entry.id !== id));
       onRemoved();
-      await view.deleteAnnotation({ value: highlight.cfi });
+      await view.deleteAnnotation({ value: highlight.location.cfi });
     }, "error.saveHighlight");
   }
 
@@ -134,7 +138,7 @@ export function useEpubBookmarks(bookId: string, location: ReaderLocation | null
   const { entries: bookmarks, setEntries: setBookmarks, busy, change } = list;
   const pageCFI = location?.cfi ?? "";
   const pageBookmarks = pageCFI
-    ? bookmarks.filter((bookmark) => isCFIOnPage(bookmark.cfi, pageCFI))
+    ? bookmarks.filter((bookmark) => isCFIOnPage(bookmark.location.cfi, pageCFI))
     : [];
   const pageBookmarked = pageBookmarks.length > 0;
 
@@ -145,34 +149,36 @@ export function useEpubBookmarks(bookId: string, location: ReaderLocation | null
     await change(async () => {
       if (pageBookmarked) {
         await Promise.all(
-          pageBookmarks.map((bookmark) =>
-            removeBookmark(bookId, bookmark.pageNumber, bookmark.cfi),
-          ),
+          pageBookmarks.map((bookmark) => removeBookmark(bookId, bookmark.location)),
         );
         setBookmarks((current) => current.filter((bookmark) => !pageBookmarks.includes(bookmark)));
       } else {
         const saved = await addBookmark(
           bookId,
-          location.section,
-          Math.max(location.section, location.sectionCount),
           {
+            kind: "epub",
+            section: location.section,
             cfi: pageStartCFI(location.cfi),
             progress: Math.min(1, Math.max(0, location.fraction)),
           },
+          Math.max(location.section, location.sectionCount),
         );
         setBookmarks((current) =>
-          sortEpubBookmarks([...current.filter((bookmark) => bookmark.cfi !== saved.cfi), saved]),
+          sortEpubBookmarks([
+            ...current.filter((bookmark) => bookmark.location.cfi !== saved.location.cfi),
+            saved,
+          ]),
         );
       }
     }, "error.saveBookmark");
   }
 
-  async function remove(bookmark: BookBookmark) {
+  async function remove(bookmark: EpubBookmark) {
     if (busy) {
       return;
     }
     await change(async () => {
-      await removeBookmark(bookId, bookmark.pageNumber, bookmark.cfi);
+      await removeBookmark(bookId, bookmark.location);
       setBookmarks((current) => current.filter((entry) => entry !== bookmark));
     }, "error.saveBookmark");
   }

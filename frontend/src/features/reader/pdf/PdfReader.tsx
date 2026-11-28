@@ -249,8 +249,8 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
       const hitPage = Number(page.dataset.page);
       return highlights.highlights.findLast(
         (highlight) =>
-          highlight.pageNumber === hitPage &&
-          highlight.rects.some((rect) => rectContainsPoint(rect, x, y)),
+          highlight.location.page === hitPage &&
+          highlight.location.rects.some((rect) => rectContainsPoint(rect, x, y)),
       );
     }
     return undefined;
@@ -400,9 +400,9 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
     return (
       <div className="highlight-layer" aria-hidden="true">
         {highlights.highlights
-          .filter((highlight) => highlight.pageNumber === layerPageNumber)
+          .filter((highlight) => highlight.location.page === layerPageNumber)
           .flatMap((highlight) =>
-            highlight.rects.map((rect) => (
+            highlight.location.rects.map((rect) => (
               <div
                 key={`${highlight.id}-${rect.x}-${rect.y}`}
                 className={`highlight-mark is-${highlight.color}${
@@ -641,12 +641,12 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
               entries={pageHighlights.map((highlight) => ({
                 key: highlight.id,
                 color: highlight.color,
-                active: renderedPages.includes(highlight.pageNumber),
-                place: t("reader.bookmarkPage", { page: highlight.pageNumber }),
+                active: renderedPages.includes(highlight.location.page),
+                place: t("reader.bookmarkPage", { page: highlight.location.page }),
                 text: highlight.text,
-                goLabel: t("reader.goToHighlight", { page: highlight.pageNumber }),
-                removeLabel: t("reader.removeHighlightOnPage", { page: highlight.pageNumber }),
-                onGo: () => jumpToOutlinePage(highlight.pageNumber),
+                goLabel: t("reader.goToHighlight", { page: highlight.location.page }),
+                removeLabel: t("reader.removeHighlightOnPage", { page: highlight.location.page }),
+                onGo: () => jumpToOutlinePage(highlight.location.page),
                 onRemove: () => void deleteHighlight(highlight.id),
               }))}
             />
@@ -658,14 +658,14 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
               busy={bookmarks.busy}
               emptyMessage={t("reader.noBookmarks")}
               entries={pageBookmarks.map((bookmark) => ({
-                key: bookmark.pageNumber,
-                active: bookmark.pageNumber === pageNumber,
-                title: t("reader.bookmarkPage", { page: bookmark.pageNumber }),
+                key: bookmark.location.page,
+                active: bookmark.location.page === pageNumber,
+                title: t("reader.bookmarkPage", { page: bookmark.location.page }),
                 detail: t("reader.bookmarkSaved"),
-                goLabel: t("reader.goToBookmark", { page: bookmark.pageNumber }),
-                removeLabel: t("reader.removePageBookmark", { page: bookmark.pageNumber }),
-                onGo: () => jumpToOutlinePage(bookmark.pageNumber),
-                onRemove: () => void bookmarks.remove(bookmark.pageNumber),
+                goLabel: t("reader.goToBookmark", { page: bookmark.location.page }),
+                removeLabel: t("reader.removePageBookmark", { page: bookmark.location.page }),
+                onGo: () => jumpToOutlinePage(bookmark.location.page),
+                onRemove: () => void bookmarks.remove(bookmark.location.page),
               }))}
             />
           )}
@@ -748,12 +748,12 @@ export function PdfReader({ book, initialPage = 1, onPageChange, onBack }: PdfRe
         markers={
           document
             ? pageBookmarks.map((bookmark) => ({
-                key: bookmark.pageNumber,
-                position: numPages > 1 ? ((bookmark.pageNumber - 1) / (numPages - 1)) * 100 : 0,
-                current: bookmark.pageNumber === pageNumber,
-                label: t("reader.sliderBookmark", { page: bookmark.pageNumber }),
-                tooltip: t("reader.bookmarkPage", { page: bookmark.pageNumber }),
-                onGo: () => jumpToOutlinePage(bookmark.pageNumber),
+                key: bookmark.location.page,
+                position: numPages > 1 ? ((bookmark.location.page - 1) / (numPages - 1)) * 100 : 0,
+                current: bookmark.location.page === pageNumber,
+                label: t("reader.sliderBookmark", { page: bookmark.location.page }),
+                tooltip: t("reader.bookmarkPage", { page: bookmark.location.page }),
+                onGo: () => jumpToOutlinePage(bookmark.location.page),
               }))
             : []
         }

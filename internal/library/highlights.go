@@ -35,35 +35,70 @@ type HighlightRect struct {
 	Height float64 `json:"height"`
 }
 
+type HighlightLocation interface {
+	highlightLocation()
+}
+
+type PDFHighlightLocation struct {
+	Page  int
+	Rects []HighlightRect
+}
+
+type EPUBHighlightLocation struct {
+	Section int
+	CFI     string
+}
+
+func (PDFHighlightLocation) highlightLocation()  {}
+func (EPUBHighlightLocation) highlightLocation() {}
+
 type BookHighlight struct {
-	ID         int64
-	PageNumber int
-	Color      string
-	Text       string
-	Rects      []HighlightRect
-	CFI        string
-	CreatedAt  string
+	ID        int64
+	Color     string
+	Text      string
+	Location  HighlightLocation
+	CreatedAt string
 }
 
 type NewHighlight struct {
-	PageNumber int
-	PageCount  int
-	Color      string
-	Text       string
-	Rects      []HighlightRect
-	CFI        string
+	Location  HighlightLocation
+	PageCount int
+	Color     string
+	Text      string
+}
+
+type highlightColumns struct {
+	pageNumber int
+	rects      []HighlightRect
+	cfi        string
+}
+
+func columnsOfHighlight(location HighlightLocation) (highlightColumns, bool) {
+	switch location := location.(type) {
+	case PDFHighlightLocation:
+		if len(location.Rects) == 0 || len(location.Rects) > MaxHighlightRects ||
+			slices.ContainsFunc(location.Rects, func(rect HighlightRect) bool { return !rect.valid() }) {
+			return highlightColumns{}, false
+		}
+		return highlightColumns{pageNumber: location.Page, rects: location.Rects}, true
+	case EPUBHighlightLocation:
+		if !validCFI(location.CFI) {
+			return highlightColumns{}, false
+		}
+		return highlightColumns{pageNumber: location.Section, rects: []HighlightRect{}, cfi: location.CFI}, true
+	default:
+		return highlightColumns{}, false
+	}
 }
 
 func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewHighlight, now time.Time) (BookHighlight, error) {
 	bookID = strings.TrimSpace(bookID)
 	text := strings.TrimSpace(input.Text)
-	if bookID == "" || !validHighlight(input, text) {
+	columns, ok := columnsOfHighlight(input.Location)
+	if bookID == "" || !ok || !validHighlight(input, columns.pageNumber, text) {
 		return BookHighlight{}, ErrInvalidHighlight
 	}
-	if input.Rects == nil {
-		input.Rects = []HighlightRect{}
-	}
-	rects, err := json.Marshal(input.Rects)
+	rects, err := json.Marshal(columns.rects)
 	if err != nil {
 		return BookHighlight{}, fmt.Errorf("encode highlight rects: %w", err)
 	}
@@ -80,11 +115,11 @@ func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewH
 		}
 		id, err = queries.InsertHighlight(ctx, librarydb.InsertHighlightParams{
 			BookID:     bookID,
-			PageNumber: int64(input.PageNumber),
+			PageNumber: int64(columns.pageNumber),
 			Color:      input.Color,
 			Text:       text,
 			Rects:      string(rects),
-			Cfi:        input.CFI,
+			Cfi:        columns.cfi,
 			CreatedAt:  timestamp,
 		})
 		return err
@@ -92,14 +127,16 @@ func (store *Store) SaveHighlight(ctx context.Context, bookID string, input NewH
 	if err != nil {
 		return BookHighlight{}, fmt.Errorf("save highlight: %w", err)
 	}
+	location := input.Location
+	if pdf, ok := location.(PDFHighlightLocation); ok {
+		location = PDFHighlightLocation{Page: pdf.Page, Rects: slices.Clone(pdf.Rects)}
+	}
 	return BookHighlight{
-		ID:         id,
-		PageNumber: input.PageNumber,
-		Color:      input.Color,
-		Text:       text,
-		Rects:      slices.Clone(input.Rects),
-		CFI:        input.CFI,
-		CreatedAt:  timestamp,
+		ID:        id,
+		Color:     input.Color,
+		Text:      text,
+		Location:  location,
+		CreatedAt: timestamp,
 	}, nil
 }
 
@@ -153,18 +190,20 @@ func (store *Store) UpdateHighlightColor(ctx context.Context, bookID string, id 
 }
 
 func highlightFromRow(row librarydb.GetHighlightRow) (BookHighlight, error) {
-	var rects []HighlightRect
-	if err := json.Unmarshal([]byte(row.Rects), &rects); err != nil {
-		return BookHighlight{}, fmt.Errorf("decode highlight %d rects: %w", row.ID, err)
+	var location HighlightLocation = EPUBHighlightLocation{Section: int(row.PageNumber), CFI: row.Cfi}
+	if row.Cfi == "" {
+		var rects []HighlightRect
+		if err := json.Unmarshal([]byte(row.Rects), &rects); err != nil {
+			return BookHighlight{}, fmt.Errorf("decode highlight %d rects: %w", row.ID, err)
+		}
+		location = PDFHighlightLocation{Page: int(row.PageNumber), Rects: rects}
 	}
 	return BookHighlight{
-		ID:         row.ID,
-		PageNumber: int(row.PageNumber),
-		Color:      row.Color,
-		Text:       row.Text,
-		Rects:      rects,
-		CFI:        row.Cfi,
-		CreatedAt:  row.CreatedAt,
+		ID:        row.ID,
+		Color:     row.Color,
+		Text:      row.Text,
+		Location:  location,
+		CreatedAt: row.CreatedAt,
 	}, nil
 }
 
@@ -182,23 +221,14 @@ func (store *Store) DeleteHighlight(ctx context.Context, bookID string, id int64
 	return nil
 }
 
-func validHighlight(input NewHighlight, text string) bool {
-	if input.PageCount < 1 || input.PageNumber < 1 || input.PageNumber > input.PageCount {
+func validHighlight(input NewHighlight, pageNumber int, text string) bool {
+	if input.PageCount < 1 || pageNumber < 1 || pageNumber > input.PageCount {
 		return false
 	}
 	if !slices.Contains(HighlightColors, input.Color) {
 		return false
 	}
-	if text == "" || utf8.RuneCountInString(text) > MaxHighlightTextRunes {
-		return false
-	}
-	if input.CFI != "" {
-		return len(input.Rects) == 0 && validCFI(input.CFI)
-	}
-	if len(input.Rects) == 0 || len(input.Rects) > MaxHighlightRects {
-		return false
-	}
-	return !slices.ContainsFunc(input.Rects, func(rect HighlightRect) bool { return !rect.valid() })
+	return text != "" && utf8.RuneCountInString(text) <= MaxHighlightTextRunes
 }
 
 func validCFI(cfi string) bool {

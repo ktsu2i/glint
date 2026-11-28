@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { TextAaIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { FoliateShowAnnotationDetail } from "foliate-js/view.js";
-import type { BookBookmark, BookHighlight, HighlightColor } from "../api";
+import type { EpubBookmark, EpubHighlight, HighlightColor } from "../api";
 import type { BookFile } from "../../../shared/api/books";
 import { BookmarkList, HighlightList } from "../common/AnnotationLists";
 import { BookSearchPanel } from "../common/BookSearchPanel";
@@ -39,8 +39,8 @@ type ActiveHighlight = FloatingAnchor & { id: number };
 
 type TurnDirection = "left" | "right" | "next" | "prev";
 
-function progressPercent(bookmark: BookBookmark): number {
-  return Math.round(bookmark.progress * 100);
+function progressPercent(bookmark: EpubBookmark): number {
+  return Math.round(bookmark.location.progress * 100);
 }
 
 const wheelTurnThreshold = 60;
@@ -68,7 +68,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const handlersRef = useRef<FoliateHandlers | null>(null);
   // foliate-js asks for highlights while it draws a section, outside React's
   // render, so it reads them here.
-  const highlightsRef = useRef<BookHighlight[]>([]);
+  const highlightsRef = useRef<EpubHighlight[]>([]);
   const pageRangeRef = useRef<Range | null>(null);
   const pageChangeCallbackRef = useRef(onPageChange);
   useEffect(() => {
@@ -246,7 +246,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
 
   const handleAnnotation = useCallback(
     (detail: FoliateShowAnnotationDetail) => {
-      const highlight = highlightsRef.current.find((entry) => entry.cfi === detail.value);
+      const highlight = highlightsRef.current.find((entry) => entry.location.cfi === detail.value);
       const anchor = rangeAnchor(detail.range, readerRef.current);
       if (!highlight || !anchor) {
         return;
@@ -479,13 +479,13 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
               busy={bookmarks.busy}
               emptyMessage={t("reader.noEpubBookmarks")}
               entries={bookmarks.bookmarks.map((bookmark) => ({
-                key: bookmark.cfi,
+                key: bookmark.location.cfi,
                 active: bookmarks.pageBookmarks.includes(bookmark),
                 title: placeName(bookmark),
                 detail: `${progressPercent(bookmark)}%`,
                 goLabel: t("reader.goToBookmarkIn", { place: placeName(bookmark) }),
                 removeLabel: t("reader.removeBookmarkIn", { place: placeName(bookmark) }),
-                onGo: () => void view?.goTo(bookmark.cfi),
+                onGo: () => void view?.goTo(bookmark.location.cfi),
                 onRemove: () => void bookmarks.remove(bookmark),
               }))}
             />
@@ -498,12 +498,12 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
               entries={highlights.highlights.map((highlight) => ({
                 key: highlight.id,
                 color: highlight.color,
-                active: highlight.pageNumber === location?.section,
+                active: highlight.location.section === location?.section,
                 place: placeName(highlight),
                 text: highlight.text,
                 goLabel: t("reader.goToHighlightIn", { place: placeName(highlight) }),
                 removeLabel: t("reader.removeHighlightIn", { place: placeName(highlight) }),
-                onGo: () => void view?.goTo(highlight.cfi),
+                onGo: () => void view?.goTo(highlight.location.cfi),
                 onRemove: () =>
                   void highlights.remove(highlight.id, () => setActiveHighlight(null)),
               }))}
@@ -571,12 +571,12 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
             ? bookmarks.bookmarks.map((bookmark) => {
                 const place = `${placeName(bookmark)} · ${progressPercent(bookmark)}%`;
                 return {
-                  key: bookmark.cfi,
-                  position: bookmark.progress * 100,
+                  key: bookmark.location.cfi,
+                  position: bookmark.location.progress * 100,
                   current: bookmarks.pageBookmarks.includes(bookmark),
                   label: t("reader.goToBookmarkIn", { place }),
                   tooltip: place,
-                  onGo: () => void view?.goTo(bookmark.cfi),
+                  onGo: () => void view?.goTo(bookmark.location.cfi),
                 };
               })
             : []

@@ -48,18 +48,29 @@ type BookSearchResult struct {
 	MatchCount  int    `json:"matchCount"`
 }
 
+type PDFBookmarkLocation struct {
+	Page int `json:"page"`
+}
+
+type EPUBBookmarkLocation struct {
+	Section  int     `json:"section"`
+	CFI      string  `json:"cfi"`
+	Progress float64 `json:"progress"`
+}
+
+type BookmarkLocation struct {
+	PDF  *PDFBookmarkLocation  `json:"pdf,omitempty"`
+	EPUB *EPUBBookmarkLocation `json:"epub,omitempty"`
+}
+
 type BookBookmark struct {
-	PageNumber int     `json:"pageNumber"`
-	CFI        string  `json:"cfi"`
-	Progress   float64 `json:"progress"`
-	CreatedAt  string  `json:"createdAt"`
+	Location  BookmarkLocation `json:"location"`
+	CreatedAt string           `json:"createdAt"`
 }
 
 type BookmarkInput struct {
-	PageNumber int     `json:"pageNumber"`
-	PageCount  int     `json:"pageCount"`
-	CFI        string  `json:"cfi"`
-	Progress   float64 `json:"progress"`
+	Location  BookmarkLocation `json:"location"`
+	PageCount int              `json:"pageCount"`
 }
 
 type HighlightRect struct {
@@ -69,23 +80,34 @@ type HighlightRect struct {
 	Height float64 `json:"height"`
 }
 
+type PDFHighlightLocation struct {
+	Page  int             `json:"page"`
+	Rects []HighlightRect `json:"rects"`
+}
+
+type EPUBHighlightLocation struct {
+	Section int    `json:"section"`
+	CFI     string `json:"cfi"`
+}
+
+type HighlightLocation struct {
+	PDF  *PDFHighlightLocation  `json:"pdf,omitempty"`
+	EPUB *EPUBHighlightLocation `json:"epub,omitempty"`
+}
+
 type BookHighlight struct {
-	ID         int64           `json:"id"`
-	PageNumber int             `json:"pageNumber"`
-	Color      string          `json:"color"`
-	Text       string          `json:"text"`
-	Rects      []HighlightRect `json:"rects"`
-	CFI        string          `json:"cfi"`
-	CreatedAt  string          `json:"createdAt"`
+	ID        int64             `json:"id"`
+	Color     string            `json:"color"`
+	Text      string            `json:"text"`
+	Location  HighlightLocation `json:"location"`
+	CreatedAt string            `json:"createdAt"`
 }
 
 type HighlightInput struct {
-	PageNumber int             `json:"pageNumber"`
-	PageCount  int             `json:"pageCount"`
-	Color      string          `json:"color"`
-	Text       string          `json:"text"`
-	Rects      []HighlightRect `json:"rects"`
-	CFI        string          `json:"cfi"`
+	Location  HighlightLocation `json:"location"`
+	PageCount int               `json:"pageCount"`
+	Color     string            `json:"color"`
+	Text      string            `json:"text"`
 }
 
 type BookSummary struct {
@@ -109,47 +131,87 @@ type LibrarySearchHit struct {
 	Pages        []BookSearchResult `json:"pages"`
 }
 
+func toBookmarkLocation(location library.BookmarkLocation) BookmarkLocation {
+	switch location := location.(type) {
+	case library.PDFBookmarkLocation:
+		return BookmarkLocation{PDF: &PDFBookmarkLocation{Page: location.Page}}
+	case library.EPUBBookmarkLocation:
+		epub := EPUBBookmarkLocation(location)
+		return BookmarkLocation{EPUB: &epub}
+	default:
+		return BookmarkLocation{}
+	}
+}
+
+func (location BookmarkLocation) toLibrary() library.BookmarkLocation {
+	switch {
+	case location.PDF != nil && location.EPUB == nil:
+		return library.PDFBookmarkLocation{Page: location.PDF.Page}
+	case location.EPUB != nil && location.PDF == nil:
+		return library.EPUBBookmarkLocation(*location.EPUB)
+	default:
+		return nil
+	}
+}
+
 func toBookBookmark(bookmark library.BookBookmark) BookBookmark {
 	return BookBookmark{
-		PageNumber: bookmark.PageNumber,
-		CFI:        bookmark.CFI,
-		Progress:   bookmark.Progress,
-		CreatedAt:  bookmark.CreatedAt,
+		Location:  toBookmarkLocation(bookmark.Location),
+		CreatedAt: bookmark.CreatedAt,
 	}
 }
 
 func (input BookmarkInput) toNewBookmark() library.NewBookmark {
-	return library.NewBookmark(input)
+	return library.NewBookmark{Location: input.Location.toLibrary(), PageCount: input.PageCount}
+}
+
+func toHighlightLocation(location library.HighlightLocation) HighlightLocation {
+	switch location := location.(type) {
+	case library.PDFHighlightLocation:
+		rects := make([]HighlightRect, len(location.Rects))
+		for i, rect := range location.Rects {
+			rects[i] = HighlightRect(rect)
+		}
+		return HighlightLocation{PDF: &PDFHighlightLocation{Page: location.Page, Rects: rects}}
+	case library.EPUBHighlightLocation:
+		epub := EPUBHighlightLocation(location)
+		return HighlightLocation{EPUB: &epub}
+	default:
+		return HighlightLocation{}
+	}
+}
+
+func (location HighlightLocation) toLibrary() library.HighlightLocation {
+	switch {
+	case location.PDF != nil && location.EPUB == nil:
+		rects := make([]library.HighlightRect, len(location.PDF.Rects))
+		for i, rect := range location.PDF.Rects {
+			rects[i] = library.HighlightRect(rect)
+		}
+		return library.PDFHighlightLocation{Page: location.PDF.Page, Rects: rects}
+	case location.EPUB != nil && location.PDF == nil:
+		return library.EPUBHighlightLocation(*location.EPUB)
+	default:
+		return nil
+	}
 }
 
 func toBookHighlight(highlight library.BookHighlight) BookHighlight {
-	rects := make([]HighlightRect, len(highlight.Rects))
-	for i, rect := range highlight.Rects {
-		rects[i] = HighlightRect(rect)
-	}
 	return BookHighlight{
-		ID:         highlight.ID,
-		PageNumber: highlight.PageNumber,
-		Color:      highlight.Color,
-		Text:       highlight.Text,
-		Rects:      rects,
-		CFI:        highlight.CFI,
-		CreatedAt:  highlight.CreatedAt,
+		ID:        highlight.ID,
+		Color:     highlight.Color,
+		Text:      highlight.Text,
+		Location:  toHighlightLocation(highlight.Location),
+		CreatedAt: highlight.CreatedAt,
 	}
 }
 
 func (input HighlightInput) toNewHighlight() library.NewHighlight {
-	rects := make([]library.HighlightRect, len(input.Rects))
-	for i, rect := range input.Rects {
-		rects[i] = library.HighlightRect(rect)
-	}
 	return library.NewHighlight{
-		PageNumber: input.PageNumber,
-		PageCount:  input.PageCount,
-		Color:      input.Color,
-		Text:       input.Text,
-		Rects:      rects,
-		CFI:        input.CFI,
+		Location:  input.Location.toLibrary(),
+		PageCount: input.PageCount,
+		Color:     input.Color,
+		Text:      input.Text,
 	}
 }
 
