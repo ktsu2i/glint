@@ -35,7 +35,7 @@ go tool verify stop
 ## Command surface
 
 - Lifecycle: `build`, `start`, `stop`, `doctor`, `info`, `restart-app`
-- Navigation and input: `open`, `reload`, `click`, `click-css`, `mouse-click`, `right-click`, `press`, `type`, `select-text`, `hover`
+- Navigation and input: `open`, `reload`, `color-scheme`, `click`, `click-css`, `mouse-click`, `right-click`, `press`, `type`, `select-text`, `hover`
 - Inspection and evidence: `snapshot`, `screenshot`, `wait`, `eval`, `console`, `sql`, `logs`
 - Dialogs: `dialog open-file <path>`, `dialog confirm <accept|cancel>`, `dialog last`
 - EPUB content: `--in-book` as the first argument of `click-css`, `mouse-click`, `right-click`, `hover`, `select-text`, `snapshot`, `wait`, and `eval` acts inside the frame of the current section
@@ -67,7 +67,7 @@ Do not submit "it opened" or "it showed up" as evidence. Show the result of the 
 The driver cannot verify the following. Report them as gaps when relevant.
 
 - The native window: title bar, full screen, remembered window position and size, the application menu
-- The settings window: it opens as a separate window and has not been checked yet
+- Opening the settings window from the menu, and live updates between the settings window and the main window. The settings screen itself is reachable at `/#settings` (see `references/features/settings.md`)
 - Drag and drop from Finder
 - Sparkle updates
 - Read-aloud audio itself (the button state can be checked)

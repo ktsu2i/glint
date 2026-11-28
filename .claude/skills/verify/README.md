@@ -80,7 +80,8 @@ The loop is: read names with `snapshot`, act with `click`, wait for the result w
 | `select-text` | Text can be selected (the text layer lines up). Prints the selected text |
 | `hover` | Hover UI: slider previews, tooltips |
 | `--in-book` | The same commands inside the EPUB page: selecting book text, clicking elements in a section, reading the section's DOM (for example, that scripts were stripped) |
-| `open` / `reload` | Starting from a given URL, or reloading so only frontend state is lost while the app keeps running |
+| `open` / `reload` | Starting from a given URL (for example the settings screen at `/#settings`), or reloading so only frontend state is lost while the app keeps running |
+| `color-scheme <light\|dark>` | The System theme following the OS appearance |
 
 ### Inspection and evidence
 
@@ -115,7 +116,7 @@ One command alone is weak evidence. Combine them:
 
 ## Out of reach
 
-- Native parts: the window, title bar, full screen, menu bar, settings window, drag and drop from Finder, Sparkle, read-aloud audio
+- Native parts: the window, title bar, full screen, menu bar, opening the settings window and live updates between windows (the settings screen itself opens at `/#settings`), drag and drop from Finder, Sparkle, read-aloud audio
 - WKWebView-only differences (Playwright WebKit is close but not identical)
 - Performance numbers (there is no stable way to measure them yet)
 - Selecting text across lines (`select-text` stays within one element)
@@ -132,4 +133,4 @@ When a change touches these, report them as gaps and check the real app with `go
 ## Maintaining the feature map
 
 - When you add a feature or change the UI, update the matching feature file in the same PR, in English, with the same four headings.
-- Files not written yet (read-aloud, settings, journeys) are added as those features need verification.
+- Files not written yet (read-aloud, journeys) are added as those features need verification.
