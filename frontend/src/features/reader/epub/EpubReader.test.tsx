@@ -38,7 +38,7 @@ vi.mock("./foliate", () => ({ createFoliateView: foliate.createFoliateView }));
 
 import { EpubReader } from "./EpubReader";
 import { I18nProvider } from "../../../shared/i18n/i18n";
-import type { BookBookmark, BookHighlight } from "../api";
+import type { EpubBookmark, EpubBookmarkLocation, EpubHighlight, HighlightColor } from "../api";
 import type { BookFile } from "../../../shared/api/books";
 
 class FakeView extends HTMLElement {
@@ -238,13 +238,13 @@ describe("EpubReader", () => {
     view.relocate(0, 0.1);
     const reader = screen.getByRole("region", { name: "EPUBリーダー" });
     const doc = view.loadSection();
-    await waitFor(() => expect(view.drawn.has(saved.cfi)).toBe(true));
+    await waitFor(() => expect(view.drawn.has(saved.location.cfi)).toBe(true));
 
     act(() => {
       doc.querySelector("#text")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       view.dispatchEvent(
         new CustomEvent("show-annotation", {
-          detail: { value: saved.cfi, index: 0, range: selectInFrame(doc) },
+          detail: { value: saved.location.cfi, index: 0, range: selectInFrame(doc) },
         }),
       );
     });
@@ -364,8 +364,8 @@ describe("EpubReader", () => {
 
   it("draws saved highlights in their colors and lists them", async () => {
     backend.listHighlights.mockResolvedValue([
-      highlight({ id: 2, pageNumber: 2, color: "green", cfi: "epubcfi(/6/4!/4/2,/1:0,/1:3)" }),
-      highlight({ id: 1, pageNumber: 1, color: "pink", cfi: "epubcfi(/6/2!/4/2,/1:0,/1:3)" }),
+      highlight({ id: 2, section: 2, color: "green", cfi: "epubcfi(/6/4!/4/2,/1:0,/1:3)" }),
+      highlight({ id: 1, section: 1, color: "pink", cfi: "epubcfi(/6/2!/4/2,/1:0,/1:3)" }),
     ]);
     const { view } = await openReader();
     view.relocate(0, 0.1);
@@ -395,59 +395,60 @@ describe("EpubReader", () => {
 
     await waitFor(() =>
       expect(backend.addHighlight).toHaveBeenCalledWith("epub-1", {
-        pageNumber: 1,
+        location: { kind: "epub", section: 1, cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)" },
         pageCount: 3,
         color: "yellow",
         text: "Text",
-        rects: [],
-        cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)",
       }),
     );
-    await waitFor(() => expect(view.drawn.get(saved.cfi)).toBe("#ffd000"));
+    await waitFor(() => expect(view.drawn.get(saved.location.cfi)).toBe("#ffd000"));
     expect(screen.queryByRole("toolbar", { name: "選択した文章をハイライト" })).toBeNull();
   });
 
   it("recolors and removes a highlight clicked on the page", async () => {
     const saved = highlight({ id: 3, color: "yellow", cfi: "epubcfi(/6/2!/4/2,/1:0,/1:4)" });
     backend.listHighlights.mockResolvedValue([saved]);
-    backend.changeHighlightColor.mockResolvedValue({ ...saved, color: "purple" });
+    backend.changeHighlightColor.mockResolvedValue("purple");
     const { view } = await openReader();
     view.relocate(0, 0.1);
     const doc = view.loadSection();
-    await waitFor(() => expect(view.drawn.get(saved.cfi)).toBe("#ffd000"));
+    await waitFor(() => expect(view.drawn.get(saved.location.cfi)).toBe("#ffd000"));
 
     act(() => {
       view.dispatchEvent(
         new CustomEvent("show-annotation", {
-          detail: { value: saved.cfi, index: 0, range: selectInFrame(doc) },
+          detail: { value: saved.location.cfi, index: 0, range: selectInFrame(doc) },
         }),
       );
     });
     fireEvent.click(await screen.findByRole("button", { name: "紫に変更" }));
-    await waitFor(() => expect(view.drawn.get(saved.cfi)).toBe("#9664ff"));
+    await waitFor(() => expect(view.drawn.get(saved.location.cfi)).toBe("#9664ff"));
     expect(backend.changeHighlightColor).toHaveBeenCalledWith("epub-1", 3, "purple");
 
     fireEvent.click(screen.getByRole("button", { name: "ハイライトを削除" }));
-    await waitFor(() => expect(view.drawn.has(saved.cfi)).toBe(false));
+    await waitFor(() => expect(view.drawn.has(saved.location.cfi)).toBe(false));
     expect(backend.removeHighlight).toHaveBeenCalledWith("epub-1", 3);
   });
 
   it("bookmarks the page and lists the bookmark", async () => {
     const pageCFI = "epubcfi(/6/4!/4,/2/1:0,/10/1:5)";
     backend.addBookmark.mockImplementation(
-      async (_bookId: string, pageNumber: number, _count: number, place: BookBookmark) =>
-        bookmark({ pageNumber, cfi: place.cfi, progress: place.progress }),
+      async (_bookId: string, location: EpubBookmarkLocation) => ({
+        location,
+        createdAt: "2026-11-26T00:00:00Z",
+      }),
     );
+    const place = {
+      kind: "epub",
+      section: 2,
+      cfi: "epubcfi(/6/4!/4/2/1:0)",
+      progress: 0.42,
+    } as const;
     const { view } = await openReader();
     view.relocate(1, 0.42, "Chapter Two", { cfi: pageCFI });
 
     fireEvent.click(screen.getByRole("button", { name: "このページをしおりに保存" }));
-    await waitFor(() =>
-      expect(backend.addBookmark).toHaveBeenCalledWith("epub-1", 2, 3, {
-        cfi: "epubcfi(/6/4!/4/2/1:0)",
-        progress: 0.42,
-      }),
-    );
+    await waitFor(() => expect(backend.addBookmark).toHaveBeenCalledWith("epub-1", place, 3));
     expect(await screen.findByRole("button", { name: "このページのしおりを削除" })).toBeTruthy();
     const marker = screen.getByRole("button", { name: "セクション 2 · 42%のしおりへ移動" });
     expect(marker.getAttribute("aria-current")).toBe("page");
@@ -457,16 +458,14 @@ describe("EpubReader", () => {
 
     view.relocate(1, 0.42, "Chapter Two", { cfi: pageCFI });
     fireEvent.click(screen.getByRole("button", { name: "このページのしおりを削除" }));
-    await waitFor(() =>
-      expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", 2, "epubcfi(/6/4!/4/2/1:0)"),
-    );
+    await waitFor(() => expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", place));
     expect(await screen.findByRole("button", { name: "このページをしおりに保存" })).toBeTruthy();
   });
 
   it("lists saved bookmarks and goes to them", async () => {
     backend.listBookmarks.mockResolvedValue([
-      bookmark({ pageNumber: 1, cfi: "epubcfi(/6/2!/4/8/1:0)", progress: 0.1 }),
-      bookmark({ pageNumber: 3, cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.8 }),
+      bookmark({ section: 1, cfi: "epubcfi(/6/2!/4/8/1:0)", progress: 0.1 }),
+      bookmark({ section: 3, cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.8 }),
     ]);
     const { view } = await openReader();
     view.relocate(0, 0.05);
@@ -479,7 +478,12 @@ describe("EpubReader", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Chapter Oneのしおりを削除" })[0]!);
     await waitFor(() =>
-      expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", 1, "epubcfi(/6/2!/4/8/1:0)"),
+      expect(backend.removeBookmark).toHaveBeenCalledWith("epub-1", {
+        kind: "epub",
+        section: 1,
+        cfi: "epubcfi(/6/2!/4/8/1:0)",
+        progress: 0.1,
+      }),
     );
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /Chapter Oneのしおりへ移動/ })).toHaveLength(1),
@@ -526,13 +530,16 @@ describe("EpubReader", () => {
   });
 });
 
-function bookmark(overrides: Partial<BookBookmark>): BookBookmark {
+function bookmark(overrides: Partial<Omit<EpubBookmarkLocation, "kind">>): EpubBookmark {
   return {
-    pageNumber: 1,
-    cfi: "epubcfi(/6/2!/4/2/1:0)",
-    progress: 0,
+    location: {
+      kind: "epub",
+      section: 1,
+      cfi: "epubcfi(/6/2!/4/2/1:0)",
+      progress: 0,
+      ...overrides,
+    },
     createdAt: "2026-11-26T00:00:00Z",
-    ...overrides,
   };
 }
 
@@ -566,16 +573,23 @@ function stubSpeech() {
   return { spoken, cancel };
 }
 
-function highlight(overrides: Partial<BookHighlight>): BookHighlight {
+function highlight({
+  id = 1,
+  section = 1,
+  color = "yellow",
+  cfi = "epubcfi(/6/2!/4/2,/1:0,/1:5)",
+}: {
+  id?: number;
+  section?: number;
+  color?: HighlightColor;
+  cfi?: string;
+}): EpubHighlight {
   return {
-    id: 1,
-    pageNumber: 1,
-    color: "yellow",
+    id,
+    color,
     text: "first",
-    rects: [],
-    cfi: "epubcfi(/6/2!/4/2,/1:0,/1:5)",
+    location: { kind: "epub", section, cfi },
     createdAt: "2026-11-25T00:00:00Z",
-    ...overrides,
   };
 }
 

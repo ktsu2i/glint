@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { FoliateShowAnnotationDetail, View } from "foliate-js/view.js";
-import type { BookHighlight, ReaderSettings } from "../api";
+import type { EpubHighlight, ReaderSettings } from "../api";
 import { epubHighlightFills, flattenToc, guardEpubContent, type EpubTocLine } from "./epubContent";
 import { createFoliateView } from "./foliate";
 import type { ReaderLocation } from "./useEpubAnnotations";
@@ -22,7 +22,7 @@ type FoliateViewOptions = {
   initialCfi: string;
   initialSection: number;
   handlersRef: RefObject<FoliateHandlers | null>;
-  highlightsRef: RefObject<BookHighlight[]>;
+  highlightsRef: RefObject<EpubHighlight[]>;
   onSettingsLoaded: (settings: ReaderSettings) => void;
   onRelocate: (location: ReaderLocation, pageRange: Range | null) => void;
 };
@@ -98,13 +98,15 @@ export function useFoliateView({
       });
       foliate.addEventListener("create-overlay", ({ detail: { index } }) => {
         for (const highlight of highlightsRef.current) {
-          if (highlight.pageNumber === index + 1 && highlight.cfi) {
-            void foliate.addAnnotation({ value: highlight.cfi });
+          if (highlight.location.section === index + 1) {
+            void foliate.addAnnotation({ value: highlight.location.cfi });
           }
         }
       });
       foliate.addEventListener("draw-annotation", ({ detail: { draw, annotation } }) => {
-        const highlight = highlightsRef.current.find((entry) => entry.cfi === annotation.value);
+        const highlight = highlightsRef.current.find(
+          (entry) => entry.location.cfi === annotation.value,
+        );
         draw(drawHighlight, { color: epubHighlightFills[highlight?.color ?? "yellow"] });
       });
       foliate.addEventListener("show-annotation", ({ detail }) =>

@@ -13,12 +13,21 @@ import (
 
 func sampleHighlight(page int) NewHighlight {
 	return NewHighlight{
-		PageNumber: page,
-		PageCount:  20,
-		Color:      "yellow",
-		Text:       "  a highlighted sentence  ",
-		Rects:      []HighlightRect{{X: 0.1, Y: 0.2, Width: 0.5, Height: 0.02}},
+		Location: PDFHighlightLocation{
+			Page:  page,
+			Rects: []HighlightRect{{X: 0.1, Y: 0.2, Width: 0.5, Height: 0.02}},
+		},
+		PageCount: 20,
+		Color:     "yellow",
+		Text:      "  a highlighted sentence  ",
 	}
+}
+
+func withPDF(h *NewHighlight, mutate func(*PDFHighlightLocation)) {
+	location, _ := h.Location.(PDFHighlightLocation)
+	location.Rects = append([]HighlightRect(nil), location.Rects...)
+	mutate(&location)
+	h.Location = location
 }
 
 func TestStorePersistsHighlightsInPageOrderAndDeletesThem(t *testing.T) {
@@ -34,7 +43,9 @@ func TestStorePersistsHighlightsInPageOrderAndDeletesThem(t *testing.T) {
 	assert.Equal(t, "a highlighted sentence", later.Text, "surrounding whitespace is trimmed")
 	green := sampleHighlight(3)
 	green.Color = "green"
-	green.Rects = append(green.Rects, HighlightRect{X: 0.1, Y: 0.23, Width: 0.3, Height: 0.02})
+	withPDF(&green, func(l *PDFHighlightLocation) {
+		l.Rects = append(l.Rects, HighlightRect{X: 0.1, Y: 0.23, Width: 0.3, Height: 0.02})
+	})
 	earlier, err := store.SaveHighlight(t.Context(), book.ID, green, now.Add(time.Minute))
 	require.NoError(t, err)
 	require.NoError(t, store.Close())
@@ -65,19 +76,19 @@ func TestStoreValidatesHighlights(t *testing.T) {
 	require.NoError(t, err)
 
 	invalid := map[string]func(*NewHighlight){
-		"page zero":        func(h *NewHighlight) { h.PageNumber = 0 },
-		"page past end":    func(h *NewHighlight) { h.PageNumber = 21 },
+		"no location":      func(h *NewHighlight) { h.Location = nil },
+		"page zero":        func(h *NewHighlight) { withPDF(h, func(l *PDFHighlightLocation) { l.Page = 0 }) },
+		"page past end":    func(h *NewHighlight) { withPDF(h, func(l *PDFHighlightLocation) { l.Page = 21 }) },
 		"unknown color":    func(h *NewHighlight) { h.Color = "red" },
 		"blank text":       func(h *NewHighlight) { h.Text = "   " },
 		"text too long":    func(h *NewHighlight) { h.Text = strings.Repeat("あ", MaxHighlightTextRunes+1) },
-		"no rects":         func(h *NewHighlight) { h.Rects = nil },
-		"zero width":       func(h *NewHighlight) { h.Rects[0].Width = 0 },
-		"outside the page": func(h *NewHighlight) { h.Rects[0].X = 0.9 },
-		"not a number":     func(h *NewHighlight) { h.Rects[0].Y = math.NaN() },
-		"cfi and rects":    func(h *NewHighlight) { h.CFI = "epubcfi(/6/4!/4/2)" },
-		"not a cfi":        func(h *NewHighlight) { h.Rects, h.CFI = nil, "/6/4!/4/2" },
+		"no rects":         func(h *NewHighlight) { withPDF(h, func(l *PDFHighlightLocation) { l.Rects = nil }) },
+		"zero width":       func(h *NewHighlight) { withPDF(h, func(l *PDFHighlightLocation) { l.Rects[0].Width = 0 }) },
+		"outside the page": func(h *NewHighlight) { withPDF(h, func(l *PDFHighlightLocation) { l.Rects[0].X = 0.9 }) },
+		"not a number":     func(h *NewHighlight) { withPDF(h, func(l *PDFHighlightLocation) { l.Rects[0].Y = math.NaN() }) },
+		"not a cfi":        func(h *NewHighlight) { h.Location = EPUBHighlightLocation{Section: 2, CFI: "/6/4!/4/2"} },
 		"cfi too long": func(h *NewHighlight) {
-			h.Rects, h.CFI = nil, "epubcfi("+strings.Repeat("/2", MaxHighlightCFIBytes)+")"
+			h.Location = EPUBHighlightLocation{Section: 2, CFI: "epubcfi(" + strings.Repeat("/2", MaxHighlightCFIBytes) + ")"}
 		},
 	}
 	for name, mutate := range invalid {
@@ -154,12 +165,12 @@ func TestStorePersistsEPUBHighlightsByCFI(t *testing.T) {
 	book, err := store.Import(t.Context(), "book-1", "/tmp/Guide.epub", "hash-1", "epub", 10, now)
 	require.NoError(t, err)
 
+	location := EPUBHighlightLocation{Section: 2, CFI: "epubcfi(/6/4!/4/2,/1:0,/1:13)"}
 	saved, err := store.SaveHighlight(t.Context(), book.ID, NewHighlight{
-		PageNumber: 2, PageCount: 4, Color: "purple", Text: "reflowed text",
-		CFI: "epubcfi(/6/4!/4/2,/1:0,/1:13)",
+		Location: location, PageCount: 4, Color: "purple", Text: "reflowed text",
 	}, now)
 	require.NoError(t, err)
-	assert.Empty(t, saved.Rects)
+	assert.Equal(t, location, saved.Location)
 	require.NoError(t, store.Close())
 
 	store, err = Open(path)

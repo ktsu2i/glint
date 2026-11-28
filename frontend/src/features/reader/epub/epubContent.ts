@@ -1,6 +1,6 @@
 import { collapse as collapseCFI, compare as compareCFI } from "foliate-js/epubcfi.js";
 import type { FoliateTocItem } from "foliate-js/view.js";
-import type { BookBookmark, BookHighlight, HighlightColor, ReaderSettings } from "../api";
+import type { EpubBookmark, EpubHighlight, HighlightColor, ReaderSettings } from "../api";
 
 export const EPUB_MIN_FONT_SCALE = 80;
 export const EPUB_MAX_FONT_SCALE = 200;
@@ -141,28 +141,28 @@ export const epubHighlightFills: Record<HighlightColor, string> = {
   purple: "#9664ff",
 };
 
-export function sortEpubHighlights(highlights: BookHighlight[]): BookHighlight[] {
+export function sortEpubHighlights(highlights: EpubHighlight[]): EpubHighlight[] {
   return highlights.toSorted((a, b) => {
-    if (a.pageNumber !== b.pageNumber) {
-      return a.pageNumber - b.pageNumber;
+    if (a.location.section !== b.location.section) {
+      return a.location.section - b.location.section;
     }
     try {
-      return compareCFI(a.cfi, b.cfi) || a.id - b.id;
+      return compareCFI(a.location.cfi, b.location.cfi) || a.id - b.id;
     } catch {
       return a.id - b.id;
     }
   });
 }
 
-export function sortEpubBookmarks(bookmarks: BookBookmark[]): BookBookmark[] {
+export function sortEpubBookmarks(bookmarks: EpubBookmark[]): EpubBookmark[] {
   return bookmarks.toSorted((a, b) => {
-    if (a.pageNumber !== b.pageNumber) {
-      return a.pageNumber - b.pageNumber;
+    if (a.location.section !== b.location.section) {
+      return a.location.section - b.location.section;
     }
     try {
-      return compareCFI(a.cfi, b.cfi);
+      return compareCFI(a.location.cfi, b.location.cfi);
     } catch {
-      return a.progress - b.progress;
+      return a.location.progress - b.location.progress;
     }
   });
 }

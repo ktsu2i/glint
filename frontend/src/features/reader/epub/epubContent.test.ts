@@ -10,7 +10,7 @@ import {
   sortEpubHighlights,
   stripActiveContent,
 } from "./epubContent";
-import type { BookBookmark, BookHighlight } from "../api";
+import type { EpubBookmark, EpubHighlight } from "../api";
 
 const section = `<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>s</title>
@@ -91,14 +91,12 @@ describe("flattenToc", () => {
   });
 });
 
-function makeHighlight(id: number, pageNumber: number, cfi: string): BookHighlight {
+function makeHighlight(id: number, sectionNumber: number, cfi: string): EpubHighlight {
   return {
     id,
-    pageNumber,
-    cfi,
     color: "yellow",
     text: "t",
-    rects: [],
+    location: { kind: "epub", section: sectionNumber, cfi },
     createdAt: "",
   };
 }
@@ -114,8 +112,8 @@ describe("sortEpubHighlights", () => {
   });
 });
 
-function makeBookmark(pageNumber: number, cfi: string): BookBookmark {
-  return { pageNumber, cfi, progress: 0, createdAt: "" };
+function makeBookmark(sectionNumber: number, cfi: string): EpubBookmark {
+  return { location: { kind: "epub", section: sectionNumber, cfi, progress: 0 }, createdAt: "" };
 }
 
 describe("bookmarks", () => {
@@ -141,7 +139,7 @@ describe("bookmarks", () => {
       makeBookmark(1, "epubcfi(/6/2!/4/10/1:0)"),
       makeBookmark(1, "epubcfi(/6/2!/4/4/1:0)"),
     ]);
-    expect(sorted.map((bookmark) => bookmark.cfi)).toEqual([
+    expect(sorted.map((bookmark) => bookmark.location.cfi)).toEqual([
       "epubcfi(/6/2!/4/4/1:0)",
       "epubcfi(/6/2!/4/10/1:0)",
       "epubcfi(/6/4!/4/2/1:0)",

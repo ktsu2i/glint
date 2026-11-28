@@ -57,15 +57,12 @@ describe("reader api", () => {
     bindings.listBookmarks.mockResolvedValue(null);
     bindings.searchBook.mockResolvedValue(null);
 
-    await expect(listBookmarks("book-1")).resolves.toEqual([]);
+    await expect(listBookmarks("book-1", "pdf")).resolves.toEqual([]);
     await expect(searchBook("book-1", "missing")).resolves.toEqual([]);
   });
 
-  it("delegates reading state, search, and bookmarks", async () => {
+  it("delegates reading state and search", async () => {
     bindings.searchBook.mockResolvedValue([{ pageNumber: 2, excerpt: "match", matchCount: 1 }]);
-    const bookmark = { pageNumber: 4, cfi: "", progress: 0, createdAt: "2026-06-23T00:00:00Z" };
-    bindings.listBookmarks.mockResolvedValue([bookmark]);
-    bindings.addBookmark.mockResolvedValue(bookmark);
 
     await saveReadingPosition("book-1", 3, 10);
     await saveReadingPosition("book-2", 2, 9, "epubcfi(/6/4!/4/2/1:0)");
@@ -73,11 +70,6 @@ describe("reader api", () => {
     await expect(searchBook("book-1", "page")).resolves.toEqual([
       { pageNumber: 2, excerpt: "match", matchCount: 1 },
     ]);
-    await expect(listBookmarks("book-1")).resolves.toEqual([bookmark]);
-    await expect(addBookmark("book-1", 4, 10)).resolves.toEqual(bookmark);
-    await removeBookmark("book-1", 4);
-    await addBookmark("book-2", 3, 9, { cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.4 });
-    await removeBookmark("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
 
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith("book-1", 3, 10, "");
     expect(bindings.saveReadingPosition).toHaveBeenCalledWith(
@@ -88,47 +80,105 @@ describe("reader api", () => {
     );
     expect(bindings.saveBindingDirection).toHaveBeenCalledWith("book-1", "rtl");
     expect(bindings.searchBook).toHaveBeenCalledWith("book-1", "page");
-    expect(bindings.listBookmarks).toHaveBeenCalledWith("book-1");
-    expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", {
-      pageNumber: 4,
-      pageCount: 10,
-      cfi: "",
-      progress: 0,
-    });
-    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-1", 4, "");
-    expect(bindings.addBookmark).toHaveBeenCalledWith("book-2", {
-      pageNumber: 3,
-      pageCount: 9,
-      cfi: "epubcfi(/6/6!/4/2/1:0)",
-      progress: 0.4,
-    });
-    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-2", 3, "epubcfi(/6/6!/4/2/1:0)");
   });
 
-  it("passes highlights through and treats a missing list as empty", async () => {
-    const highlight = {
+  it("turns bookmark locations into a union of the two formats", async () => {
+    const createdAt = "2026-06-23T00:00:00Z";
+    const epubPlace = { section: 3, cfi: "epubcfi(/6/6!/4/2/1:0)", progress: 0.4 };
+    bindings.listBookmarks.mockResolvedValue([
+      { location: { pdf: { page: 4 } }, createdAt },
+      { location: { epub: epubPlace }, createdAt },
+    ]);
+    bindings.addBookmark.mockResolvedValue({ location: { pdf: { page: 4 } }, createdAt });
+
+    await expect(listBookmarks("book-1", "pdf")).resolves.toEqual([
+      { location: { kind: "pdf", page: 4 }, createdAt },
+    ]);
+    await expect(listBookmarks("book-1", "epub")).resolves.toEqual([
+      { location: { kind: "epub", ...epubPlace }, createdAt },
+    ]);
+    await expect(addBookmark("book-1", { kind: "pdf", page: 4 }, 10)).resolves.toEqual({
+      location: { kind: "pdf", page: 4 },
+      createdAt,
+    });
+    await removeBookmark("book-1", { kind: "pdf", page: 4 });
+    await addBookmark("book-2", { kind: "epub", ...epubPlace }, 9);
+    await removeBookmark("book-2", { kind: "epub", ...epubPlace });
+
+    expect(bindings.addBookmark).toHaveBeenCalledWith("book-1", {
+      location: { pdf: { page: 4 } },
+      pageCount: 10,
+    });
+    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-1", { pdf: { page: 4 } });
+    expect(bindings.addBookmark).toHaveBeenCalledWith("book-2", {
+      location: { epub: epubPlace },
+      pageCount: 9,
+    });
+    expect(bindings.removeBookmark).toHaveBeenCalledWith("book-2", { epub: epubPlace });
+  });
+
+  it("rejects a bookmark without a location", async () => {
+    bindings.listBookmarks.mockResolvedValue([{ location: {}, createdAt: "" }]);
+
+    await expect(listBookmarks("book-1", "pdf")).rejects.toThrow("A bookmark has no location.");
+  });
+
+  it("turns highlight locations into a union and checks their colors", async () => {
+    const rects = [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }];
+    const createdAt = "2026-11-25T00:00:00Z";
+    const pdfHighlight = {
       id: 3,
-      pageNumber: 2,
       color: "green",
       text: "keep this",
-      rects: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.02 }],
-      createdAt: "2026-11-25T00:00:00Z",
+      location: { pdf: { page: 2, rects } },
+      createdAt,
     };
-    bindings.listHighlights.mockResolvedValueOnce(null).mockResolvedValueOnce([highlight]);
-    bindings.addHighlight.mockResolvedValue(highlight);
-    const { id: _id, createdAt: _createdAt, ...rest } = highlight;
-    const input = { ...rest, color: "green" as const, pageCount: 10 };
-
-    await expect(listHighlights("book-1")).resolves.toEqual([]);
-    await expect(listHighlights("book-1")).resolves.toEqual([highlight]);
-    await expect(addHighlight("book-1", input)).resolves.toEqual(highlight);
-    bindings.changeHighlightColor.mockResolvedValue({ ...highlight, color: "purple" });
-    await expect(changeHighlightColor("book-1", 3, "purple")).resolves.toMatchObject({
-      color: "purple",
+    const epubHighlight = {
+      id: 4,
+      color: "pink",
+      text: "and this",
+      location: { epub: { section: 1, cfi: "epubcfi(/6/4!/4/2,/1:0,/1:4)" } },
+      createdAt,
+    };
+    bindings.listHighlights
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce([pdfHighlight, epubHighlight])
+      .mockResolvedValueOnce([{ ...pdfHighlight, color: "red" }]);
+    bindings.addHighlight.mockResolvedValue({
+      ...pdfHighlight,
+      location: { pdf: { page: 2, rects: null } },
     });
+    const pdfLocation = { kind: "pdf" as const, page: 2, rects };
+
+    await expect(listHighlights("book-1", "pdf")).resolves.toEqual([]);
+    await expect(listHighlights("book-1", "pdf")).resolves.toEqual([
+      { id: 3, color: "green", text: "keep this", location: pdfLocation, createdAt },
+    ]);
+    await expect(listHighlights("book-1", "pdf")).rejects.toThrow("Unknown highlight color: red");
+    await expect(
+      addHighlight("book-1", {
+        location: pdfLocation,
+        pageCount: 10,
+        color: "green",
+        text: "keep this",
+      }),
+    ).resolves.toEqual({
+      id: 3,
+      color: "green",
+      text: "keep this",
+      location: pdfLocation,
+      createdAt,
+    });
+    bindings.changeHighlightColor.mockResolvedValue({ ...pdfHighlight, color: "purple" });
+    await expect(changeHighlightColor("book-1", 3, "purple")).resolves.toBe("purple");
     await removeHighlight("book-1", 3);
 
-    expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", { ...input, cfi: "" });
+    expect(bindings.addHighlight).toHaveBeenCalledWith("book-1", {
+      location: { pdf: { page: 2, rects } },
+      pageCount: 10,
+      color: "green",
+      text: "keep this",
+    });
     expect(bindings.changeHighlightColor).toHaveBeenCalledWith("book-1", 3, "purple");
     expect(bindings.removeHighlight).toHaveBeenCalledWith("book-1", 3);
   });

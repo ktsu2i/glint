@@ -176,8 +176,8 @@ func (s *BooksService) AddBookmark(bookID string, input BookmarkInput) (BookBook
 	return toBookBookmark(bookmark), nil
 }
 
-func (s *BooksService) RemoveBookmark(bookID string, pageNumber int, cfi string) error {
-	if err := s.books.RemoveBookmark(s.context(), bookID, pageNumber, cfi); err != nil {
+func (s *BooksService) RemoveBookmark(bookID string, location BookmarkLocation) error {
+	if err := s.books.RemoveBookmark(s.context(), bookID, location.toLibrary()); err != nil {
 		return s.bookError(err)
 	}
 	return nil

@@ -227,11 +227,15 @@ func TestBookErrorsAreLocalized(t *testing.T) {
 
 	_, err := h.service.RenameBook(book.ID, "   ")
 	assert.EqualError(t, err, "Book names must be between 1 and 200 characters.")
-	_, err = h.service.AddBookmark(book.ID, BookmarkInput{PageNumber: 13, PageCount: 12})
+	_, err = h.service.AddBookmark(book.ID, BookmarkInput{
+		Location: BookmarkLocation{PDF: &PDFBookmarkLocation{Page: 13}}, PageCount: 12,
+	})
 	assert.EqualError(t, err, "The bookmark is outside this book.")
 	_, err = h.service.SearchBook(book.ID, "   ")
 	assert.EqualError(t, err, "Search terms must be between 1 and 200 characters.")
-	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 2, Color: "yellow", Text: "text"})
+	_, err = h.service.AddHighlight(book.ID, HighlightInput{
+		Location: HighlightLocation{PDF: &PDFHighlightLocation{Page: 1}}, PageCount: 2, Color: "yellow", Text: "text",
+	})
 	assert.EqualError(t, err, "The highlight could not be saved. Select up to 10,000 characters.")
 
 	h.useJapanese()
@@ -277,13 +281,13 @@ func TestHighlightsRoundTripAsDTOs(t *testing.T) {
 	book := h.importPDF("Highlights.pdf")
 	rects := []HighlightRect{{X: 0.12, Y: 0.3, Width: 0.5, Height: 0.025}}
 
+	location := HighlightLocation{PDF: &PDFHighlightLocation{Page: 2, Rects: rects}}
 	saved, err := h.service.AddHighlight(book.ID, HighlightInput{
-		PageNumber: 2, PageCount: 5, Color: "pink", Text: "an idea worth keeping", Rects: rects,
+		Location: location, PageCount: 5, Color: "pink", Text: "an idea worth keeping",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 2, saved.PageNumber)
+	assert.Equal(t, location, saved.Location)
 	assert.Equal(t, "pink", saved.Color)
-	assert.Equal(t, rects, saved.Rects)
 
 	listed, err := h.service.ListHighlights(book.ID)
 	require.NoError(t, err)
@@ -292,7 +296,7 @@ func TestHighlightsRoundTripAsDTOs(t *testing.T) {
 	changed, err := h.service.ChangeHighlightColor(book.ID, saved.ID, "green")
 	require.NoError(t, err)
 	assert.Equal(t, "green", changed.Color)
-	assert.Equal(t, rects, changed.Rects)
+	assert.Equal(t, location, changed.Location)
 
 	require.NoError(t, h.service.RemoveHighlight(book.ID, saved.ID))
 	_, err = h.service.ChangeHighlightColor(book.ID, saved.ID, "green")
@@ -302,7 +306,9 @@ func TestHighlightsRoundTripAsDTOs(t *testing.T) {
 	assert.Empty(t, listed)
 
 	h.useJapanese()
-	_, err = h.service.AddHighlight(book.ID, HighlightInput{PageNumber: 1, PageCount: 5, Color: "pink", Text: "x"})
+	_, err = h.service.AddHighlight(book.ID, HighlightInput{
+		Location: HighlightLocation{PDF: &PDFHighlightLocation{Page: 1}}, PageCount: 5, Color: "pink", Text: "x",
+	})
 	assert.EqualError(t, err, "ハイライトを保存できませんでした。10,000文字以内で選択してください。")
 }
 
@@ -313,17 +319,46 @@ func TestEPUBHighlightsRoundTripAsDTOs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "epub", book.Format)
 
-	const cfi = "epubcfi(/6/2!/4/10,/1:0,/1:9)"
+	location := HighlightLocation{EPUB: &EPUBHighlightLocation{Section: 1, CFI: "epubcfi(/6/2!/4/10,/1:0,/1:9)"}}
 	saved, err := h.service.AddHighlight(book.ID, HighlightInput{
-		PageNumber: 1, PageCount: 1, Color: "yellow", Text: "Paragraph", Rects: []HighlightRect{}, CFI: cfi,
+		Location: location, PageCount: 1, Color: "yellow", Text: "Paragraph",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, cfi, saved.CFI)
-	assert.Empty(t, saved.Rects)
+	assert.Equal(t, location, saved.Location)
 
 	listed, err := h.service.ListHighlights(book.ID)
 	require.NoError(t, err)
 	assert.Equal(t, []BookHighlight{saved}, listed)
+
+	location.PDF = &PDFHighlightLocation{Page: 1, Rects: []HighlightRect{{X: 0.1, Y: 0.1, Width: 0.2, Height: 0.02}}}
+	_, err = h.service.AddHighlight(book.ID, HighlightInput{
+		Location: location, PageCount: 1, Color: "yellow", Text: "Paragraph",
+	})
+	require.Error(t, err, "a location names exactly one format")
+}
+
+func TestBookmarksRoundTripAsDTOs(t *testing.T) {
+	h := newHarness(t)
+	h.dialogs.path = writeTestEPUB(t, h.root)
+	book, err := h.service.OpenBookFile()
+	require.NoError(t, err)
+
+	location := BookmarkLocation{EPUB: &EPUBBookmarkLocation{Section: 1, CFI: "epubcfi(/6/2!/4/10/1:0)", Progress: 0.4}}
+	saved, err := h.service.AddBookmark(book.ID, BookmarkInput{Location: location, PageCount: 1})
+	require.NoError(t, err)
+	assert.Equal(t, location, saved.Location)
+
+	listed, err := h.service.ListBookmarks(book.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []BookBookmark{saved}, listed)
+
+	_, err = h.service.AddBookmark(book.ID, BookmarkInput{PageCount: 1})
+	assert.EqualError(t, err, "The bookmark is outside this book.", "a bookmark needs a location")
+
+	require.NoError(t, h.service.RemoveBookmark(book.ID, location))
+	listed, err = h.service.ListBookmarks(book.ID)
+	require.NoError(t, err)
+	assert.Empty(t, listed)
 }
 
 func TestOpenBookRestoresEPUBPlaceAndBindingDirection(t *testing.T) {

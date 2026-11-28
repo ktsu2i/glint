@@ -184,8 +184,8 @@ beforeEach(() => {
   );
   backend.searchBook.mockResolvedValue([]);
   backend.listBookmarks.mockResolvedValue([]);
-  backend.addBookmark.mockImplementation(async (_bookId: string, pageNumber: number) => ({
-    pageNumber,
+  backend.addBookmark.mockImplementation(async (_bookId: string, location: unknown) => ({
+    location,
     createdAt: "2026-06-23T00:00:00Z",
   }));
   backend.removeBookmark.mockResolvedValue(undefined);
@@ -198,14 +198,7 @@ beforeEach(() => {
   );
   backend.removeHighlight.mockResolvedValue(undefined);
   backend.changeHighlightColor.mockImplementation(
-    async (_bookId: string, id: number, color: string) => ({
-      id,
-      pageNumber: 1,
-      color,
-      text: "Alpha Beta",
-      rects: [{ x: 0.1, y: 0.1, width: 0.5, height: 0.1 }],
-      createdAt: "2026-11-25T00:00:00Z",
-    }),
+    async (_bookId: string, _id: number, color: string) => color,
   );
   backend.setWindowControlsVisible.mockResolvedValue(undefined);
   backend.saveBindingDirection.mockResolvedValue(undefined);
@@ -367,8 +360,8 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;
     backend.listBookmarks.mockResolvedValue([
-      { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" },
-      { pageNumber: 10, createdAt: "2026-06-23T00:01:00Z" },
+      { location: { kind: "pdf", page: 4 }, createdAt: "2026-06-23T00:00:00Z" },
+      { location: { kind: "pdf", page: 10 }, createdAt: "2026-06-23T00:01:00Z" },
     ]);
     resolveDocument(pdfDocument);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
@@ -391,8 +384,8 @@ describe("PdfReader", () => {
     const pdfDocument = makeDocument();
     pdfDocument.numPages = 12;
     backend.listBookmarks.mockResolvedValue([
-      { pageNumber: 4, createdAt: "2026-06-23T00:00:00Z" },
-      { pageNumber: 30, createdAt: "2026-06-23T00:01:00Z" },
+      { location: { kind: "pdf", page: 4 }, createdAt: "2026-06-23T00:00:00Z" },
+      { location: { kind: "pdf", page: 30 }, createdAt: "2026-06-23T00:01:00Z" },
     ]);
     resolveDocument(pdfDocument);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
@@ -938,13 +931,13 @@ describe("PdfReader", () => {
     resolveDocument(pdfDocument);
     backend.listBookmarks.mockResolvedValue([
       {
-        pageNumber: 2,
+        location: { kind: "pdf", page: 2 },
         createdAt: "2026-06-23T00:00:00Z",
       },
     ]);
     render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
-    await waitFor(() => expect(backend.listBookmarks).toHaveBeenCalledWith("book-1"));
+    await waitFor(() => expect(backend.listBookmarks).toHaveBeenCalledWith("book-1", "pdf"));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(1));
 
     fireEvent.click(screen.getByRole("button", { name: "しおりを開く" }));
@@ -953,13 +946,17 @@ describe("PdfReader", () => {
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenCalledWith(2));
 
     fireEvent.click(screen.getAllByRole("button", { name: "2ページのしおりを削除" })[0]!);
-    await waitFor(() => expect(backend.removeBookmark).toHaveBeenCalledWith("book-1", 2));
+    await waitFor(() =>
+      expect(backend.removeBookmark).toHaveBeenCalledWith("book-1", { kind: "pdf", page: 2 }),
+    );
     expect(screen.queryByText("2ページ")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "前のページ" }));
     await waitFor(() => expect(pdfDocument.getPage).toHaveBeenLastCalledWith(1));
     fireEvent.click(screen.getByRole("button", { name: "1ページをしおりに保存" }));
-    await waitFor(() => expect(backend.addBookmark).toHaveBeenCalledWith("book-1", 1, 2));
+    await waitFor(() =>
+      expect(backend.addBookmark).toHaveBeenCalledWith("book-1", { kind: "pdf", page: 1 }, 2),
+    );
     expect(await screen.findByText("1ページ")).toBeTruthy();
   });
 
@@ -969,16 +966,15 @@ describe("PdfReader", () => {
     backend.listHighlights.mockResolvedValue([
       {
         id: 7,
-        pageNumber: 2,
         color: "green",
         text: "依存の向きは一方向に保つ",
-        rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }],
+        location: { kind: "pdf", page: 2, rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }] },
         createdAt: "2026-11-25T00:00:00Z",
       },
     ]);
     const { container } = render(<PdfReader book={makeBook()} onPageChange={vi.fn()} />);
     act(() => resize.callbacks.at(-1)?.([{ contentRect: { width: 500, height: 300 } }]));
-    await waitFor(() => expect(backend.listHighlights).toHaveBeenCalledWith("book-1"));
+    await waitFor(() => expect(backend.listHighlights).toHaveBeenCalledWith("book-1", "pdf"));
     await waitFor(() => expect(container.querySelector(".pdf-page[data-page='1']")).toBeTruthy());
     expect(container.querySelector(".highlight-mark")).toBeNull();
 
@@ -1026,11 +1022,10 @@ describe("PdfReader", () => {
       fireEvent.click(await screen.findByRole("button", { name: "黄色でハイライト" }));
       await waitFor(() =>
         expect(backend.addHighlight).toHaveBeenCalledWith("book-1", {
-          pageNumber: 1,
+          location: { kind: "pdf", page: 1, rects: [{ x: 0.1, y: 0.1, width: 0.5, height: 0.1 }] },
           pageCount: 2,
           color: "yellow",
           text: "Alpha Beta",
-          rects: [{ x: 0.1, y: 0.1, width: 0.5, height: 0.1 }],
         }),
       );
       await waitFor(() =>

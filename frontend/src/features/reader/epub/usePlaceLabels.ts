@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { View } from "foliate-js/view.js";
 import type { ReaderPanel } from "../common/ReaderTopBar";
 
-type Place = { cfi: string; pageNumber: number };
+type Place = { location: { cfi: string; section: number } };
 
 export function usePlaceLabels(
   view: View | null,
@@ -20,7 +20,7 @@ export function usePlaceLabels(
     }
     let active = true;
     const places = openPanel === "highlights" ? highlights : bookmarks;
-    const missing = [...new Set(places.map((place) => place.cfi))].filter(
+    const missing = [...new Set(places.map((place) => place.location.cfi))].filter(
       (cfi) => !(cfi in labels),
     );
     const label = async () => {
@@ -41,5 +41,5 @@ export function usePlaceLabels(
   }, [openPanel, view, highlights, bookmarks, labels]);
 
   return (place: Place) =>
-    labels[place.cfi] || t("reader.sectionNumber", { number: place.pageNumber });
+    labels[place.location.cfi] || t("reader.sectionNumber", { number: place.location.section });
 }
