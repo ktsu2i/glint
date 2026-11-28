@@ -38,8 +38,8 @@ func (s *BooksService) OpenBookFile() (BookFile, error) {
 		return BookFile{}, errNotReady
 	}
 	path, err := s.dialogs.chooseBookFile(s.ctx, s.text.text(s.ctx,
-		"Add a technical book to the library",
-		"技術書を本棚へ追加",
+		"Add a book to the library",
+		"本を本棚へ追加",
 	))
 	if err != nil || path == "" {
 		return BookFile{}, err

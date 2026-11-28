@@ -4,7 +4,7 @@ A guide for agents working on Glint. Human-facing docs (feature list, installati
 
 ## Project overview
 
-Glint is a macOS desktop app for reading technical books (PDF / EPUB). Reading, not chat, is the core. The long-term goal is book-to-repo mapping: connecting the chapter, section, or code block being read to the user's local repository, and helping them understand it with evidence from both the book and the code.
+Glint is a macOS desktop app that makes any PDF or EPUB comfortable to read. It is not limited to technical books. Reading, not chat, is the core. The long-term goal is book-to-repo mapping: connecting the chapter, section, or code block being read to the user's local repository, and helping them understand it with evidence from both the book and the code.
 
 - Implemented: PDF / EPUB readers and the library, full-text search within a book and across the library, highlights, bookmarks, read aloud, appearance and UI language settings, and auto-update via Sparkle. See the README for details.
 - Not implemented yet: connecting and indexing a local repository, book-to-repo mapping.

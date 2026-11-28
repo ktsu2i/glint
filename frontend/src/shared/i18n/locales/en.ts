@@ -1,5 +1,4 @@
 export const en = {
-  "app.technicalReader": "Technical reader",
   "app.library": "Library",
   "app.addBook": "Add Book",
   "app.choosingBook": "Choosing…",
@@ -22,8 +21,6 @@ export const en = {
   "error.saveLanguage": "Could not save language settings.",
   "library.loading": "Loading your library…",
   "library.emptyTitle": "Add your first book.",
-  "library.emptyDescription":
-    "Add a technical book as a PDF or EPUB to save its cover and reading position locally.",
   "library.chooseBook": "Choose Book",
   "library.importedBooks": "Imported books",
   "library.neverOpened": "Not opened yet",

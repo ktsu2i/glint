@@ -362,17 +362,9 @@
 }
 
 .library-empty h2 {
-  margin: 0 0 10px;
+  margin: 0 0 22px;
   font-size: 22px;
   font-weight: 700;
-}
-
-.library-empty > p {
-  max-width: 400px;
-  margin: 0 0 22px;
-  color: var(--glass-muted);
-  font-size: 13px;
-  line-height: 1.7;
 }
 
 /* The hero offers to continue the book opened most recently. */

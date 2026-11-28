@@ -132,7 +132,6 @@ export function Library({
             <BooksIcon size={37} weight="thin" />
           </div>
           <h2>{t("library.emptyTitle")}</h2>
-          <p>{t("library.emptyDescription")}</p>
           <button
             type="button"
             className="solid-button"

@@ -108,7 +108,7 @@ func TestOpenBookFileRegistersAssetAndReturnsBookFile(t *testing.T) {
 	assert.Equal(t, "sample.pdf", book.Name)
 	assert.Equal(t, 1, book.InitialPage)
 	assert.True(t, strings.HasPrefix(book.URL, assetserver.BookRoutePrefix))
-	assert.Equal(t, []string{"Add a technical book to the library"}, h.dialogs.titles)
+	assert.Equal(t, []string{"Add a book to the library"}, h.dialogs.titles)
 
 	response := h.get(book.URL)
 	assert.Equal(t, http.StatusOK, response.Code)
