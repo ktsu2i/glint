@@ -79,13 +79,14 @@ The loop is: read names with `snapshot`, act with `click`, wait for the result w
 | `type` | Input fields: going to a page number, search terms, renaming |
 | `select-text` | Text can be selected (the text layer lines up). Prints the selected text |
 | `hover` | Hover UI: slider previews, tooltips |
+| `--in-book` | The same commands inside the EPUB page: selecting book text, clicking elements in a section, reading the section's DOM (for example, that scripts were stripped) |
 | `open` / `reload` | Starting from a given URL, or reloading so only frontend state is lost while the app keeps running |
 
 ### Inspection and evidence
 
 | Command | Verifies | Limits |
 |---|---|---|
-| `snapshot` | Structure and state: what is shown, button names, `[pressed]` and `[disabled]`, list item counts, open panels. Also exposes accessibility gaps such as unnamed buttons | No color or layout. Does not include the EPUB iframe |
+| `snapshot` | Structure and state: what is shown, button names, `[pressed]` and `[disabled]`, list item counts, open panels. Also exposes accessibility gaps such as unnamed buttons | No color or layout. Use `snapshot --in-book` for the EPUB page |
 | `screenshot` | Appearance: highlight colors, zoom, spreads, binding, broken layout | Needs to be looked at |
 | `wait <selector> [state]` | An asynchronous result appears or disappears (`detached`) | A timeout is evidence of failure |
 | `eval <expr>` | Fine DOM details: current page text, the selection, attributes | Read-only. Never call app functions in place of the user action |
@@ -126,9 +127,9 @@ When a change touches these, report them as gaps and check the real app with `go
 - Your own library is never touched. Data lives in `$TMPDIR/glint-verify-…` and `stop` deletes it.
 - Native dialogs do not appear. Write the answer first with `dialog open-file <path>` or `dialog confirm accept|cancel`. With no answer, the dialog is cancelled.
 - After changing code, `stop` and then `start`. A stale instance makes `doctor` report `STALE BUILD` or `STALE DRIVER`.
-- Use `frontend/testdata/generated-reader.pdf` as the book. If you try your own books, keep them out of the feature map and tests.
+- Use the generated books in `frontend/testdata` (`generated-reader.pdf`, `generated-reader.epub`). If you try your own books, keep them out of the feature map and tests.
 
 ## Maintaining the feature map
 
 - When you add a feature or change the UI, update the matching feature file in the same PR, in English, with the same four headings.
-- Files not written yet (epub-reader, search, read-aloud, settings, journeys) are added as those features need verification.
+- Files not written yet (search, read-aloud, settings, journeys) are added as those features need verification.

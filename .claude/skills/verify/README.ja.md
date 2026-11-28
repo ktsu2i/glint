@@ -79,13 +79,14 @@ go tool verify stop           # 全部止めてデータを消す
 | `type` | 入力欄の動き：ページ番号への移動、検索語の入力、名前の変更 |
 | `select-text` | 本文が選べること（text layer が正しく重なっているか）。選ばれた文字列を出力する |
 | `hover` | hover で出る UI：スライダーのプレビュー、ツールチップ |
+| `--in-book` | 同じコマンドを EPUB の本文の中で使う：本文の選択、章の中の要素のクリック、章の DOM の確認（スクリプトが除去されたかなど） |
 | `open` / `reload` | 特定の URL から始めたときや、ページを読み直したときの動き。フロントエンドの状態だけが消え、アプリ側は動き続けている状態を作れる |
 
 ### 確認と証拠
 
 | コマンド | 確かめられること | 限界 |
 |---|---|---|
-| `snapshot` | 画面の構造と状態：何が出ているか、ボタン名、`[pressed]` や `[disabled]`、一覧の項目数、パネルが開いているか。a11y の欠け（名前のないボタンなど）も見つかる | 色やレイアウトは分からない。EPUB の iframe の中身は出ない |
+| `snapshot` | 画面の構造と状態：何が出ているか、ボタン名、`[pressed]` や `[disabled]`、一覧の項目数、パネルが開いているか。a11y の欠け（名前のないボタンなど）も見つかる | 色やレイアウトは分からない。EPUB の本文は `snapshot --in-book` で見る |
 | `screenshot` | 見た目：ハイライトの色、ズーム、見開き、綴じ方向、崩れ | 目で見る必要がある |
 | `wait <selector> [state]` | 非同期の結果が出ること、消えること（`detached`） | 時間内に出なければ失敗の証拠になる |
 | `eval <expr>` | DOM の細かい値（今のページ番号の文字、選択範囲、属性など） | 読み取り専用。アプリの関数を直接呼んで操作の代わりにしない |
@@ -126,9 +127,9 @@ go tool verify stop           # 全部止めてデータを消す
 - 普段のライブラリには触れない。データは `$TMPDIR/glint-verify-…` に作られ、`stop` で消える。
 - ネイティブのダイアログは出ない。操作の前に `dialog open-file <path>` や `dialog confirm accept|cancel` で答えを書いておく。答えがなければキャンセル扱いになる。
 - コードを変えたら `stop` してから `start` し直す。古いまま動かしていると `doctor` が `STALE BUILD` や `STALE DRIVER` を出す。
-- テスト用の本は `frontend/testdata/generated-reader.pdf` を使う。手元の本で試す場合も、その結果を feature map やテストに書かない。
+- テスト用の本は `frontend/testdata` の生成済みの本（`generated-reader.pdf`、`generated-reader.epub`）を使う。手元の本で試す場合も、その結果を feature map やテストに書かない。
 
 ## feature map の育て方
 
 - 機能を足したり UI を変えたりしたら、同じ PR で該当する feature ファイルも直す。英語で書き、4 つの見出しを揃える。
-- まだないファイル（epub-reader、検索、read-aloud、settings、journeys）は、その機能を確かめる必要が出たときに足す。
+- まだないファイル（検索、read-aloud、settings、journeys）は、その機能を確かめる必要が出たときに足す。

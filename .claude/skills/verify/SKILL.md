@@ -38,6 +38,7 @@ go tool verify stop
 - Navigation and input: `open`, `reload`, `click`, `click-css`, `mouse-click`, `right-click`, `press`, `type`, `select-text`, `hover`
 - Inspection and evidence: `snapshot`, `screenshot`, `wait`, `eval`, `console`, `sql`, `logs`
 - Dialogs: `dialog open-file <path>`, `dialog confirm <accept|cancel>`, `dialog last`
+- EPUB content: `--in-book` as the first argument of `click-css`, `mouse-click`, `right-click`, `hover`, `select-text`, `snapshot`, `wait`, and `eval` acts inside the frame of the current section
 
 ## Proof bar
 
@@ -56,7 +57,8 @@ Do not submit "it opened" or "it showed up" as evidence. Show the result of the 
 - When a name contains something variable such as a book title, use a `/regex/` (`click button "/Continue generated-reader/"`).
 - Do not wait with fixed sleeps. Use `wait` on a visible end state.
 - Prefer registered keys (`press ArrowRight`) over coordinate clicks for things like page turns.
-- Use `frontend/testdata/generated-reader.pdf` (3 pages with an outline) as the book. Do not use copyrighted or personal books.
+- Use the generated books: `frontend/testdata/generated-reader.pdf` (3 pages with an outline) and `frontend/testdata/generated-reader.epub` (3 chapters, active content in chapter 2). Do not use copyrighted or personal books.
+- The EPUB page is in a frame inside a closed shadow root. Use `--in-book` to read or act on the book's text.
 - After changing Go code or `cmd/verify`, `stop` and `start` again.
 - These `console` messages are expected: Wails "Browser Environment Detected", PDF.js "Setting up fake worker", and the WebSocket disconnect and reconnect after `restart-app`.
 

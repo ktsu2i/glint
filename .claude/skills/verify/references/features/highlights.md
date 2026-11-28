@@ -22,7 +22,7 @@ Drag across text in the reader. The list opens from "Open highlights" in the top
 go tool verify select-text ".text-layer[data-page='1'] span"   # prints the selected text
 go tool verify click button "Highlight in yellow"
 go tool verify wait ".highlight-mark.is-yellow"
-go tool verify sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
+go tool verify sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '[]' as has_rects from book_highlights"
 
 # change color
 go tool verify mouse-click ".highlight-mark.is-yellow"
@@ -44,6 +44,7 @@ go tool verify wait ".highlight-mark.is-pink"
 
 - `.highlight-mark` sits under the text layer, so `click-css` gets intercepted by the text layer. Use `mouse-click` to select an existing highlight (the app looks up the highlight at the clicked point).
 - `select-text` drags from the left edge to the right edge of one element. Selecting across lines is not supported by the driver yet.
-- A PDF highlight has `rects` and an empty `cfi`; an EPUB highlight is the opposite. Check with `sql` that exactly one of them is set.
+- A PDF highlight has `rects` and an empty `cfi`; an EPUB highlight has a `cfi` and `rects` of `[]`. Check with `sql` that exactly one of them is set.
+- These steps are for PDFs. For EPUBs, select inside the book frame with `--in-book`; see [epub-reader](epub-reader.md).
 - Highlights are drawn only on rendered pages, and a reopened book starts at the saved reading position. After `restart-app`, go to the highlight's page (or start from page 1) before waiting for `.highlight-mark`.
 - Color is user-visible evidence, so keep a `screenshot` in addition to `sql`.

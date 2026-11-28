@@ -43,5 +43,5 @@ go tool verify snapshot
 - Button names include the page number, so they change when the page changes. Read the current name with `snapshot` before clicking.
 - With the list open, "Remove bookmark from page N" exists both in the top bar and in the list. `click` presses the first match, the one in the top bar.
 - Arrow key direction depends on the binding (see [pdf-reader](pdf-reader.md)). The steps above assume left binding, the default.
-- PDF bookmarks have an empty `cfi` and `progress` 0. EPUB bookmarks have both set.
+- PDF bookmarks have an empty `cfi` and `progress` 0. EPUB bookmarks have both set; their buttons are "Bookmark this page" and, in the list, "Go to the bookmark in <chapter>". See [epub-reader](epub-reader.md).
 - The list panel stays open. Close it with "Close panel" before checking another panel.

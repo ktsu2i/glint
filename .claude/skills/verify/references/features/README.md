@@ -7,7 +7,7 @@ A behavior-level inventory of Glint. Agents use it to decide what to drive and w
 - `doctor` reports `doctor: ok`.
 - Start from the empty library right after `start`. Do not carry data over from an earlier run (`stop` deletes it).
 - The UI language is English (the driver opens the page with `en-US`). To check Japanese, switch the setting first.
-- Use `frontend/testdata/generated-reader.pdf` as the book. It has 3 pages, each with a heading, two lines of body text, and one line of code.
+- Use the generated books in `frontend/testdata`: `generated-reader.pdf` (3 pages, each with a heading, two lines of body text, and one line of code) and `generated-reader.epub` (3 chapters spanning several pages, with active content in chapter 2). Never use copyrighted or personal books.
 
 ## Coverage and gap reporting
 
@@ -23,10 +23,11 @@ For a broad regression, walk this list top to bottom. Keep new entries behavior-
 
 - [library](library.md): import, sort, rename, remove, covers, continue reading
 - [pdf-reader](pdf-reader.md): page turns, go to page, slider, view settings (binding, zoom), restoring the reading position
+- [epub-reader](epub-reader.md): EPUB sections, table of contents, page turns, text size and spreads, position, highlights and bookmarks by CFI, stripping active content
 - [highlights](highlights.md): create from a selection, change color, remove, jump from the list
 - [bookmarks](bookmarks.md): save and remove a page, jump and remove from the list
 
-Not written yet: epub-reader, book-search, library-search, read-aloud, settings, and multi-feature journeys.
+Not written yet: book-search, library-search, read-aloud, settings, and multi-feature journeys.
 
 ## Entry contract
 
