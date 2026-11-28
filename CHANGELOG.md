@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.5.1](https://github.com/ktsu2i/glint/compare/v0.5.0...v0.5.1) - 2026-11-28
+
+### Other Changes
+- fix: keep reading state in SQLite instead of localStorage by @ktsu2i in https://github.com/ktsu2i/glint/pull/59
+- fix: normalize search text with NFKC and fold case consistently by @ktsu2i in https://github.com/ktsu2i/glint/pull/60
+- refactor: split the frontend into app, features, and shared layers by @ktsu2i in https://github.com/ktsu2i/glint/pull/62
+- refactor: move library and reader logic out of the app shell by @ktsu2i in https://github.com/ktsu2i/glint/pull/63
+- refactor: share the reader chrome between the PDF and EPUB readers by @ktsu2i in https://github.com/ktsu2i/glint/pull/64
+- refactor: split the readers into hooks and pdf/epub/common directories by @ktsu2i in https://github.com/ktsu2i/glint/pull/65
+- refactor: split styles.css by feature by @ktsu2i in https://github.com/ktsu2i/glint/pull/66
+
 ## [v0.5.0](https://github.com/ktsu2i/glint/compare/v0.4.0...v0.5.0) - 2026-11-26
 
 ### New Features
