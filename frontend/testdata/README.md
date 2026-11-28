@@ -1,15 +1,15 @@
-# テスト用fixture
+# Test fixtures
 
-`generated-reader.pdf`は、PDF readerの検証に使うcommit可能なPDFです。
-2つのsection、説明文、code block、page number、outlineを含みます。
+`generated-reader.pdf` is a committable PDF for testing the PDF reader.
+It has two sections, body text, a code block, page numbers, and an outline.
 
-`generated-reader.epub`は、EPUB readerの検証に使うcommit可能なEPUBです。
-表紙、目次（nav）、複数ページにまたがる3つの章を含みます。
-第2章には、readerが取り除くべきactive content（`<script>`、`onclick`、`javascript:`のlink）をわざと入れています。
+`generated-reader.epub` is a committable EPUB for testing the EPUB reader.
+It has a cover, a table of contents (nav), and three chapters that span several pages.
+Chapter 2 deliberately contains active content the reader must strip: a `<script>`, an `onclick` handler, and a `javascript:` link.
 
-`generated-reader-drm.epub`は、同じ本に`META-INF/encryption.xml`を加えたEPUBです。DRM保護されたEPUBとして取り込みを拒否されることの検証に使います。
+`generated-reader-drm.epub` is the same book with a `META-INF/encryption.xml` added. It is used to check that importing a DRM-protected EPUB is refused.
 
-内容を再生成する場合は次を実行します。
+To regenerate them, run:
 
 ```bash
 cd frontend
