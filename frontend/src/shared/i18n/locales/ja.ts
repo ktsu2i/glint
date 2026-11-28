@@ -1,7 +1,6 @@
 import type { TranslationKey } from "./en";
 
 export const ja: Record<TranslationKey, string> = {
-  "app.technicalReader": "Technical reader",
   "app.library": "本棚",
   "app.addBook": "本を追加",
   "app.choosingBook": "選択しています…",
@@ -24,8 +23,6 @@ export const ja: Record<TranslationKey, string> = {
   "error.saveLanguage": "言語設定を保存できませんでした。",
   "library.loading": "本棚を読み込んでいます…",
   "library.emptyTitle": "最初の一冊を、本棚へ。",
-  "library.emptyDescription":
-    "技術書のPDFまたはEPUBを追加すると、表紙と読書位置をローカルに保存します。",
   "library.chooseBook": "本を選ぶ",
   "library.importedBooks": "import済みの本",
   "library.neverOpened": "まだ開いていません",
