@@ -21,6 +21,7 @@ import { useBookSearch } from "../common/useBookSearch";
 import { useReaderChrome } from "../common/useReaderChrome";
 import { EPUB_FONT_SCALE_STEP, EPUB_MAX_FONT_SCALE, EPUB_MIN_FONT_SCALE } from "./epubContent";
 import { isEditableTarget, isElementLike, rangeAnchor } from "./epubDom";
+import { tocLabelAt } from "./sectionAt";
 import { useEpubBookmarks, useEpubHighlights } from "./useEpubAnnotations";
 import { useEpubReadAloud } from "./useEpubReadAloud";
 import { useEpubSettings } from "./useEpubSettings";
@@ -581,6 +582,22 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
               })
             : []
         }
+        seek={{
+          min: 0,
+          max: sliderSteps,
+          onSeek: (value) => void view?.goToFraction(value / sliderSteps),
+          renderHover: (value) => {
+            const title = tocLabelAt(view, value / sliderSteps);
+            return (
+              <>
+                {title && <span className="reader-slider-hover-title">{title}</span>}
+                <span className="reader-slider-hover-label">
+                  {Math.round((value / sliderSteps) * 100)}%
+                </span>
+              </>
+            );
+          },
+        }}
       />
     </section>
   );

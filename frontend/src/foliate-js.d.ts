@@ -88,6 +88,9 @@ declare module "foliate-js/view.js" {
     clearSearch(): void;
     getCFI(index: number, range: Range): string;
     getTOCItemOf(target: string): Promise<FoliateTocItem | undefined>;
+    /** Where each section starts within the whole book, plus 1 at the end. */
+    getSectionFractions(): number[];
+    getProgressOf(index: number, range?: Range): { tocItem?: FoliateTocItem | null };
     addAnnotation(annotation: FoliateAnnotation): Promise<unknown>;
     deleteAnnotation(annotation: FoliateAnnotation): Promise<unknown>;
     addEventListener<K extends keyof FoliateViewEventMap>(
