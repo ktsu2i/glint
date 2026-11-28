@@ -2,6 +2,9 @@
 // original text: a cover, a nav document, three chapters long enough to span
 // several pages, and one chapter carrying active content (a script, an event
 // handler, and a javascript: link) that the reader must strip.
+//
+// It also generates generated-reader-drm.epub, the same book with a
+// META-INF/encryption.xml, which Glint must refuse to import.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -10,6 +13,7 @@ import { crc32, deflateSync } from "node:zlib";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outputPath = resolve(root, "frontend/testdata/generated-reader.epub");
+const drmOutputPath = resolve(root, "frontend/testdata/generated-reader-drm.epub");
 const encoder = new TextEncoder();
 
 const chapters = [
@@ -202,5 +206,18 @@ const entries = [
   ...chapters.map((entry) => [`OEBPS/${entry.id}.xhtml`, encoder.encode(chapter(entry))]),
 ];
 
+const encryption = `<?xml version="1.0" encoding="UTF-8"?>
+<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+  <enc:EncryptedData>
+    <enc:EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#aes128-cbc"/>
+    <enc:CipherData><enc:CipherReference URI="OEBPS/chapter-1.xhtml"/></enc:CipherData>
+  </enc:EncryptedData>
+</encryption>
+`;
+
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, zip(entries));
+writeFileSync(
+  drmOutputPath,
+  zip([entries[0], ["META-INF/encryption.xml", encoder.encode(encryption)], ...entries.slice(1)]),
+);
