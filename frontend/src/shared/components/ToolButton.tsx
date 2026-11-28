@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Tooltip } from "@base-ui/react/tooltip";
+import "./ToolButton.css";
 
 type ToolButtonProps = {
   label: string;

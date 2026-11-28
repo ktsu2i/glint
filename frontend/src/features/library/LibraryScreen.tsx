@@ -7,6 +7,7 @@ import { sortBooks, type useLibrarySortOrder } from "./librarySort";
 import type { LibraryActions } from "./useLibraryActions";
 import type { LibraryBooks } from "./useLibraryBooks";
 import type { LibrarySearch } from "./useLibrarySearch";
+import "./library.css";
 
 type LibraryScreenProps = {
   /** Whether the top bar shows the shelf or the search across every book. */

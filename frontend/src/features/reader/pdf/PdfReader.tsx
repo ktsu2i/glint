@@ -27,6 +27,7 @@ import { usePdfOutline } from "./usePdfOutline";
 import { usePdfPageRender, type ViewMode } from "./usePdfPageRender";
 import { usePdfReadAloud } from "./usePdfReadAloud";
 import { usePdfStage } from "./usePdfStage";
+import "../reader.css";
 
 const manualZoomStep = 0.1;
 

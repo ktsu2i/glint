@@ -26,6 +26,7 @@ import { useEpubReadAloud } from "./useEpubReadAloud";
 import { useEpubSettings } from "./useEpubSettings";
 import { useFoliateView, type FoliateHandlers } from "./useFoliateView";
 import { usePlaceLabels } from "./usePlaceLabels";
+import "../reader.css";
 
 type PendingSelection = FloatingAnchor & {
   cfi: string;

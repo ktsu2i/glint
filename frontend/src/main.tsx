@@ -1,8 +1,9 @@
+// Global styles come first so the styles of each feature can build on them.
+import "./app/global.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./app/App";
 import { SettingsWindowApp } from "./features/settings/SettingsWindow";
-import "./styles.css";
 
 const rootElement = document.querySelector("#root");
 if (rootElement === null) {
