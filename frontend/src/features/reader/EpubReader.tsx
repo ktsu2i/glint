@@ -1,21 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  BookmarkSimpleIcon,
-  BookmarksSimpleIcon,
-  BookOpenIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
-  FileIcon,
-  HighlighterIcon,
-  ListBulletsIcon,
-  MagnifyingGlassIcon,
-  MinusIcon,
-  PlusIcon,
-  SpeakerHighIcon,
-  TextAaIcon,
-  TrashIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { TextAaIcon } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import type { FoliateRelocateDetail, FoliateShowAnnotationDetail, View } from "foliate-js/view.js";
 import {
@@ -29,7 +13,6 @@ import {
   removeHighlight,
   saveReaderSettings,
   searchBook,
-  setWindowControlsVisible,
   type BookBookmark,
   type BookHighlight,
   type EpubLayout,
@@ -37,8 +20,18 @@ import {
   type ReaderSettings,
 } from "./api";
 import type { BookFile, BookSearchResult } from "../../shared/api/books";
-import { HighlightedExcerpt } from "../../shared/components/HighlightedExcerpt";
-import { ToolButton } from "../../shared/components/ToolButton";
+import { BookmarkList, HighlightList } from "./common/AnnotationLists";
+import { BookSearchPanel } from "./common/BookSearchPanel";
+import {
+  floatingStyle,
+  HighlightActionsToolbar,
+  SelectionHighlightToolbar,
+} from "./common/HighlightToolbars";
+import { ReaderBottomBar } from "./common/ReaderBottomBar";
+import { ReaderSheet } from "./common/ReaderSheet";
+import { ReaderTopBar, useReaderPanel } from "./common/ReaderTopBar";
+import { LayoutSection, ReaderViewMenu, ScaleSection } from "./common/ReaderViewMenu";
+import { showWindowControls } from "./common/windowControls";
 import {
   EPUB_FONT_SCALE_STEP,
   EPUB_MAX_FONT_SCALE,
@@ -57,15 +50,12 @@ import {
   type EpubTocLine,
 } from "./epubContent";
 import { createFoliateView } from "./foliate";
-import { highlightColors } from "./highlights";
 import {
   detectUtteranceLang,
   isSpeechSupported,
   pickVoiceForLang,
   useSpeechVoices,
 } from "./speech";
-
-type ReaderPanel = "toc" | "search" | "bookmarks" | "highlights" | null;
 
 /** Where a floating toolbar points, in the reader's coordinates, with the reader's width. */
 type FloatingAnchor = { x: number; top: number; bottom: number; width: number };
@@ -115,10 +105,6 @@ const keyDirections: Partial<Record<string, TurnDirection>> = {
   PageDown: "next",
   PageUp: "prev",
 };
-
-function showWindowControls(visible: boolean) {
-  void setWindowControlsVisible(visible).catch(() => {});
-}
 
 function currentTheme(): EpubTheme {
   return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
@@ -175,14 +161,6 @@ function rangeAnchor(range: Range, reader: HTMLElement | null): FloatingAnchor |
   };
 }
 
-/** Places a floating toolbar above the anchor, or below it near the top of the window. */
-function floatingStyle(anchor: FloatingAnchor) {
-  const x = anchor.width > 0 ? Math.min(anchor.width - 110, Math.max(110, anchor.x)) : anchor.x;
-  return anchor.top < 110
-    ? { left: `${x}px`, top: `${anchor.bottom + 10}px` }
-    : { left: `${x}px`, top: `${anchor.top - 10}px`, transform: "translate(-50%, -100%)" };
-}
-
 type EpubReaderProps = {
   book: BookFile;
   /** The section to open, counted from 1. */
@@ -217,7 +195,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const [toc, setToc] = useState<EpubTocLine[]>([]);
   const [location, setLocation] = useState<ReaderLocation | null>(null);
   const [fontScale, setFontScale] = useState(defaultReaderSettings.epubFontScale);
-  const [openPanel, setOpenPanel] = useState<ReaderPanel>(null);
+  const { openPanel, setOpenPanel, togglePanel } = useReaderPanel();
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [isTopbarHovered, setIsTopbarHovered] = useState(false);
@@ -548,7 +526,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       return;
     }
     setChromeVisible((current) => !current);
-  }, [isViewMenuOpen, openPanel]);
+  }, [isViewMenuOpen, openPanel, setOpenPanel]);
 
   const turnPage = useCallback(
     (direction: TurnDirection) => {
@@ -572,7 +550,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
     (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        setOpenPanel((panel) => (panel === "search" ? null : "search"));
+        togglePanel("search");
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey || isEditableTarget(event.target)) {
@@ -593,7 +571,7 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
         }
       }
     },
-    [activeHighlight, pendingSelection, toggleChrome, turnPage],
+    [activeHighlight, pendingSelection, toggleChrome, togglePanel, turnPage],
   );
 
   const wheelRef = useRef({ total: 0, lockedUntil: 0 });
@@ -927,14 +905,6 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
   const isReady = view !== null && location !== null;
   const percent = Math.round((location?.fraction ?? 0) * 100);
   const sliderValue = Math.round((location?.fraction ?? 0) * sliderSteps);
-  const panelTitle =
-    openPanel === "toc"
-      ? t("reader.toc")
-      : openPanel === "highlights"
-        ? t("reader.highlights")
-        : openPanel === "bookmarks"
-          ? t("reader.bookmarks")
-          : t("reader.textSearch");
   const selectedHighlight = activeHighlight
     ? highlights.find((entry) => entry.id === activeHighlight.id)
     : undefined;
@@ -964,165 +934,60 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
         </p>
       )}
 
-      <header
-        className="reader-topbar glass"
-        onMouseEnter={() => setIsTopbarHovered(true)}
-        onMouseLeave={() => setIsTopbarHovered(false)}
-        onFocus={() => setIsTopbarFocused(true)}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) {
-            setIsTopbarFocused(false);
-          }
+      <ReaderTopBar
+        ready={isReady}
+        title={book.title}
+        subtitle={sectionLabel || null}
+        openPanel={openPanel}
+        onTogglePanel={togglePanel}
+        readAloud={{
+          supported: speechSupported,
+          active: isReadingAloud,
+          onToggle: toggleReadAloud,
         }}
-      >
-        <div className="reader-topbar-start">
-          {onBack && (
-            <button type="button" className="glass-button reader-back" onClick={onBack}>
-              <CaretLeftIcon size={15} weight="bold" aria-hidden="true" />
-              {t("reader.backToLibrary")}
-            </button>
-          )}
-          <span className="reader-topbar-separator" aria-hidden="true" />
-          <ToolButton
-            label={openPanel === "toc" ? t("reader.closeToc") : t("reader.openToc")}
-            className={openPanel === "toc" ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => (panel === "toc" ? null : "toc"))}
-            disabled={!isReady}
-          >
-            <ListBulletsIcon size={17} weight="regular" />
-          </ToolButton>
-          <ToolButton
-            label={openPanel === "search" ? t("reader.closeSearch") : t("reader.openSearch")}
-            className={openPanel === "search" ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => (panel === "search" ? null : "search"))}
-            disabled={!isReady}
-          >
-            <MagnifyingGlassIcon size={17} weight="regular" />
-          </ToolButton>
-          <ToolButton
-            label={
-              openPanel === "bookmarks" ? t("reader.closeBookmarks") : t("reader.openBookmarks")
-            }
-            className={openPanel === "bookmarks" ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => (panel === "bookmarks" ? null : "bookmarks"))}
-            disabled={!isReady}
-          >
-            <BookmarksSimpleIcon size={17} weight="regular" />
-          </ToolButton>
-          <ToolButton
-            label={
-              openPanel === "highlights" ? t("reader.closeHighlights") : t("reader.openHighlights")
-            }
-            className={openPanel === "highlights" ? "is-active" : ""}
-            onClick={() => setOpenPanel((panel) => (panel === "highlights" ? null : "highlights"))}
-            disabled={!isReady}
-          >
-            <HighlighterIcon size={17} weight="regular" />
-          </ToolButton>
-        </div>
-        <div className="reader-title">
-          <strong title={book.title}>{book.title}</strong>
-          {sectionLabel && <span>{sectionLabel}</span>}
-        </div>
-        <div className="reader-topbar-end">
-          <ToolButton
-            label={
-              speechSupported
-                ? isReadingAloud
-                  ? t("reader.stopReadAloud")
-                  : t("reader.startReadAloud")
-                : t("reader.readAloudUnsupported")
-            }
-            className={isReadingAloud ? "is-active is-reading" : ""}
-            disabled={!isReady || !speechSupported}
-            onClick={toggleReadAloud}
-          >
-            <SpeakerHighIcon size={17} weight={isReadingAloud ? "fill" : "regular"} />
-          </ToolButton>
-          <ToolButton
-            label={pageBookmarked ? t("reader.removeBookmarkHere") : t("reader.saveBookmarkHere")}
-            className={
-              pageBookmarked ? "is-active reader-bookmark-toggle" : "reader-bookmark-toggle"
-            }
-            disabled={!isReady || bookmarkBusy}
-            onClick={() => void togglePageBookmark()}
-          >
-            <BookmarkSimpleIcon size={17} weight={pageBookmarked ? "fill" : "regular"} />
-          </ToolButton>
-          <ToolButton
-            label={t("reader.view")}
-            className={isViewMenuOpen ? "is-active" : ""}
-            expanded={isViewMenuOpen}
-            onClick={() => setIsViewMenuOpen((current) => !current)}
-          >
-            <TextAaIcon size={17} weight="regular" />
-          </ToolButton>
-        </div>
-      </header>
+        bookmark={{
+          label: pageBookmarked ? t("reader.removeBookmarkHere") : t("reader.saveBookmarkHere"),
+          active: pageBookmarked,
+          disabled: bookmarkBusy,
+          onToggle: () => void togglePageBookmark(),
+        }}
+        viewMenu={{
+          open: isViewMenuOpen,
+          icon: <TextAaIcon size={17} weight="regular" />,
+          onToggle: () => setIsViewMenuOpen((current) => !current),
+        }}
+        onHoverChange={setIsTopbarHovered}
+        onFocusChange={setIsTopbarFocused}
+        onBack={onBack}
+      />
 
       {isViewMenuOpen && (
-        <div
-          className="reader-view-menu glass glass-strong"
-          role="dialog"
-          aria-label={t("reader.view")}
-        >
-          <section>
-            <h2>{t("reader.layoutHeading")}</h2>
-            <div className="segmented" role="group" aria-label={t("reader.layoutHeading")}>
-              <button
-                type="button"
-                aria-pressed={layout === "single"}
-                onClick={() => changeLayout("single")}
-              >
-                <FileIcon size={14} aria-hidden="true" />
-                {t("reader.layoutSingle")}
-              </button>
-              <button
-                type="button"
-                aria-pressed={layout === "spread"}
-                onClick={() => changeLayout("spread")}
-              >
-                <BookOpenIcon size={14} aria-hidden="true" />
-                {t("reader.layoutSpread")}
-              </button>
-            </div>
-            <p>{t("reader.epubSpreadNote")}</p>
-          </section>
-          <section>
-            <h2>{t("reader.textSize")}</h2>
-            <div className="reader-zoom-row">
-              <div className="reader-zoom-stepper">
-                <button
-                  type="button"
-                  className="glass-button"
-                  aria-label={t("reader.smallerText")}
-                  disabled={fontScale <= EPUB_MIN_FONT_SCALE}
-                  onClick={() => changeFontScale(fontScale - EPUB_FONT_SCALE_STEP)}
-                >
-                  <MinusIcon size={13} weight="bold" aria-hidden="true" />
-                </button>
-                <span>{fontScale}%</span>
-                <button
-                  type="button"
-                  className="glass-button"
-                  aria-label={t("reader.largerText")}
-                  disabled={fontScale >= EPUB_MAX_FONT_SCALE}
-                  onClick={() => changeFontScale(fontScale + EPUB_FONT_SCALE_STEP)}
-                >
-                  <PlusIcon size={13} weight="bold" aria-hidden="true" />
-                </button>
-              </div>
-              <button
-                type="button"
-                className="reader-fit-button"
-                aria-pressed={fontScale === 100}
-                onClick={() => changeFontScale(100)}
-              >
-                {t("reader.defaultTextSize")}
-              </button>
-            </div>
-          </section>
-        </div>
+        <ReaderViewMenu>
+          <LayoutSection
+            layout={layout}
+            note={t("reader.epubSpreadNote")}
+            onChange={changeLayout}
+          />
+          <ScaleSection
+            heading={t("reader.textSize")}
+            value={`${fontScale}%`}
+            decrease={{
+              label: t("reader.smallerText"),
+              disabled: fontScale <= EPUB_MIN_FONT_SCALE,
+              onClick: () => changeFontScale(fontScale - EPUB_FONT_SCALE_STEP),
+            }}
+            increase={{
+              label: t("reader.largerText"),
+              disabled: fontScale >= EPUB_MAX_FONT_SCALE,
+              onClick: () => changeFontScale(fontScale + EPUB_FONT_SCALE_STEP),
+            }}
+            reset={{
+              label: t("reader.defaultTextSize"),
+              pressed: fontScale === 100,
+              onClick: () => changeFontScale(100),
+            }}
+          />
+        </ReaderViewMenu>
       )}
 
       {(bookmarkError || highlightError) && (
@@ -1132,86 +997,35 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
       )}
 
       {pendingSelection && (
-        <div
-          className="reader-highlight-toolbar glass glass-strong"
-          role="toolbar"
-          aria-label={t("reader.highlightSelection")}
-          tabIndex={-1}
-          style={floatingStyle(pendingSelection)}
-          // Keep the selection while a color is picked.
-          onMouseDown={(event) => event.preventDefault()}
-        >
-          {highlightColors.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={`reader-highlight-swatch is-${color}`}
-              aria-label={t("reader.highlightIn", { color: t(`reader.color.${color}`) })}
-              disabled={highlightBusy}
-              onClick={() => void saveSelectionHighlight(color)}
-            />
-          ))}
-        </div>
+        <SelectionHighlightToolbar
+          style={floatingStyle(pendingSelection, pendingSelection.width)}
+          busy={highlightBusy}
+          onPick={(color) => void saveSelectionHighlight(color)}
+        />
       )}
 
       {activeHighlight && selectedHighlight && (
-        <div
-          className="reader-highlight-toolbar glass glass-strong"
-          role="toolbar"
-          aria-label={t("reader.highlightActions")}
-          style={floatingStyle(activeHighlight)}
-        >
-          {highlightColors.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={`reader-highlight-swatch is-${color}`}
-              aria-label={t("reader.changeHighlightColor", { color: t(`reader.color.${color}`) })}
-              aria-pressed={selectedHighlight.color === color}
-              disabled={highlightBusy}
-              onClick={() => {
-                if (selectedHighlight.color !== color) {
-                  void recolorHighlight(selectedHighlight.id, color);
-                }
-              }}
-            />
-          ))}
-          <span className="reader-highlight-divider" aria-hidden="true" />
-          <button
-            type="button"
-            className="reader-highlight-remove"
-            aria-label={t("reader.removeHighlight")}
-            title={t("reader.removeHighlight")}
-            disabled={highlightBusy}
-            onClick={() => void deleteHighlight(selectedHighlight.id)}
-          >
-            <TrashIcon size={15} aria-hidden="true" />
-          </button>
-        </div>
+        <HighlightActionsToolbar
+          style={floatingStyle(activeHighlight, activeHighlight.width)}
+          color={selectedHighlight.color}
+          busy={highlightBusy}
+          onRecolor={(color) => void recolorHighlight(selectedHighlight.id, color)}
+          onRemove={() => void deleteHighlight(selectedHighlight.id)}
+        />
       )}
 
       {openPanel && (
-        <aside
-          className={`reader-sheet glass glass-strong reader-sheet-${openPanel}`}
-          aria-label={panelTitle}
+        <ReaderSheet
+          panel={openPanel}
+          count={
+            openPanel === "highlights"
+              ? highlights.length
+              : openPanel === "bookmarks"
+                ? bookmarks.length
+                : 0
+          }
+          onClose={() => setOpenPanel(null)}
         >
-          <div className="reader-sheet-header">
-            <h2>{panelTitle}</h2>
-            {openPanel === "highlights" && highlights.length > 0 && (
-              <strong className="reader-sheet-count">{highlights.length}</strong>
-            )}
-            {openPanel === "bookmarks" && bookmarks.length > 0 && (
-              <strong className="reader-sheet-count">{bookmarks.length}</strong>
-            )}
-            <button
-              type="button"
-              className="glass-button reader-sheet-close"
-              aria-label={t("reader.closePanel")}
-              onClick={() => setOpenPanel(null)}
-            >
-              <XIcon size={14} weight="bold" aria-hidden="true" />
-            </button>
-          </div>
           {openPanel === "toc" && (
             <div className="reader-sheet-scroll">
               {toc.length === 0 ? (
@@ -1237,237 +1051,111 @@ export function EpubReader({ book, initialSection = 1, onPageChange, onBack }: E
             </div>
           )}
           {openPanel === "bookmarks" && (
-            <div className="reader-sheet-scroll">
-              {bookmarksLoaded && bookmarks.length === 0 ? (
-                <p className={`reader-sheet-message${bookmarkError ? " is-error" : ""}`}>
-                  {bookmarkError || t("reader.noEpubBookmarks")}
-                </p>
-              ) : bookmarksLoaded ? (
-                <ol className="reader-bookmark-list">
-                  {bookmarks.map((bookmark) => (
-                    <li
-                      key={bookmark.cfi}
-                      className={pageBookmarks.includes(bookmark) ? "is-active" : ""}
-                    >
-                      <button
-                        type="button"
-                        className="reader-bookmark-link"
-                        aria-label={t("reader.goToBookmarkIn", { place: placeName(bookmark) })}
-                        onClick={() => void view?.goTo(bookmark.cfi)}
-                      >
-                        <BookmarkSimpleIcon size={15} weight="fill" aria-hidden="true" />
-                        <span>
-                          <strong>{placeName(bookmark)}</strong>
-                          <small>{progressPercent(bookmark)}%</small>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="reader-bookmark-remove"
-                        aria-label={t("reader.removeBookmarkIn", { place: placeName(bookmark) })}
-                        disabled={bookmarkBusy}
-                        onClick={() => void deleteBookmark(bookmark)}
-                      >
-                        <XIcon size={12} weight="bold" aria-hidden="true" />
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="reader-sheet-message">{t("reader.loadingBookmarks")}</p>
-              )}
-            </div>
+            <BookmarkList
+              loaded={bookmarksLoaded}
+              error={bookmarkError}
+              busy={bookmarkBusy}
+              emptyMessage={t("reader.noEpubBookmarks")}
+              entries={bookmarks.map((bookmark) => ({
+                key: bookmark.cfi,
+                active: pageBookmarks.includes(bookmark),
+                title: placeName(bookmark),
+                detail: `${progressPercent(bookmark)}%`,
+                goLabel: t("reader.goToBookmarkIn", { place: placeName(bookmark) }),
+                removeLabel: t("reader.removeBookmarkIn", { place: placeName(bookmark) }),
+                onGo: () => void view?.goTo(bookmark.cfi),
+                onRemove: () => void deleteBookmark(bookmark),
+              }))}
+            />
           )}
           {openPanel === "highlights" && (
-            <div className="reader-sheet-scroll">
-              {highlightsLoaded && highlights.length === 0 ? (
-                <p className="reader-sheet-message">{t("reader.noHighlights")}</p>
-              ) : highlightsLoaded ? (
-                <ol className="reader-highlight-list">
-                  {highlights.map((highlight) => (
-                    <li
-                      key={highlight.id}
-                      className={`is-${highlight.color}${
-                        highlight.pageNumber === location?.section ? " is-active" : ""
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        className="reader-highlight-link"
-                        aria-label={t("reader.goToHighlightIn", {
-                          place: placeName(highlight),
-                        })}
-                        onClick={() => void view?.goTo(highlight.cfi)}
-                      >
-                        <small>{placeName(highlight)}</small>
-                        <span>{highlight.text}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="reader-bookmark-remove"
-                        aria-label={t("reader.removeHighlightIn", {
-                          place: placeName(highlight),
-                        })}
-                        disabled={highlightBusy}
-                        onClick={() => void deleteHighlight(highlight.id)}
-                      >
-                        <XIcon size={12} weight="bold" aria-hidden="true" />
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="reader-sheet-message">{t("reader.loadingHighlights")}</p>
-              )}
-            </div>
+            <HighlightList
+              loaded={highlightsLoaded}
+              // The error shows above the page; the list stays as it was.
+              error=""
+              busy={highlightBusy}
+              entries={highlights.map((highlight) => ({
+                key: highlight.id,
+                color: highlight.color,
+                active: highlight.pageNumber === location?.section,
+                place: placeName(highlight),
+                text: highlight.text,
+                goLabel: t("reader.goToHighlightIn", { place: placeName(highlight) }),
+                removeLabel: t("reader.removeHighlightIn", { place: placeName(highlight) }),
+                onGo: () => void view?.goTo(highlight.cfi),
+                onRemove: () => void deleteHighlight(highlight.id),
+              }))}
+            />
           )}
           {openPanel === "search" && (
-            <>
-              <form
-                className="reader-search-form"
-                role="search"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitBookSearch();
-                }}
-              >
-                <label className="reader-search-field">
-                  <MagnifyingGlassIcon size={14} aria-hidden="true" />
-                  <input
-                    ref={searchInputRef}
-                    type="search"
-                    aria-label={t("reader.openSearch")}
-                    placeholder={t("reader.searchPlaceholder")}
-                    maxLength={200}
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                  />
-                </label>
-                <button
-                  type="submit"
-                  className="solid-button"
-                  disabled={!searchQuery.trim() || isSearching}
-                >
-                  {isSearching ? t("reader.searchingAction") : t("reader.searchAction")}
-                </button>
-              </form>
-              <div className="reader-sheet-scroll">
-                {searchError ? (
-                  <p className="reader-sheet-message is-error" role="alert">
-                    {searchError}
-                  </p>
-                ) : submittedSearchQuery ? (
-                  isSearching ? (
-                    <p className="reader-sheet-message">
-                      {t("reader.searchingFor", { query: submittedSearchQuery })}
-                    </p>
-                  ) : searchResults.length === 0 ? (
-                    <p className="reader-sheet-message">
-                      {t("reader.noResults", { query: submittedSearchQuery })}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="reader-search-count">
-                        {t("reader.resultsFound", { count: searchResults.length })}
-                      </p>
-                      <ol className="reader-search-results">
-                        {searchResults.map((result) => {
-                          const title =
-                            result.headingPath ||
-                            t("reader.sectionNumber", { number: result.pageNumber });
-                          return (
-                            <li key={result.pageNumber}>
-                              <button
-                                type="button"
-                                className={
-                                  result.pageNumber === location?.section ? "is-active" : ""
-                                }
-                                aria-label={t("reader.goToSection", { title })}
-                                onClick={() => void openSearchResult(result.pageNumber)}
-                              >
-                                <span className="reader-search-result-meta">
-                                  <strong>{title}</strong>
-                                  <span>{t("reader.matches", { count: result.matchCount })}</span>
-                                </span>
-                                <span className="reader-search-excerpt">
-                                  <HighlightedExcerpt
-                                    text={result.excerpt}
-                                    query={submittedSearchQuery}
-                                  />
-                                </span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </>
-                  )
-                ) : (
-                  <p className="reader-sheet-message">{t("reader.searchPrompt")}</p>
-                )}
-              </div>
-            </>
+            <BookSearchPanel
+              inputRef={searchInputRef}
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              onSubmit={() => void submitBookSearch()}
+              submittedQuery={submittedSearchQuery}
+              searching={isSearching}
+              error={searchError}
+              results={searchResults}
+              describeResult={(result) => {
+                const title =
+                  result.headingPath || t("reader.sectionNumber", { number: result.pageNumber });
+                return {
+                  title,
+                  label: t("reader.goToSection", { title }),
+                  active: result.pageNumber === location?.section,
+                };
+              }}
+              onSelectResult={(result) => void openSearchResult(result.pageNumber)}
+            />
           )}
-        </aside>
+        </ReaderSheet>
       )}
 
-      <footer className="reader-bottombar glass" aria-label={t("reader.pageControls")}>
-        <ToolButton
-          label={isRtl ? t("reader.nextPage") : t("reader.previousPage")}
-          disabled={!isReady}
-          onClick={() => turnPage("left")}
-        >
-          <CaretLeftIcon size={16} weight="bold" />
-        </ToolButton>
-        <span className="page-count epub-page-count">{percent}%</span>
-        <ToolButton
-          label={isRtl ? t("reader.previousPage") : t("reader.nextPage")}
-          disabled={!isReady}
-          onClick={() => turnPage("right")}
-        >
-          <CaretRightIcon size={16} weight="bold" />
-        </ToolButton>
-        <div className="reader-page-slider">
-          <div className={`reader-page-rail${isRtl ? " is-rtl" : ""}`}>
-            <input
-              type="range"
-              min={0}
-              max={sliderSteps}
-              step={1}
-              value={sliderValue}
-              aria-label={t("reader.progressSlider")}
-              aria-valuetext={`${percent}%`}
-              disabled={!isReady}
-              dir={isRtl ? "rtl" : "ltr"}
-              style={{ "--page-progress": `${sliderValue / (sliderSteps / 100)}%` }}
-              onChange={(event) =>
-                void view?.goToFraction(Number(event.target.value) / sliderSteps)
-              }
-            />
-            <div className="reader-slider-bookmarks">
-              {isReady &&
-                bookmarks.map((bookmark) => {
-                  const isCurrent = pageBookmarks.includes(bookmark);
-                  const place = `${placeName(bookmark)} · ${progressPercent(bookmark)}%`;
-                  return (
-                    <button
-                      key={bookmark.cfi}
-                      type="button"
-                      className={`reader-slider-bookmark${isCurrent ? " is-current" : ""}`}
-                      style={{ "--bookmark-position": `${bookmark.progress * 100}%` }}
-                      aria-label={t("reader.goToBookmarkIn", { place })}
-                      aria-current={isCurrent ? "page" : undefined}
-                      data-tooltip={place}
-                      onClick={() => void view?.goTo(bookmark.cfi)}
-                    >
-                      <span className="reader-slider-bookmark-dot" aria-hidden="true" />
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
-      </footer>
+      <ReaderBottomBar
+        left={{
+          label: isRtl ? t("reader.nextPage") : t("reader.previousPage"),
+          disabled: !isReady,
+          onClick: () => turnPage("left"),
+        }}
+        right={{
+          label: isRtl ? t("reader.previousPage") : t("reader.nextPage"),
+          disabled: !isReady,
+          onClick: () => turnPage("right"),
+        }}
+        counter={<span className="page-count epub-page-count">{percent}%</span>}
+        rtl={isRtl}
+        slider={
+          <input
+            type="range"
+            min={0}
+            max={sliderSteps}
+            step={1}
+            value={sliderValue}
+            aria-label={t("reader.progressSlider")}
+            aria-valuetext={`${percent}%`}
+            disabled={!isReady}
+            dir={isRtl ? "rtl" : "ltr"}
+            style={{ "--page-progress": `${sliderValue / (sliderSteps / 100)}%` }}
+            onChange={(event) => void view?.goToFraction(Number(event.target.value) / sliderSteps)}
+          />
+        }
+        markers={
+          isReady
+            ? bookmarks.map((bookmark) => {
+                const place = `${placeName(bookmark)} · ${progressPercent(bookmark)}%`;
+                return {
+                  key: bookmark.cfi,
+                  position: bookmark.progress * 100,
+                  current: pageBookmarks.includes(bookmark),
+                  label: t("reader.goToBookmarkIn", { place }),
+                  tooltip: place,
+                  onGo: () => void view?.goTo(bookmark.cfi),
+                };
+              })
+            : []
+        }
+      />
     </section>
   );
 }
