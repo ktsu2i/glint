@@ -2,172 +2,46 @@
 
 [English](README.md) | **日本語**
 
-Glint は技術書を読むための desktop app です。PDF を開き、目次・しおり・見開き・全文検索といった reader として当然の機能で読み進められます。
+技術書を読むための macOS アプリです。PDF と EPUB を手元の本棚に並べて読み、読んだ本をまとめて全文検索できます。
 
-本も読書位置も、すべて手元のマシンに残ります。
+![Glint の本棚](assets/library-ja.png)
 
-## できること
+![Glint で本を読んでいる画面](assets/reader-ja.png)
 
-### 手元の本棚に置く
+## 主な機能
 
-![import した本を表紙と読書位置つきで並べた Glint の本棚](assets/library-ja.png)
+- **ローカルの本棚** — PDF / EPUB を追加し、前回読んでいたページから再開できます。
+- **読みやすい表示** — 単ページと見開き、左綴じと右綴じ、ズーム、ライト / ダークモードに対応しています。
+- **全文検索** — `⌘F` で、読んでいる本の中や本棚のすべての本を検索できます。
+- **ハイライトとしおり** — 4 色のハイライトを引き、しおりを挟んで後から戻れます。
+- **読み上げ** — ページを読み上げ、終わると自動で次のページへ進みます。
+- **英語 / 日本語の UI**
 
-- macOS の file picker から技術書を PDF または EPUB で追加する。
-- import した本を最近読んだ順に表紙付きで本棚に並べ、表紙をクリックして前回読んでいたページから再開する。
-- 本を右クリックして、自分が呼んでいる名前に変更したり、本棚から削除したりする。
-- 元のファイルを移動・削除した場合は Glint が知らせ、表紙からファイルを選び直せる。
+## インストール
 
-### 読む
-
-- ページを主役にして読む。ページをクリックするか `Esc` を押すと、浮かんだ toolbar と page slider を表示・非表示にできる。
-- PDF を単ページでも見開きでも読む。
-- 左綴じ / 右綴じを切り替えられるので、日本語の本も正しい向きでめくれる。
-- 拡大・縮小、ウィンドウ幅に合わせる。ページの並べ方、綴じ方向、ズームは `Aa` のメニューにまとめている。
-- 目次、page slider、ページ番号の直接入力で移動する。
-- ページにしおりを挟み、しおり一覧から戻る。
-- 文章を選択して黄・緑・ピンク・紫のハイライトを引き、ハイライト一覧から見返す。ページ上のハイライトをクリックすると、色の変更や削除ができる。
-- 現在のページを読み上げる。ページの終わりで次のページへ自動で進む。
-- light / dark / system に合わせた表示で読む。ページそのものは著者が作ったままの見た目を保つ。
-- Glint の UI を英語または日本語で使う。どちらも設定ウィンドウ（`⌘,`）で切り替える。
-
-### 探す
-
-- 読んでいる本の中を `⌘F` で検索し、該当ページへ飛ぶ。
-- 本棚で `⌘F` を押し、import 済みのすべての本を横断検索して、目的の本の目的のページを開く。
-- 同じ本棚の検索で、タイトルから本を探す。タイトルの一致した本も本文の検索結果も、入力するそばから表示される。
-
-### EPUB を読む
-
-- EPUB をウィンドウの大きさに合わせて組み直したページで読む。片開きでも、ウィンドウに十分な幅があれば見開きでも読める。
-- 矢印キー、トラックパッドのスワイプ、ページ送りのボタンでページをめくり、目次、進み具合のスライダー、本の中のリンクで移動する。
-- `Aa` のメニューで文字を大きく・小さくし、片開きと見開きを切り替える。文字の色は light / dark の表示に合わせる。
-- PDF と同じように、文章を選択して黄・緑・ピンク・紫のハイライトを引き、ハイライト一覧から見返す。ページ上のハイライトをクリックすると、色の変更や削除ができる。
-- EPUB を前回読んでいたページから再開する。
-- 今のページにしおりを挟む。しおりは章ごとに一覧でき、進み具合の slider にも印が付く。
-- ページを読み上げる。ページの終わりで次のページへ自動で進む。
-
-## 使い始める
-
-Glint は macOS 13 以降で動きます。
-
-### Homebrew でインストールする
+macOS 13 以降で動きます。
 
 ```bash
 brew install --cask ktsu2i/tap/glint
 ```
 
-Glint はまだ Apple の notarization を受けていないため、初回起動は macOS にブロックされます。システム設定 > プライバシーとセキュリティ で「このまま開く」を押すか、次を実行してください。
+[GitHub Releases](https://github.com/ktsu2i/glint/releases) から zip をダウンロードすることもできます。
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Glint.app
-```
+> [!NOTE]
+> Glint はまだ Apple の公証（notarization）を受けていないため、初回起動が macOS にブロックされます。**システム設定 > プライバシーとセキュリティ** で **このまま開く** を押すか、次のコマンドを実行してください。
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Glint.app
+> ```
 
-[GitHub Releases](https://github.com/ktsu2i/glint/releases) から zip を直接ダウンロードすることもできます。
+## アップデート
 
-### アップデート
+Glint は自動でアップデートを確認し、新しいバージョンがあればインストールを案内します。メニューバーの **Glint > Check for Updates…** から手動で確認するか、`brew upgrade --cask glint` を実行してアップデートすることもできます。
 
-Glint は [Sparkle](https://sparkle-project.org/) を使って、1日1回アップデートを確認します。新しいバージョンがあるとインストールを案内するウィンドウが開き、インストールすると新しいバージョンで再起動します。メニューバーの Glint > Check for Updates… から手動で確認することもできます。確認のときに GitHub に問い合わせるのは最新のリリースだけで、本やリポジトリの情報は送りません。
+## プライバシー
 
-アップデートは、インストールする前に EdDSA 署名で検証されます。「このまま開く」で起動して quarantine 属性が残っている場合、macOS が Glint を読み取り専用の場所から起動し、自分でアップデートできないことがあります。その場合は、上の `xattr` コマンドを一度実行してください。
+本、読書位置、ハイライト、しおりはすべて Mac の中だけに保存されます。Glint が行う通信はアップデートの確認だけで、本の情報は送りません。
 
-### source から build する
+## 今後の予定
 
-必要なもの:
-
-- Go 1.27.4 以上
-- pnpm 12.21.0
-
-ほかのツールはリポジトリで版を固定しているので、自分で install する必要はありません。
-
-- 手元の Go が古い場合は、Go が `go.mod` の版の toolchain を自動で取得します。
-- Wails CLI（v3.1.0）は `go.mod` の tool 依存です。`go tool wails3` で実行します。
-- sqlc（v1.31.1）も `go.mod` の tool 依存です。`go tool sqlc` で実行します。
-- frontend 用の Node.js 26.13.1 は、`frontend/package.json` の `devEngines.runtime` に従って pnpm が取得します。
-
-Wails が追加のツールを要求することがあります。build が失敗する場合は [Wails installation guide](https://wails.io/getting-started/installation/) を確認してください。
-
-build します。
-
-```bash
-cd frontend
-pnpm install --frozen-lockfile
-cd ..
-go tool wails3 build
-```
-
-ビルドは `Taskfile.yml` に従い、frontend の依存取得、bindings 生成、frontend のビルド、macOS app の作成・署名を行います。Apple Silicon / Intel の両方に対応するには `go tool wails3 task build ARCH=universal` を実行します。bundle のバージョンは `frontend/package.json` から設定し、Sparkle の設定と bundle identifier は `build/darwin/Info.plist` に保持します。
-
-`build/bin/Glint.app` が生成されます。アプリケーションフォルダへ移動すれば、通常の Mac アプリと同じように開けます。
-
-`.github/workflows` 配下の workflow を変更した場合は、CI と同じ検査を実行してください。ツールの版は `aqua.yaml` で固定しています。[aqua](https://aquaproj.github.io/) を使う場合は `aqua i -l` でまとめて入ります。
-
-```bash
-actionlint
-jactionlint
-ghalint run
-zizmor .
-```
-
-Go のコードを変更した場合は、CI と同じく golangci-lint を実行してください。版は同じく `aqua.yaml` で固定し、設定は `.golangci.yml` にあります。
-
-```bash
-golangci-lint run ./...
-golangci-lint fmt ./...
-```
-
-DB の query は `internal/library/queries/*.sql` に書き、sqlc がそれと `migrations/` から `internal/library/librarydb` の Go コードを生成します。query を変更した場合や migration を追加した場合は、コードを再生成して commit してください。生成漏れは CI の `go tool sqlc diff` で検出します。
-
-```bash
-go tool sqlc generate
-```
-
-## 手元から出ていくもの
-
-- **本は出ていきません。** PDF、EPUB、表紙、読書位置、しおり、ハイライト、設定はすべて Mac のローカルに保存されます。
-- **通信はアップデート確認だけです。** GitHub に最新のリリースを問い合わせるだけで、本の情報は送りません。
-
-## これから向かう先
-
-読むことは土台です。目指しているのは、本と自分のコードをつなぐ reader です。自分のリポジトリを Glint に指定すると、いま読んでいる章から、それが説明しているファイル・symbol・パターンへ辿れる。しかも本とコードの両方に根拠を示した状態で。この機能は制作中で、まだアプリには含まれていません。
-
-## 開発する
-
-Glint は Wails v3、Go、React 19 + TypeScript、PDF.js、SQLite で作られています。source から live reload 付きで起動するには、上記の必要環境を入れたうえで次を実行します。
-
-```bash
-cd frontend
-pnpm install --frozen-lockfile
-cd ..
-go tool wails3 dev
-```
-
-開発モードは `build/config.yml` を使い、Vite server と `build/bin/Glint.dev.app` を起動します。生成した bindings は `frontend/bindings` に置き、commit しません。新しい checkout で frontend の検査を行う前に生成してください（CI でも生成します）。
-
-frontend の package manager は pnpm 12.21.0 に固定しています。`npm install` と `npm run` は意図的に失敗します。
-
-テスト:
-
-```bash
-go test ./...
-go tool wails3 generate bindings -ts -i
-cd frontend
-pnpm test
-pnpm run build
-```
-
-frontend の静的チェック (型検査、oxlint、oxfmt、knip) はまとめて実行できます。
-
-```bash
-cd frontend
-pnpm check      # typecheck + lint + format:check + knip
-pnpm lint:fix   # 自動修正できる lint を直す
-pnpm format     # oxfmt で整形する
-```
-
-### リリース
-
-リリースは [tagpr](https://github.com/Songmu/tagpr) で管理しています。`main` に merge するたびに、tagpr がリリース PR を作成・更新します。この PR で `frontend/package.json` のバージョンが上がり、merge された PR の一覧が `CHANGELOG.md` に追記されます。リリース PR を merge すると、tag が作られ、macOS の universal app がビルドされて GitHub Release に添付され、Release が公開されます。続けて [ktsu2i/homebrew-tap](https://github.com/ktsu2i/homebrew-tap) の update workflow を起動します。この workflow が cask のバージョンを上げ、インストールできることを確認してから merge するので、数分後には `brew upgrade --cask glint` で新しいバージョンが入ります。これには `HOMEBREW_TAP_TOKEN` secret (`ktsu2i/homebrew-tap` の Actions: write を持つ fine-grained PAT) が必要です。未設定の場合も、tap 側の定期実行 (1日2回) で取り込まれます。
-
-release workflow は、[Sparkle](https://sparkle-project.org/) を組み込んで (`sparkle` build tag) Glint をビルドし、`SPARKLE_ED_PRIVATE_KEY` secret の EdDSA 鍵で zip に署名して、`appcast.xml` を Release に添付します。インストール済みの Glint は最新 Release の `appcast.xml` を読み、`build/darwin/Info.plist` の公開鍵で署名を検証します。秘密鍵は必ずバックアップしてください。失うと、インストール済みの Glint をアプリ内から更新できなくなります。
-
-次のバージョンは、デフォルトでは patch が上がります。minor を上げたいときは PR に `enhancement`（または `minor`）ラベルを、major を上げたいときは `major` ラベルを付けてください。リリース PR に `tagpr:minor` / `tagpr:major` ラベルを付けるか、リリース PR 上で `frontend/package.json` のバージョンを直接書き換えることもできます。
+いま読んでいる本と自分のコードをつなげる機能を開発中です。ローカルのリポジトリを指定すると、読んでいる章から、その章が説明しているファイルや symbol へ移動できるようにする予定です。
