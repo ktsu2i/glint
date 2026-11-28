@@ -9,6 +9,7 @@ require (
 	github.com/wailsapp/wails/v3 v3.1.0
 	golang.org/x/net v0.63.0
 	golang.org/x/text v0.44.0
+	pgregory.net/rapid v1.3.0
 )
 
 require (

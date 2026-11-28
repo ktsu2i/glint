@@ -29,3 +29,6 @@ docs
 # Wails v3 generated bindings and task cache
 frontend/bindings/
 .task/
+
+# rapid writes failing cases here to replay them
+testdata/rapid/
