@@ -415,6 +415,8 @@ func rankSegmentMatches(records []segmentMatch, phrase string, terms []string) [
 }
 
 func normalizeBookSearchQuery(query string) (string, []string, error) {
+	// SQLite ends an FTS5 query string at NUL, so a NUL separates terms like a space does.
+	query = strings.ReplaceAll(query, "\x00", " ")
 	phrase := foldCase(strings.Join(strings.Fields(norm.NFKC.String(query)), " "))
 	if phrase == "" || utf8.RuneCountInString(phrase) > maxBookSearchRunes {
 		return "", nil, ErrInvalidBookSearchQuery
