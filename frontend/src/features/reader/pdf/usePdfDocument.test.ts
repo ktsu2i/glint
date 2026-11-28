@@ -29,9 +29,7 @@ describe("usePdfDocument", () => {
   it("does not report a document that loads after unmount", async () => {
     const task = pendingTask();
     const onLoaded = vi.fn();
-    const { unmount } = renderHook(() =>
-      usePdfDocument(book, 1, { onBookChange: vi.fn(), onLoaded }),
-    );
+    const { unmount } = renderHook(() => usePdfDocument(book, 1, { onLoaded }));
     unmount();
 
     task.resolve({ promise: Promise.resolve({ numPages: 1 }), destroy: vi.fn() });
@@ -42,9 +40,7 @@ describe("usePdfDocument", () => {
 
   it("does not report a failure that arrives after unmount", async () => {
     const task = pendingTask();
-    const { result, unmount } = renderHook(() =>
-      usePdfDocument(book, 1, { onBookChange: vi.fn(), onLoaded: vi.fn() }),
-    );
+    const { result, unmount } = renderHook(() => usePdfDocument(book, 1, { onLoaded: vi.fn() }));
     unmount();
 
     task.reject(new Error("late failure"));

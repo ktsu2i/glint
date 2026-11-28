@@ -212,12 +212,12 @@ beforeEach(() => {
 });
 
 describe("PdfReader", () => {
-  it("renders the empty state and resets the page", () => {
+  it("renders the empty state without reporting a page", () => {
     const onPageChange = vi.fn();
     const { unmount } = render(<PdfReader book={null} onPageChange={onPageChange} />);
 
     expect(screen.getByText("本とコードのあいだを読む。")).toBeTruthy();
-    expect(onPageChange).toHaveBeenCalledWith(0, 0);
+    expect(onPageChange).not.toHaveBeenCalled();
     unmount();
   });
 
