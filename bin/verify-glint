@@ -1,6 +1,0 @@
-#!/bin/sh
-# Runs the verify-glint driver from any directory.
-# See .claude/skills/verify-glint/README.md.
-set -eu
-root=$(cd "$(dirname "$(realpath "$0")")/.." && pwd)
-exec node "$root/frontend/scripts/glint-driver.mjs" "$@"

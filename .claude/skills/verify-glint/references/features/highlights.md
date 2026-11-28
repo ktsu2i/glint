@@ -15,29 +15,29 @@ Coloring selected text. PDF highlights are located by on-page rectangles (`rects
 
 Drag across text in the reader. The list opens from "Open highlights" in the top bar.
 
-## Driving it with verify-glint
+## Driving it with glint-driver
 
 ```bash
 # create
-bin/verify-glint select-text ".text-layer[data-page='1'] span"   # prints the selected text
-bin/verify-glint click button "Highlight in yellow"
-bin/verify-glint wait ".highlight-mark.is-yellow"
-bin/verify-glint sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
+node frontend/scripts/glint-driver.mjs select-text ".text-layer[data-page='1'] span"   # prints the selected text
+node frontend/scripts/glint-driver.mjs click button "Highlight in yellow"
+node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-yellow"
+node frontend/scripts/glint-driver.mjs sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
 
 # change color
-bin/verify-glint mouse-click ".highlight-mark.is-yellow"
-bin/verify-glint click button "Change to pink"
-bin/verify-glint wait ".highlight-mark.is-pink"
+node frontend/scripts/glint-driver.mjs mouse-click ".highlight-mark.is-yellow"
+node frontend/scripts/glint-driver.mjs click button "Change to pink"
+node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
 
 # list
-bin/verify-glint click button "Open highlights"
-bin/verify-glint snapshot          # listitems inside complementary "Highlights"
-bin/verify-glint click button "Go to the highlight on page 1"
+node frontend/scripts/glint-driver.mjs click button "Open highlights"
+node frontend/scripts/glint-driver.mjs snapshot          # listitems inside complementary "Highlights"
+node frontend/scripts/glint-driver.mjs click button "Go to the highlight on page 1"
 
 # persistence
-bin/verify-glint restart-app
-bin/verify-glint click button "/Continue generated-reader/"
-bin/verify-glint wait ".highlight-mark.is-pink"
+node frontend/scripts/glint-driver.mjs restart-app
+node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
+node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
 ```
 
 ## Gotchas

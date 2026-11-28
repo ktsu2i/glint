@@ -1,5 +1,4 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreExportsUsedInFile": true,
-  "ignoreBinaries": ["go", "sqlite3"]
+  "ignoreExportsUsedInFile": true
 }
