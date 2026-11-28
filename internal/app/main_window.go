@@ -75,15 +75,16 @@ func (s *MainWindowState) restoreOnScreen(window *application.WebviewWindow, scr
 		return
 	}
 	state := s.saved
-	workAreas := make([]settings.WindowBounds, 0, len(screens))
-	for _, primaryFirst := range []bool{true, false} {
-		for _, screen := range screens {
-			if screen != nil && screen.IsPrimary == primaryFirst {
-				workAreas = append(workAreas, fromRect(screen.WorkArea))
-			}
+	connected := make([]settings.Screen, 0, len(screens))
+	for _, screen := range screens {
+		if screen != nil {
+			connected = append(connected, settings.Screen{
+				WorkArea: fromRect(screen.WorkArea),
+				Primary:  screen.IsPrimary,
+			})
 		}
 	}
-	placed := settings.PlaceWindow(state.Bounds, workAreas)
+	placed := settings.PlaceWindow(state.Bounds, connected)
 	// Wails creates the window a point smaller than asked for, so the frame
 	// is set again even when the saved bounds fit on screen. The size goes
 	// first: AppKit keeps the bottom edge when it resizes, and the position
