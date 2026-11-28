@@ -6,19 +6,18 @@ Glint を実際に動かして、変更が効いていることを証拠付き�
 
 - `SKILL.md`：agent 向けの指示
 - `references/features/`：feature map。何を操作し、何を確かめるかを機能ごとにまとめた一覧
-- `frontend/scripts/glint-driver.mjs`：ドライバ
+- `cmd/verify-glint`：ドライバ。`go tool verify-glint` で実行する
 
 ## 準備
 
 最初の 1 回だけ実行する。
 
 ```bash
-cd frontend
-pnpm install --frozen-lockfile
-pnpm exec playwright install webkit
+(cd frontend && pnpm install --frozen-lockfile)
+go tool verify-glint install    # Playwright のドライバと WebKit をダウンロードする
 ```
 
-ほかに必要なのは Go と、macOS に最初から入っている `sqlite3`。ビルドは `start` が自動でする。
+ビルドは `start` が自動でする。
 
 ## 使い方
 
@@ -36,26 +35,24 @@ agent は、変更に関係する feature ファイルを読み、`start` と `d
 
 ### 自分で動かす
 
-リポジトリのルートで実行する。
+リポジトリの中ならどのディレクトリからでも実行できる。本のファイルなど、渡した相対パスは今いるディレクトリから解決される。
 
 ```bash
-alias gd='node frontend/scripts/glint-driver.mjs'
+go tool verify-glint start          # ソースが新しければビルドしてから起動。空のライブラリから始まる
+go tool verify-glint doctor         # doctor: ok になっているか
+go tool verify-glint snapshot       # 今の画面の a11y tree。押せるボタンの名前が分かる
 
-gd start          # ソースが新しければビルドしてから起動。空のライブラリから始まる
-gd doctor         # doctor: ok になっているか
-gd snapshot       # 今の画面の a11y tree。押せるボタンの名前が分かる
+go tool verify-glint dialog open-file frontend/testdata/generated-reader.pdf   # 次のファイル選択ダイアログの答え
+go tool verify-glint click button "Add Book"
+go tool verify-glint wait ".text-layer[data-page='1'] span"
+go tool verify-glint screenshot /tmp/reader.png
+go tool verify-glint sql "select title, page_count from books"
 
-gd dialog open-file frontend/testdata/generated-reader.pdf   # 次のファイル選択ダイアログの答え
-gd click button "Add Book"
-gd wait ".text-layer[data-page='1'] span"
-gd screenshot /tmp/reader.png
-gd sql "select title, page_count from books"
-
-gd restart-app    # 同じデータのままアプリだけを再起動
-gd stop           # 全部止めてデータを消す
+go tool verify-glint restart-app    # 同じデータのままアプリだけを再起動
+go tool verify-glint stop           # 全部止めてデータを消す
 ```
 
-`snapshot` で名前を見る、`click` で操作する、`wait` で結果を待つ、`screenshot` や `sql` で確かめる、の繰り返しになる。`gd help` で全コマンドを見られる。
+`snapshot` で名前を見る、`click` で操作する、`wait` で結果を待つ、`screenshot` や `sql` で確かめる、の繰り返しになる。`go tool verify-glint help` で全コマンドを見られる。
 
 ## 各コマンドで確かめられること
 
@@ -63,6 +60,7 @@ gd stop           # 全部止めてデータを消す
 
 | コマンド | 確かめられること |
 |---|---|
+| `install` | 何も確かめない。Playwright のドライバと WebKit を最初に 1 回ダウンロードする |
 | `start` | 今のソースからビルドでき、起動してマイグレーションが通り、空のライブラリが表示されること |
 | `doctor` | 結果を信用してよい状態か：ビルドがソースより新しいか、ドライバやバイナリが起動後に変わっていないか、アプリが応答するか、使われていないダイアログの答えが残っていないか |
 | `info` | 確かめた対象の URL、データベース、ログの場所（報告に添える） |

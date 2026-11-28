@@ -6,19 +6,18 @@ A skill for running Glint and proving that a change works, with evidence. It dri
 
 - `SKILL.md`: instructions for agents
 - `references/features/`: the feature map, a behavior-level inventory of what to drive and what to check
-- `frontend/scripts/glint-driver.mjs`: the driver
+- `cmd/verify-glint`: the driver, run as `go tool verify-glint`
 
 ## Setup
 
 Once:
 
 ```bash
-cd frontend
-pnpm install --frozen-lockfile
-pnpm exec playwright install webkit
+(cd frontend && pnpm install --frozen-lockfile)
+go tool verify-glint install    # downloads the Playwright driver and WebKit
 ```
 
-You also need Go and `sqlite3` (bundled with macOS). `start` builds the app for you.
+`start` builds the app for you.
 
 ## Using it
 
@@ -36,26 +35,24 @@ Examples:
 
 ### Run the driver yourself
 
-From the repository root:
+Run it from anywhere inside the repository. Relative paths you pass, such as a book file, are resolved from the current directory.
 
 ```bash
-alias gd='node frontend/scripts/glint-driver.mjs'
+go tool verify-glint start          # rebuild if the sources are newer, then start on an empty library
+go tool verify-glint doctor         # check for "doctor: ok"
+go tool verify-glint snapshot       # accessibility tree; shows the names of buttons you can click
 
-gd start          # rebuild if the sources are newer, then start on an empty library
-gd doctor         # check for "doctor: ok"
-gd snapshot       # accessibility tree; shows the names of buttons you can click
+go tool verify-glint dialog open-file frontend/testdata/generated-reader.pdf   # answer for the next file dialog
+go tool verify-glint click button "Add Book"
+go tool verify-glint wait ".text-layer[data-page='1'] span"
+go tool verify-glint screenshot /tmp/reader.png
+go tool verify-glint sql "select title, page_count from books"
 
-gd dialog open-file frontend/testdata/generated-reader.pdf   # answer for the next file dialog
-gd click button "Add Book"
-gd wait ".text-layer[data-page='1'] span"
-gd screenshot /tmp/reader.png
-gd sql "select title, page_count from books"
-
-gd restart-app    # restart only the app on the same data
-gd stop           # stop everything and delete the data
+go tool verify-glint restart-app    # restart only the app on the same data
+go tool verify-glint stop           # stop everything and delete the data
 ```
 
-The loop is: read names with `snapshot`, act with `click`, wait for the result with `wait`, and check it with `screenshot` or `sql`. `gd help` lists every command.
+The loop is: read names with `snapshot`, act with `click`, wait for the result with `wait`, and check it with `screenshot` or `sql`. `go tool verify-glint help` lists every command.
 
 ## What each command verifies
 
@@ -63,6 +60,7 @@ The loop is: read names with `snapshot`, act with `click`, wait for the result w
 
 | Command | Verifies |
 |---|---|
+| `install` | Nothing; downloads the Playwright driver and WebKit once |
 | `start` | The current sources build, the app starts, migrations apply, and the empty library shows |
 | `doctor` | Whether results can be trusted: the build is newer than the sources, the driver and binary have not changed since start, the app answers, and no unused dialog answer is left |
 | `info` | Where the instance under test lives: URL, database, logs (attach to reports) |

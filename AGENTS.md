@@ -34,6 +34,7 @@ pnpm run build
 # App
 go tool wails3 dev     # run with live reload
 go tool wails3 build   # build build/bin/Glint.app
+go tool verify-glint help   # drive a server-mode build for verification (see the verify-glint skill)
 ```
 
 - `frontend/bindings` is generated and not committed. In a fresh checkout, generate bindings before running frontend tests or checks.
@@ -76,6 +77,7 @@ Run the same checks as CI for whatever you changed.
 
 ```text
 main.go                    Starts the Wails app, wires dependencies, binds services
+cmd/verify-glint           CLI that drives a server-mode build in WebKit for verification (`go tool verify-glint`)
 internal/app               Services bound to Wails (BooksService, SettingsService), DTOs, native dialogs, error i18n
 internal/books             Book usecases (import, open, relink, search, covers, highlights, bookmarks) and PDF / EPUB parsing
 internal/library           SQLite store (books, reading position, book segments and full-text search, highlights, bookmarks, app settings)

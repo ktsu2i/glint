@@ -15,29 +15,29 @@ Coloring selected text. PDF highlights are located by on-page rectangles (`rects
 
 Drag across text in the reader. The list opens from "Open highlights" in the top bar.
 
-## Driving it with glint-driver
+## Driving it with verify-glint
 
 ```bash
 # create
-node frontend/scripts/glint-driver.mjs select-text ".text-layer[data-page='1'] span"   # prints the selected text
-node frontend/scripts/glint-driver.mjs click button "Highlight in yellow"
-node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-yellow"
-node frontend/scripts/glint-driver.mjs sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
+go tool verify-glint select-text ".text-layer[data-page='1'] span"   # prints the selected text
+go tool verify-glint click button "Highlight in yellow"
+go tool verify-glint wait ".highlight-mark.is-yellow"
+go tool verify-glint sql "select page_number, color, text, cfi = '' as is_pdf, rects <> '' as has_rects from book_highlights"
 
 # change color
-node frontend/scripts/glint-driver.mjs mouse-click ".highlight-mark.is-yellow"
-node frontend/scripts/glint-driver.mjs click button "Change to pink"
-node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
+go tool verify-glint mouse-click ".highlight-mark.is-yellow"
+go tool verify-glint click button "Change to pink"
+go tool verify-glint wait ".highlight-mark.is-pink"
 
 # list
-node frontend/scripts/glint-driver.mjs click button "Open highlights"
-node frontend/scripts/glint-driver.mjs snapshot          # listitems inside complementary "Highlights"
-node frontend/scripts/glint-driver.mjs click button "Go to the highlight on page 1"
+go tool verify-glint click button "Open highlights"
+go tool verify-glint snapshot          # listitems inside complementary "Highlights"
+go tool verify-glint click button "Go to the highlight on page 1"
 
 # persistence
-node frontend/scripts/glint-driver.mjs restart-app
-node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
-node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
+go tool verify-glint restart-app
+go tool verify-glint click button "/Continue generated-reader/"
+go tool verify-glint wait ".highlight-mark.is-pink"
 ```
 
 ## Gotchas
@@ -45,4 +45,5 @@ node frontend/scripts/glint-driver.mjs wait ".highlight-mark.is-pink"
 - `.highlight-mark` sits under the text layer, so `click-css` gets intercepted by the text layer. Use `mouse-click` to select an existing highlight (the app looks up the highlight at the clicked point).
 - `select-text` drags from the left edge to the right edge of one element. Selecting across lines is not supported by the driver yet.
 - A PDF highlight has `rects` and an empty `cfi`; an EPUB highlight is the opposite. Check with `sql` that exactly one of them is set.
+- Highlights are drawn only on rendered pages, and a reopened book starts at the saved reading position. After `restart-app`, go to the highlight's page (or start from page 1) before waiting for `.highlight-mark`.
 - Color is user-visible evidence, so keep a `screenshot` in addition to `sql`.

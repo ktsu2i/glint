@@ -7,7 +7,7 @@ description: "Run Glint and prove a change works with evidence. Drives a server-
 
 Build Glint with `-tags 'server verify'` and drive it one step at a time with Playwright WebKit. This checks what unit tests cannot see: the UI, the Wails boundary, SQLite, and restarts, all together.
 
-The driver is `node frontend/scripts/glint-driver.mjs <command>`, run from the repository root. The output of `help` is the canonical command list.
+The driver is `go tool verify-glint <command>` (`cmd/verify-glint`), run from anywhere inside the repository. The output of `help` is the canonical command list. Run `go tool verify-glint install` once to download the Playwright driver and WebKit.
 
 ## How it works
 
@@ -20,16 +20,16 @@ The driver is `node frontend/scripts/glint-driver.mjs <command>`, run from the r
 ## Quick start
 
 ```bash
-node frontend/scripts/glint-driver.mjs start      # rebuild if the sources are newer, then start
-node frontend/scripts/glint-driver.mjs doctor     # always check
-node frontend/scripts/glint-driver.mjs snapshot   # accessibility tree of the current screen
+go tool verify-glint start      # rebuild if the sources are newer, then start
+go tool verify-glint doctor     # always check
+go tool verify-glint snapshot   # accessibility tree of the current screen
 
-node frontend/scripts/glint-driver.mjs dialog open-file frontend/testdata/generated-reader.pdf
-node frontend/scripts/glint-driver.mjs click button "Add Book"
-node frontend/scripts/glint-driver.mjs wait ".text-layer[data-page='1'] span"
-node frontend/scripts/glint-driver.mjs screenshot /path/to/proof.png
+go tool verify-glint dialog open-file frontend/testdata/generated-reader.pdf
+go tool verify-glint click button "Add Book"
+go tool verify-glint wait ".text-layer[data-page='1'] span"
+go tool verify-glint screenshot /path/to/proof.png
 
-node frontend/scripts/glint-driver.mjs stop
+go tool verify-glint stop
 ```
 
 ## Command surface
@@ -57,7 +57,7 @@ Do not submit "it opened" or "it showed up" as evidence. Show the result of the 
 - Do not wait with fixed sleeps. Use `wait` on a visible end state.
 - Prefer registered keys (`press ArrowRight`) over coordinate clicks for things like page turns.
 - Use `frontend/testdata/generated-reader.pdf` (3 pages with an outline) as the book. Do not use copyrighted or personal books.
-- After changing the driver or Go code, `stop` and `start` again.
+- After changing Go code or `cmd/verify-glint`, `stop` and `start` again.
 - These `console` messages are expected: Wails "Browser Environment Detected", PDF.js "Setting up fake worker", and the WebSocket disconnect and reconnect after `restart-app`.
 
 ## Out of reach
@@ -73,6 +73,6 @@ The driver cannot verify the following. Report them as gaps when relevant.
 
 ## Feature map
 
-The behavior inventory lives in [`references/features/`](references/features/README.md): one file per feature, each with the same four H2s, `Sub-features`, `How to get to it (user POV)`, `Driving it with glint-driver`, and `Gotchas`. For broad regression sweeps, walk the README top to bottom.
+The behavior inventory lives in [`references/features/`](references/features/README.md): one file per feature, each with the same four H2s, `Sub-features`, `How to get to it (user POV)`, `Driving it with verify-glint`, and `Gotchas`. For broad regression sweeps, walk the README top to bottom.
 
 Write the skill and its references in English. Keep `README.md` and `README.ja.md` in this directory in sync; they are for humans.

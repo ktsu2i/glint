@@ -16,30 +16,30 @@ The reader that renders PDFs with PDF.js: page turns, going to a page number, th
 
 Click a card or "Continue" in the library. A book also opens right after import.
 
-## Driving it with glint-driver
+## Driving it with verify-glint
 
 ```bash
-node frontend/scripts/glint-driver.mjs wait ".text-layer[data-page='1'] span"
-node frontend/scripts/glint-driver.mjs press ArrowRight
-node frontend/scripts/glint-driver.mjs eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"   # "2 / 3"
+go tool verify-glint wait ".text-layer[data-page='1'] span"
+go tool verify-glint press ArrowRight
+go tool verify-glint eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"   # "2 / 3"
 
 # go to a page number
-node frontend/scripts/glint-driver.mjs click button "Go to page"
-node frontend/scripts/glint-driver.mjs click-css "input[aria-label='Page number']"
-node frontend/scripts/glint-driver.mjs press Meta+A
-node frontend/scripts/glint-driver.mjs type 3
-node frontend/scripts/glint-driver.mjs press Enter
+go tool verify-glint click button "Go to page"
+go tool verify-glint click-css "input[aria-label='Page number']"
+go tool verify-glint press Meta+A
+go tool verify-glint type 3
+go tool verify-glint press Enter
 
 # right binding reverses the arrow keys
-node frontend/scripts/glint-driver.mjs click button "View"
-node frontend/scripts/glint-driver.mjs click button "Right binding"
-node frontend/scripts/glint-driver.mjs press Escape
-node frontend/scripts/glint-driver.mjs sql "select page_number, binding_direction from book_reading_states"
+go tool verify-glint click button "View"
+go tool verify-glint click button "Right binding"
+go tool verify-glint press Escape
+go tool verify-glint sql "select page_number, binding_direction from book_reading_states"
 
 # restore the reading position
-node frontend/scripts/glint-driver.mjs restart-app
-node frontend/scripts/glint-driver.mjs click button "/Continue generated-reader/"
-node frontend/scripts/glint-driver.mjs eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"
+go tool verify-glint restart-app
+go tool verify-glint click button "/Continue generated-reader/"
+go tool verify-glint eval "document.querySelector('[aria-label=\"Go to page\"]')?.textContent"
 ```
 
 For actions that change the rendering (zoom, spread, binding), also keep a `screenshot`.
